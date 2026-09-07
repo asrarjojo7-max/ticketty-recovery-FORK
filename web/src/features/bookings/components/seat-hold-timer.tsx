@@ -31,7 +31,7 @@ export function SeatHoldTimer({ expiresAt, onExpired }: SeatHoldTimerProps) {
   const urgent = remaining < 120_000;
 
   return (
-    <div className={`mb-4 flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs ${urgent ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300" : "border-blue-500/20 bg-blue-500/10 text-blue-700 dark:text-blue-300"}`}>
+    <div className={`mb-4 flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs ${urgent ? "border-amber-500/30 bg-warning/15 text-warning-foreground dark:text-amber-300" : "border-blue-500/20 bg-info/15 text-blue-700 dark:text-blue-300"}`}>
       <span className="flex items-center gap-2"><Clock3 className="h-4 w-4" />المقعد محجوز مؤقتًا</span>
       <span className="font-mono text-sm font-bold" dir="ltr">{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>
     </div>

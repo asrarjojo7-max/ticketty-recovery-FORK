@@ -137,7 +137,7 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
         <div className="space-y-2">
           <label htmlFor="payment-reference" className="text-sm font-medium">مرجع عملية البطاقة</label>
           <div className="relative">
-            <CreditCard className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <CreditCard className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input id="payment-reference" className="ps-9" maxLength={100} value={form.paymentReference} onChange={(event) => updateField("paymentReference", event.target.value)} placeholder="رقم العملية" required />
           </div>
         </div>

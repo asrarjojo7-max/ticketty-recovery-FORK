@@ -142,7 +142,7 @@ export function TripsFeature() {
             <Card><CardContent className="pt-6"><CreateRouteForm route={editingRoute} onCreated={() => { setShowRouteForm(false); setEditingRoute(undefined); }} onCancel={() => { setShowRouteForm(false); setEditingRoute(undefined); }} /></CardContent></Card>
           ) : null}
           <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="pointer-events-none absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input className="ps-9" placeholder="ابحث باسم المسار أو المدينة..." value={routeSearch} onChange={(event) => setRouteSearch(event.target.value)} />
           </div>
           <RoutesList

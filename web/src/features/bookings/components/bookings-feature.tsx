@@ -3,9 +3,11 @@
 import { useMemo, useState } from "react";
 import { AlertCircle, Bus, CalendarClock, Loader2, MapPin, RefreshCw, Ticket } from "lucide-react";
 import { useSession } from "@/components/layout/session-context";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTrips } from "@/features/trips";
 import { formatTripDate } from "@/features/trips/formatters";
@@ -65,13 +67,18 @@ export function BookingsFeature() {
       await holdMutation.mutateAsync(seat.id);
       setSelectedSeatIds((current) => [...current, seat.id]);
     } catch (error) {
+      const conflict =
+        error instanceof Error && error.message.includes("غير متاح");
       setSelectionError(
-        error instanceof Error && error.message.includes("غير متاح")
+        conflict
           ? "هذا المقعد حُجز للتو بواسطة مستخدم آخر. تم تحديث المقاعد المتاحة."
           : error instanceof Error
             ? error.message
             : "تعذر تحديد المقعد.",
       );
+      toast.error(conflict ? "المقعد محجوز لمستخدم آخر" : "تعذّر تحديد المقعد", {
+        description: conflict ? "تم تحديث خريطة المقاعد." : undefined,
+      });
       await seatsQuery.refetch();
     }
   }
@@ -86,11 +93,12 @@ export function BookingsFeature() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-6">
-      <div>
-        <p className="mb-1.5 text-xs font-bold text-primary">نقطة البيع</p>
-        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">حجز رحلة جديدة</h1>
-        <p className="mt-2 text-sm text-muted-foreground">اختر الرحلة والمقعد، ثم أكمل بيانات المسافر لإصدار تذكرة جاهزة للطباعة.</p>
-      </div>
+      <PageHeader
+        eyebrow="نقطة البيع"
+        title="حجز رحلة جديدة"
+        subtitle="اختر الرحلة والمقعد، ثم أكمل بيانات المسافر لإصدار تذكرة جاهزة للطباعة."
+        icon={Ticket}
+      />
 
       <Card className="border-primary/10">
         <CardContent className="p-5 sm:p-6">
@@ -115,7 +123,7 @@ export function BookingsFeature() {
               ))}
             </select>
           )}
-          {!tripsQuery.isLoading && !tripsQuery.isError && bookableTrips.length === 0 ? <p className="mt-2 text-xs text-amber-600">لا توجد رحلات مفتوحة للحجز حاليًا.</p> : null}
+          {!tripsQuery.isLoading && !tripsQuery.isError && bookableTrips.length === 0 ? <p className="mt-2 text-xs text-warning-foreground">لا توجد رحلات مفتوحة للحجز حاليًا.</p> : null}
         </CardContent>
       </Card>
 
@@ -136,7 +144,7 @@ export function BookingsFeature() {
               </div>
             </CardHeader>
             <CardContent>
-              {!canBook ? <p className="mb-4 rounded-md bg-amber-500/10 p-3 text-sm text-amber-700">يمكنك عرض المقاعد فقط؛ حسابك لا يملك صلاحية إنشاء الحجوزات.</p> : null}
+              {!canBook ? <p className="mb-4 rounded-md bg-warning/15 p-3 text-sm text-warning-foreground">يمكنك عرض المقاعد فقط؛ حسابك لا يملك صلاحية إنشاء الحجوزات.</p> : null}
               {selectionError ? <p className="mb-4 flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{selectionError}</p> : null}
               <BusSeatMap
                 seats={seatsQuery.data.seats}

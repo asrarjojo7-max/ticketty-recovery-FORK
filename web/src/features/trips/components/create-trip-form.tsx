@@ -115,7 +115,7 @@ export function CreateTripForm({ onCreated, onCancel }: CreateTripFormProps) {
             ))}
           </select>
           {!routes.isLoading && activeRoutes.length === 0 ? (
-            <p className="text-xs text-amber-600">أضف مسارًا نشطًا أولًا.</p>
+            <p className="text-xs text-warning-foreground">أضف مسارًا نشطًا أولًا.</p>
           ) : null}
         </div>
 
@@ -137,7 +137,7 @@ export function CreateTripForm({ onCreated, onCancel }: CreateTripFormProps) {
             ))}
           </select>
           {!buses.isLoading && readyBuses.length === 0 ? (
-            <p className="text-xs text-amber-600">لا توجد حافلات جاهزة حاليًا.</p>
+            <p className="text-xs text-warning-foreground">لا توجد حافلات جاهزة حاليًا.</p>
           ) : null}
         </div>
 
