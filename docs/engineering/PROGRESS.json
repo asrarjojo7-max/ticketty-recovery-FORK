@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-09-07T21:50:00+02:00",
+  "measuredAt": "2026-09-07T22:40:00+02:00",
   "overall": 85,
   "productionReadiness": 90,
   "weights": {
@@ -22,7 +22,7 @@
     "backend": 96,
     "erpBusinessLogic": 69,
     "accounting": 92,
-    "frontend": 92,
+    "frontend": 96,
     "testing": 86,
     "devopsObservability": 62,
     "documentation": 70

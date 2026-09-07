@@ -311,7 +311,10 @@ button {
   display: grid;
   min-height: 100vh;
   grid-template-columns: minmax(440px, 0.9fr) minmax(520px, 1.1fr);
-  background: var(--card);
+  background:
+    var(--dot-grid, radial-gradient(color-mix(in srgb, var(--foreground) 6%, transparent) 0.7px, transparent 0.7px)) fixed,
+    var(--card);
+  background-size: 18px 18px, auto;
 }
 
 .login-panel {
@@ -342,6 +345,7 @@ button {
   margin: 0;
   color: var(--foreground);
   letter-spacing: -0.03em;
+  font-family: var(--font-display), var(--font-sans), sans-serif;
   font-size: clamp(34px, 4vw, 46px);
 }
 
@@ -403,14 +407,19 @@ button {
   padding: 0 48px;
   padding-inline-start: 16px;
   border: 1px solid var(--input);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   outline: none;
   background: var(--card);
   color: var(--foreground);
+  font-family: var(--font-sans);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
     background 160ms ease;
+}
+
+.input-wrap input[type="password"] {
+  direction: ltr;
 }
 
 .input-wrap input::placeholder {
@@ -428,7 +437,7 @@ button {
   margin: -6px 0 0;
   padding: 11px 13px;
   border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--destructive) 6%, var(--card));
   color: var(--destructive);
   font-size: 13px;
@@ -443,9 +452,10 @@ button {
   height: 55px;
   margin-top: 2px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--gradient-primary);
   color: var(--primary-foreground);
+  font-family: var(--font-sans);
   font-weight: 800;
   box-shadow: var(--shadow-glow);
   transition:
@@ -540,7 +550,7 @@ button {
   width: 43px;
   height: 43px;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--radius-xl);
   background: var(--gradient-primary);
   color: var(--primary-foreground);
   font:
@@ -584,6 +594,7 @@ button {
 
 .brand-message h2 {
   margin: 0;
+  font-family: var(--font-display), var(--font-sans), sans-serif;
   font-size: clamp(40px, 5vw, 66px);
   line-height: 1.22;
   letter-spacing: -0.05em;

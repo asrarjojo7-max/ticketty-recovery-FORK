@@ -244,18 +244,19 @@ ticketty يملك BusSeatMap عاملاً بالفعل (hold/release/vip/regular
 
 ---
 ### Phase 10 — مزود الدفع (الأخيرة حصراً — بقرار المالك)
-**لا يبدأ إلا بعد اكتمال 0–9 + موافقة المالك.** Adapter layer واحد لعقد موحد (Provider interface) + webhook موقّع + idempotent provider events + Payment lifecycle PENDING→COMPLETED — التصميم مسبقاً في `docs/engineering/` قبل سطر كود، ويرتبط بقرار License Perimeter (REG-005) في `docs/compliance/regulatory-register.md`.
+**قرار المالك (2026-09-07): مؤجلة بالكامل — «سأنفذها في المستقبل وليس الآن». تم تخطيها ولا تبدأ إلا بطلب صريح من المالك.** عند التنفيذ مستقبلاً: Adapter layer واحد لعقد موحد (Provider interface) + webhook موقّع + idempotent provider events + Payment lifecycle PENDING→COMPLETED — التصميم مسبقاً في `docs/engineering/` قبل سطر كود، ويرتبط بقرار License Perimeter (REG-005) في `docs/compliance/regulatory-register.md`.
 
 ---
 ## 5) Definition of Done (للمشروع كله)
-- [ ] هوية ticket-master البصرية كاملة (tokens/خطوط/gradients/charts) في كل الشاشات
-- [ ] RTL سليم في كل مكون (lint rule يعمل، لا physical props)
-- [ ] صفر direct DB access من frontend · صفر حساب مالي في React
-- [ ] Server pagination في كل قائمة · Idempotency-Key في كل حجز/إلغاء
-- [ ] Backend source of truth محفوظ (RLS/locks/triggers لم تتغير سلباً — اختباراتها تمر)
-- [ ] Bus/Driver overlap محجوب DB+app · Playwright golden paths خضراء
-- [ ] build/lint/typecheck/tests/audits خضراء في backend+web
-- [ ] مزود الدفع مكتمل (المرحلة 10) بموافقة صريحة
+**تحقق نهائي 2026-09-07 بالأدلة (كل البنود القابلة للتحقق ✓ — عدا مزود الدفع المؤجل بقرار المالك):**
+- [x] هوية ticket-master البصرية كاملة (tokens/خطوط/gradients/charts) في كل الشاشات — بما فيها صفحة الدخول (Mada display على العناوين، radius 1rem، dot-grid خلفية) · recharts/framer-motion محذوفان
+- [x] RTL سليم في كل مكون (lint guard يعمل ويصدّ physical props + text-left/right) · `pnpm lint:check` صفر مخالفات
+- [x] صفر direct DB access من frontend (grep: لا PrismaClient/DATABASE_URL/postgres:// في `web/src`) · صفر حساب مالي مؤثر في React (CreateBookingInput بلا أي حقل مبلغ — totalAmount يحسبه السيرفر؛ reduce في السلة للعرض فقط وموثق؛ balance الوكلاء يُحسب في agents.service)
+- [x] Server pagination في كل القوائم (11 مجالاً ترث PaginationQueryDto بحد 200 + قاعدة أقصر-صفحة=الأخيرة) · Idempotency-Key في كل حجز/إلغاء (booking create+cancel، POS checkout، trip cancel، BFF pass-through)
+- [x] Backend source of truth محفوظ (RLS/locks/triggers/idempotency لم تُمس — 25/96 unit + 5/19 e2e + 5 SQL contracts خضراء) · drift الـ tenant FKs الذي كشفه العقد أُصلح بـ `prisma/repair/`
+- [x] Bus/Driver overlap محجوب DB+app (EXCLUDE gist + app checks + 5 SQL cases) · Playwright golden paths خضراء (8/8 محلياً + CI `web-e2e`)
+- [x] build/lint/typecheck/tests/audits خضراء في backend+web (تحقق نهائي 2026-09-07)
+- [ ] مزود الدفع (المرحلة 10) — **مؤجل بقرار المالك** (2026-09-07): يُنفذ مستقبلاً بطلب صريح
 
 ## 6) سجل التقدم (يُحدَّث بعد كل مرحلة — لا تحذف الأسطر المنجزة)
 
@@ -271,7 +272,7 @@ ticketty يملك BusSeatMap عاملاً بالفعل (hold/release/vip/regular
 | Phase 7 — بقية الشاشات | ✅ | 2026-09-01 | PageHeader contract على كل الشاشات (agents/fleet/trips/accounting/finance/manifests/boarding/settings/bookings)؛ ترحيل palette قديم → tokens في 8 ملفات؛ seat map الحجوزات أعيد بناؤها بلغة الـ4-حالات؛ أيقونات البحث المطلقة start-3؛ صفر ألوان hex يدوية (عدا print) |
 | Phase 8 — Backend Hardening | ✅ | 2026-09-01 | migration `20260901120000_trip_overlap_guard` (EXCLUDE gist للحافلة والسائق، [departure, arrival)) + فحص app-side برسائل عربية + 5 unit tests + عقد SQL `test:db:trip-overlap` (5 حالات). إصلاح بيانات: 3 رحلات SCHEDULED متقادمة → COMPLETED كانت تحجب الأسطول. **ملاحظة**: القيد غير مُنمذج في schema.prisma لأن Prisma لا يدعم EXCLUDE — مسجّل في تعليق الـ migration |
 | Phase 9 — Playwright | ✅ | 2026-09-07 | `web/e2e/` 5 رحلات ذهبية (login→dashboard, POS بيع كامل حتى dialog التذاكر, bookings بحث, trips tabs, AGENT permission denial) — كلها عبر storageState مُصادق (login واحد لكل دور في setup) لاحترام throttle 5/min؛ `web/playwright.config.ts` (chromium, RTL, trace on-failure)؛ `web/scripts/e2e-setup.mjs` يزوّد مستخدمي e2e owner/agent + رحلة مستقبلية مضمونة (OPEN غداً بـ40 مقعداً)؛ CI job `web-e2e` كامل (postgres service + migrate + seed + backend:4000 + web:3000). **إصلاحات اكتشفها المسار**: (1) `recordSuccessfulLogin` كان يستدعي دالة void عبر `$queryRaw` → P2010 دائماً — أصبح `$executeRaw`؛ (2) EmptyState كان يُسقط Lucide icons (forwardRef objects وليست functions) → "Objects are not valid as a React child" على dashboard — أُعيد بناء التمييز؛ (3) POS كان يفلتر بالتاريخ الافتراضي "اليوم" فلا تظهر رحلات — الافتراضي الآن "" (الكل) + isSellable يستبعد الرحلات المغادرة؛ (4) **drift حقيقي في DB**: كل composite tenant FKs/indexes من migrات 162000/170000 كانت مفقودة والـ migrate status يقول "up to date" — كشفها `test:db:tenant-consistency` وأُصلحت بـ `prisma/repair/20260907_reapply_tenant_consistency.sql` (idempotent) |
-| Phase 10 — Payment Provider | ⬜ | — | يحتاج موافقة المالك |
+| Phase 10 — Payment Provider | ⏸ مؤجلة | 2026-09-07 | بقرار المالك: «اتركها، سأنفذها في المستقبل وليس الآن» — تُنفذ فقط بطلب صريح لاحق. المتطلب التالي بعد 0–9: DoD أدناه |
 
 **آخر تحقق هندسي:** 2026-09-01 — backend: 24 suites/91 unit + 5/19 E2E + 4 SQL contracts خضراء · web: 3/10 + typecheck + lint + build خضراء · prisma valid · migrate status up-to-date (27).
 
