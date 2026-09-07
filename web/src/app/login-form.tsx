@@ -40,7 +40,19 @@ export function LoginForm() {
   }
 
   return (
-    <form className="login-form" onSubmit={handleSubmit}>
+    // SECURITY: method="POST" is a structural guarantee. Even if JS fails to
+    // load/attach (hydration failure, CSP, extension interference), the
+    // browser can only submit via POST — credentials can never leak into a
+    // URL through the native GET fallback. action="/api/session" is a
+    // progressive-enhancement path: JS (handleSubmit) handles the normal
+    // flow; without JS the form posts to the BFF which sets the session
+    // cookie and redirects server-side.
+    <form
+      className="login-form"
+      method="POST"
+      action="/api/session"
+      onSubmit={handleSubmit}
+    >
       <div className="field">
         <label htmlFor="email">البريد الإلكتروني</label>
         <div className="input-wrap">

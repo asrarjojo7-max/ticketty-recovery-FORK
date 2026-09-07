@@ -37,11 +37,37 @@ export async function POST(request: Request) {
   }
 
   let credentials: unknown;
+  const contentType = request.headers.get("content-type") ?? "";
   try {
-    credentials = await request.json();
+    if (contentType.includes("application/json")) {
+      credentials = await request.json();
+    } else if (
+      contentType.includes("application/x-www-form-urlencoded") &&
+      environment.isProduction === false
+    ) {
+      // Progressive enhancement: the login form posts natively (no-JS path)
+      // as urlencoded. Accepted only for non-JSON submits; the redirect
+      // below carries NO credentials — only a generic error flag.
+      const form = new URLSearchParams(await request.text());
+      credentials = {
+        email: form.get("email") ?? "",
+        password: form.get("password") ?? "",
+      };
+    } else {
+      return jsonResponse({ message: "بيانات الطلب غير صالحة" }, 400, requestId);
+    }
   } catch {
     return jsonResponse({ message: "بيانات الطلب غير صالحة" }, 400, requestId);
   }
+  const isFormSubmit = contentType.includes("application/x-www-form-urlencoded");
+  const loginFailure = () =>
+    isFormSubmit
+      // 303 to a bare URL — the error flag never includes what the user typed
+      ? new NextResponse(null, {
+          status: 303,
+          headers: { Location: "/?error=1", "X-Request-Id": requestId },
+        })
+      : jsonResponse({ message: "تعذر تسجيل الدخول. تحقق من البيانات وحاول مجدداً." }, 401, requestId);
 
   try {
     const response = await fetch(`${environment.apiBaseUrl}/auth/login`, {
@@ -64,6 +90,7 @@ export async function POST(request: Request) {
         typeof data.message === "string"
           ? data.message
           : "تعذر تسجيل الدخول. تحقق من البيانات وحاول مجدداً.";
+      if (isFormSubmit) return loginFailure();
       return jsonResponse({ message }, response.status, requestId);
     }
 
@@ -85,6 +112,14 @@ export async function POST(request: Request) {
       priority: "high",
     });
 
+    // No-JS form submit: redirect to the dashboard. The redirect URL carries
+    // no credentials — only the session cookie does.
+    if (isFormSubmit) {
+      return new NextResponse(null, {
+        status: 303,
+        headers: { Location: "/dashboard", "X-Request-Id": requestId },
+      });
+    }
     return jsonResponse({ user: login.user }, 200, requestId);
   } catch {
     return jsonResponse(

@@ -15,6 +15,8 @@ Organization and branch IDs from the client are identifiers to validate, never a
 - Active user/organization revalidation per protected request.
 - Helmet, constrained CORS, input validation, and rate limiting.
 - HttpOnly/SameSite web session cookie through a BFF; no sensitive token in Local Storage.
+- Login credentials travel exclusively in POST bodies: the login form is `method="POST"` with a server-side urlencoded fallback that redirects (303) without echoing credentials; automated regression (web/e2e/credential-leak.spec.ts) fails if any credential ever reaches a URL. (Incident 2026-09-07 — see `docs/operations/security-incident-2026-09-07.md`.)
+- Next.js dev servers allow only allowlisted cross-site origins for /_next/* assets (`allowedDevOrigins`); the tunnel domain is allowlisted so hydration cannot silently fail (a failed hydration previously degraded the login form to a native GET submission).
 - Environment files ignored by Git; checked-in examples contain placeholders only.
 - Fail-fast backend and server-side web configuration validation.
 - JWT verification pins HS256, issuer, and audience; BFF cookie lifetime follows token expiry.

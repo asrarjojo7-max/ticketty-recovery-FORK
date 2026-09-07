@@ -34,6 +34,15 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Next.js 16 dev servers block cross-origin requests to /_next/* assets
+  // (block-cross-site-dev) for CSRF safety. The dev preview is served through
+  // a Cloudflare tunnel on this domain, so its Origin header must be
+  // allowlisted or hydration fails (the login form then falls back to a
+  // native GET submission and leaks credentials into the URL — see the
+  // security incident of 2026-09-07).
+  allowedDevOrigins: process.env.DEV_ALLOWED_ORIGINS
+    ? process.env.DEV_ALLOWED_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    : ["app.suda-technologies.com"],
   async headers() {
     return [
       {
