@@ -96,6 +96,9 @@ export interface TripFilters {
   date?: string;
   routeId?: string;
   status?: TripStatus;
+  /** Server pagination (page 1-based, limit default 50 max 200). */
+  page?: number;
+  limit?: number;
 }
 
 export interface CreateTripInput {

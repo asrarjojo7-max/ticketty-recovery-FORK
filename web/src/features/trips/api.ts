@@ -25,6 +25,8 @@ export function fetchTrips(filters: TripFilters = {}): Promise<Trip[]> {
       date: filters.date,
       routeId: filters.routeId,
       status: filters.status,
+      ...(filters.page ? { page: String(filters.page) } : {}),
+      ...(filters.limit ? { limit: String(filters.limit) } : {}),
     })}`,
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cancelTrip, createTrip, fetchTrips, updateTrip } from "../api";
 import type { CreateTripInput, TripFilters, UpdateTripInput } from "../types";
 
@@ -21,7 +22,14 @@ export function useCreateTrip() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTripInput) => createTrip(input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripKeys.all }),
+    onSuccess: () => {
+      toast.success("تم إنشاء الرحلة بنجاح");
+      queryClient.invalidateQueries({ queryKey: tripKeys.all });
+    },
+    onError: (error) =>
+      toast.error("تعذّر إنشاء الرحلة", {
+        description: error instanceof Error ? error.message : undefined,
+      }),
   });
 }
 
@@ -30,7 +38,14 @@ export function useUpdateTrip() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateTripInput }) =>
       updateTrip(id, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tripKeys.all }),
+    onSuccess: () => {
+      toast.success("تم تحديث الرحلة");
+      queryClient.invalidateQueries({ queryKey: tripKeys.all });
+    },
+    onError: (error) =>
+      toast.error("تعذّر تحديث الرحلة", {
+        description: error instanceof Error ? error.message : undefined,
+      }),
   });
 }
 
@@ -39,9 +54,14 @@ export function useCancelTrip() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => cancelTrip(id, reason),
     onSuccess: () => {
+      toast.success("تم إلغاء الرحلة");
       queryClient.invalidateQueries({ queryKey: tripKeys.all });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
+    onError: (error) =>
+      toast.error("تعذّر إلغاء الرحلة", {
+        description: error instanceof Error ? error.message : undefined,
+      }),
   });
 }

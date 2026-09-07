@@ -49,6 +49,9 @@ export interface BookingFilters {
   date?: string;
   search?: string;
   status?: BookingStatus;
+  /** Server pagination (backend: page 1-based, limit default 50 max 200). */
+  page?: number;
+  limit?: number;
 }
 
 export interface CreateBookingInput {

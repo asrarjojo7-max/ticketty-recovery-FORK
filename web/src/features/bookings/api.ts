@@ -31,6 +31,8 @@ export function fetchBookings(filters: BookingFilters = {}): Promise<Booking[]> 
   if (filters.date) params.set("date", filters.date);
   if (filters.search) params.set("search", filters.search);
   if (filters.status) params.set("status", filters.status);
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
   const query = params.toString();
   return apiClient<Booking[]>(`/bookings${query ? `?${query}` : ""}`);
 }
