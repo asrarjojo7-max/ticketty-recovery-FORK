@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright browser specs (not app code; fixtures use Playwright's
+    // `use` API which the React hooks lint rule misreads).
+    "e2e/**",
   ]),
   {
     // ── RTL guard (MASTER_PLAN golden rule #7) ─────────────────────────

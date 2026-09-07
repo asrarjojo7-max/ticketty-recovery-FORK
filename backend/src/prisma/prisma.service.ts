@@ -260,8 +260,10 @@ export class PrismaService
   }
 
   async recordSuccessfulLogin(userId: string): Promise<void> {
+    // auth_record_success returns void; $queryRaw cannot deserialize a void
+    // column (P2010). Use $executeRaw instead.
     await this.withAuthRole(
-      (transaction) => transaction.$queryRaw`
+      (transaction) => transaction.$executeRaw`
         SELECT ticketty_security.auth_record_success(${userId})
       `,
     );

@@ -88,9 +88,9 @@ function TicketDialog({
 
 export function PosFeature() {
   const user = useSession();
-  const [date, setDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
-  );
+  // Default: no date filter — the rail lists upcoming sellable trips; sellers
+  // narrow by date only when needed.
+  const [date, setDate] = useState<string>("");
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null);
   const [cart, setCart] = useState<CartSeat[]>([]);
   const [passengers, setPassengers] = useState<Record<string, CartPassenger>>({});
@@ -210,6 +210,17 @@ export function PosFeature() {
             className="h-7 border-0 p-0 text-xs focus-visible:ring-0"
             aria-label="تاريخ الرحلات"
           />
+          {date ? (
+            <button
+              onClick={() => {
+                setDate("");
+                setSelectedTripId(null);
+              }}
+              className="text-[10px] font-bold text-primary hover:underline"
+            >
+              الكل
+            </button>
+          ) : null}
         </div>
         <p className="text-xs text-muted-foreground">
           {tripsQuery.data?.length ?? 0} رحلة قابلة للبيع

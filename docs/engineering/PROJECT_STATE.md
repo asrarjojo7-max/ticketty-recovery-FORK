@@ -1,14 +1,14 @@
 # Ticketty Project State
 
-_Last verified: 2026-09-01T11:41:21+02:00_
+_Last verified: 2026-09-07T21:50:00+02:00_
 
 ## Executive status
 
-- Overall weighted completion: **83% (production-candidate foundation, not production-ready)**.
-- Production readiness: **89% — still NO-GO for real passenger or financial data until reconciliation, browser tests, and production-like operational release gates close**.
+- Overall weighted completion: **85% (production-candidate foundation, not production-ready)**.
+- Production readiness: **90% — still NO-GO for real passenger or financial data until reconciliation, hosted telemetry/restore drills, and production-like operational release gates close. Browser golden paths now exist (Playwright, CI `web-e2e`)**.
 - Strategy: preserve the working vertical slice and harden it incrementally; do not rewrite from scratch.
 - Repository branch: `master`; version-control baseline established (first baseline commit `60672a6` on 2026-09-01 protects the accounting module, RLS migrations, accounting UI, and runtime-RLS tests; earlier history contains 8 prior commits). Master execution plan lives in `MASTER_PLAN.md` at the repository root — it is the durable memory for the UI/UX migration (ticket-master design DNA → ticketty) and must be read before continuing any UI work.
-- UI/UX direction (decided): adopt the ticket-master reference visual language (oklch tokens, Cairo/Mada typography, gradient hero, PageHeader contract, 4-state seat map) while keeping ticketty's NestJS backend as the sole source of truth. Payment-provider integration is explicitly deferred to the final phase by owner decision.
+- UI/UX direction (decided): adopt the ticket-master reference visual language (oklch tokens, Cairo/Mada typography, gradient hero, PageHeader contract, 4-state seat map) while keeping ticketty's NestJS backend as the sole source of truth. Payment-provider integration is explicitly deferred to the final phase by owner decision. `MASTER_PLAN.md` phases 0–9 are complete (design DNA, component library, shell, dashboard, POS, tables, all-screen PageHeader, backend trip-overlap hardening, Playwright golden paths); Phase 10 (payment provider) awaits explicit owner approval.
 
 ## Current architecture
 

@@ -116,9 +116,100 @@ jobs:
       - run: pnpm build
       - run: pnpm audit --prod
 
+  web-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ticketty
+          POSTGRES_USER: ticketty
+          POSTGRES_PASSWORD: ticketty
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ticketty -d ticketty"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Backend
+      DATABASE_URL: postgresql://ticketty:ticketty@127.0.0.1:5432/ticketty
+      JWT_SECRET: ci-only-secret-with-at-least-thirty-two-characters
+      JWT_EXPIRES_IN: 15m
+      JWT_ISSUER: ticketty-api
+      JWT_AUDIENCE: ticketty-web
+      WEB_ORIGIN: http://localhost:3000
+      PORT: 4000
+      # Web (BFF proxies to the backend)
+      API_BASE_URL: http://127.0.0.1:4000/api
+      APP_ORIGIN: http://localhost:3000
+      # Bootstrap fixtures (db:seed creates org/roles/admin)
+      INITIAL_ADMIN_EMAIL: admin@ticketty.local
+      INITIAL_ADMIN_PASSWORD: ci-only-admin-password
+      INITIAL_ORG_NAME: Ticketty
+      INITIAL_ORG_SLUG: ticketty
+      E2E_BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install backend deps and migrate
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec prisma generate
+          pnpm exec prisma migrate deploy
+        working-directory: backend
+      - name: Seed org, roles, admin and demo data
+        run: |
+          pnpm db:seed
+          pnpm db:seed-demo
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://ticketty:ticketty@127.0.0.1:5432/ticketty
+      - name: Build backend
+        run: pnpm build
+        working-directory: backend
+      - name: Start backend
+        run: |
+          nohup node dist/main > /tmp/backend.log 2>&1 &
+          sleep 5
+          curl -fsS http://127.0.0.1:4000/api/health/liveness
+        working-directory: backend
+      - name: Build and start web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          nohup pnpm exec next start -p 3000 > /tmp/web.log 2>&1 &
+          sleep 5
+          curl -fsS -o /dev/null http://localhost:3000/
+        working-directory: web
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+        working-directory: web
+      - name: Provision E2E fixtures
+        run: pnpm e2e:setup
+        working-directory: web
+      - name: Run golden-path specs
+        run: pnpm e2e:web
+        working-directory: web
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: web/test-results/
+          retention-days: 7
+
   container-builds:
     runs-on: ubuntu-latest
-    needs: [backend-quality, backend-integration, web-quality]
+    needs: [backend-quality, backend-integration, web-quality, web-e2e]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

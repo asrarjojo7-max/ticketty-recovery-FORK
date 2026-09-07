@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "e2e:setup": "node scripts/e2e-setup.mjs",
+    "e2e:web": "playwright test",
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
     "lint:check": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --exclude 'e2e/**' --exclude 'test-results/**'"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -39,6 +41,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",

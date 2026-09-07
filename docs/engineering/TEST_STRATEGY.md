@@ -2,12 +2,13 @@
 
 ## Current evidence
 
-- Backend: 24 Jest suites / 91 tests after the current hardening cycle, including login lockout, pagination, grant ceilings, error mapping, guard behavior, and a metadata gate requiring explicit permissions on every business route.
+- Backend: 25 Jest suites / 96 tests after the current hardening cycle, including login lockout, pagination, grant ceilings, error mapping, guard behavior, trip overlap rejection, and a metadata gate requiring explicit permissions on every business route.
 - Backend E2E: 5 suites / 19 tests covering production-equivalent app bootstrap, stable error envelopes, health, refund contention, booking-vs-trip cancellation, cross-agent isolation, runtime RLS, and the accounting lifecycle/reversal/event posting.
-- PostgreSQL contract scripts cover refund, tenant, settlement, and accounting integrity and pass against the migrated local database.
-- Frontend: 3 Vitest suites / 10 tests cover server environment, origin, request-ID, JWT-expiry helpers, and permission-aware navigation; lint, strict TypeScript, and production build pass. Component/browser tests remain absent — Playwright golden paths are planned as `MASTER_PLAN.md` Phase 9.
-- All 27 runtime migrations pass; candidate database v1 remains a separate, inactive contract.
-- GitHub CI now enforces backend/web quality, database integration contracts, dependency audits, and container builds.
+- PostgreSQL contract scripts cover refund, tenant, settlement, accounting, and bus/driver trip-overlap integrity (5 scripts, 20+ contract cases) and pass against the migrated local database. The tenant contract caught real drift on 2026-09-07 (composite tenant FKs missing while migration records said applied) — repaired via `backend/prisma/repair/20260907_reapply_tenant_consistency.sql` (idempotent; verified by the same contract).
+- Frontend: 3 Vitest suites / 10 tests cover server environment, origin, request-ID, JWT-expiry helpers, and permission-aware navigation; lint, strict TypeScript, and production build pass.
+- Browser E2E (Playwright, `MASTER_PLAN.md` Phase 9): 6 golden-path tests across 5 specs — login→dashboard for OWNER, dashboard denial + hidden admin navigation for AGENT, POS full sale through the ticket dialog (Idempotency-Key checkout), bookings server-side search, trips tabs, and direct-URL fleet denial for AGENT. Sessions are provisioned once per role via `auth.setup.ts` storageState (respects the 5/min login throttle); fixtures are provisioned by `web/scripts/e2e-setup.mjs` (dedicated e2e users + a guaranteed future OPEN trip). CI runs them in the `web-e2e` job with a Postgres service, migrated schema, seeded demo data, and both servers.
+- All 28 runtime migrations pass; candidate database v1 remains a separate, inactive contract. Note: composite tenant-consistency FKs live outside `schema.prisma` (Prisma cannot model composite FKs on these relations) — `prisma migrate status` does not verify their presence; the SQL contract is the authoritative check.
+- GitHub CI now enforces backend/web quality, database integration contracts (including trip-overlap), browser golden paths (`web-e2e`), dependency audits, and container builds.
 
 ## Test pyramid
 

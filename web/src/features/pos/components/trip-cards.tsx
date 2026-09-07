@@ -53,7 +53,7 @@ export function TripCards({
     );
   }
 
-  const sellable = (trips ?? []).filter(isSellable);
+  const sellable = (trips ?? []).filter((t) => isSellable(t));
 
   if (sellable.length === 0) {
     return (

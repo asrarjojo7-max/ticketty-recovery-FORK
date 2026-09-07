@@ -30,7 +30,10 @@ export const PAYMENT_METHODS: Array<{
   { value: "BANK_TRANSFER", label: "تحويل بنكي" },
 ];
 
-/** Trips sellable from POS: only these statuses accept holds/bookings. */
-export function isSellable(trip: PosTripCard): boolean {
-  return trip.status === "SCHEDULED" || trip.status === "OPEN";
+/** Trips sellable from POS: active status AND not yet departed. */
+export function isSellable(trip: PosTripCard, now = new Date()): boolean {
+  return (
+    (trip.status === "SCHEDULED" || trip.status === "OPEN") &&
+    new Date(trip.departureAt).getTime() > now.getTime()
+  );
 }

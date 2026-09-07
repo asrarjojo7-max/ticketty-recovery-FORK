@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-09-01T11:41:21+02:00",
-  "overall": 83,
-  "productionReadiness": 89,
+  "measuredAt": "2026-09-07T21:50:00+02:00",
+  "overall": 85,
+  "productionReadiness": 90,
   "weights": {
     "architecture": 8,
     "database": 10,
@@ -22,7 +22,7 @@
     "backend": 96,
     "erpBusinessLogic": 69,
     "accounting": 92,
-    "frontend": 65,
+    "frontend": 92,
     "testing": 86,
     "devopsObservability": 62,
     "documentation": 70
