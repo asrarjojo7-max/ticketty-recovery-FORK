@@ -266,7 +266,7 @@ ticketty يملك BusSeatMap عاملاً بالفعل (hold/release/vip/regular
 | Phase 2 — Component Library | ✅ | 2026-09-01 | page-header + status-badge (6 domains) + empty-state (متوافق مع الاستدعاءات القديمة) + kpi-card/DeltaPill + charts (Sparkline/RevenueAreaChart/FleetDonut/FleetRow SVG) + skeletons. كلها presentational props-only |
 | Phase 3 — Shell | ✅ | 2026-09-01 | commit `1f1bde1` — sidebar فاتح بالـ tokens (شعار TICKETTY متدرج، active=gradient+glow)، header sticky blur، drawer موبايل يغلق تلقائياً عند تغيير المسار. filterNavigation/الصلاحيات لم تُمس |
 | Phase 4 — Dashboard | ✅ | 2026-09-01 | backend: busCounts+avgOccupancy+upcomingTrips في `reports/dashboard` (كلها server-side)؛ web: hero متدرج + 4 KpiCard + RevenueAreaChart + FleetDonut/FleetRow + رحلات قادمة بأشرطة إشغال + refetchInterval 60s. حُذفت recharts وframer-motion |
-| Phase 5 — POS | ⬜ | — | — |
+| Phase 5 — POS | ✅ | 2026-09-01 | مسار `/pos` كامل: بطاقات رحلات + خريطة مقاعد 4-حالات + سلة ببيانات الركاب + Idempotency-Key لكل محاولة + dialog التذاكر فور النجاح + toasts sonner. **قرار موثق**: لا حقل خصم في v1 (لا يوجد policy خصم في الـ backend، وحساب المال client-side محظور) |
 | Phase 6 — Tables & Forms | ⬜ | — | — |
 | Phase 7 — بقية الشاشات | ⬜ | — | — |
 | Phase 8 — Backend Hardening | ⬜ | — | — |
