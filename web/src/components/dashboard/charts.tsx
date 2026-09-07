@@ -105,12 +105,9 @@ export function RevenueAreaChart({
         role="img"
         aria-label={ariaLabel}
       >
-        <defs>
-          <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
+        {area && (
+          <path d={area} fill="var(--color-primary)" fillOpacity="0.12" />
+        )}
         {[0.25, 0.5, 0.75].map((f) => (
           <line
             key={f}
@@ -122,7 +119,6 @@ export function RevenueAreaChart({
             strokeDasharray="3 4"
           />
         ))}
-        {area && <path d={area} fill="url(#revFill)" />}
         {line && (
           <path
             d={line}

@@ -22,11 +22,12 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.05 260);
 
-  /* Brand primary = Ticketty orange */
-  --primary: oklch(0.72 0.19 50);
-  --primary-foreground: oklch(0.99 0.005 60);
-  --primary-soft: oklch(0.96 0.04 60);
-  --primary-glow: oklch(0.78 0.17 60);
+  /* Brand primary = calm corporate blue (owner decision 2026-09-07:
+     the orange was harsh on the eyes over the tunnel) */
+  --primary: oklch(0.55 0.13 250);
+  --primary-foreground: oklch(0.99 0.005 240);
+  --primary-soft: oklch(0.955 0.02 250);
+  --primary-glow: oklch(0.62 0.13 250);
 
   --secondary: oklch(0.965 0.008 240);
   --secondary-foreground: oklch(0.28 0.05 255);
@@ -56,25 +57,28 @@
 
   --border: oklch(0.92 0.012 60);
   --input: oklch(0.92 0.012 60);
-  --ring: oklch(0.72 0.19 50);
+  --ring: oklch(0.55 0.13 250);
 
   --sidebar: oklch(0.99 0.006 60);
   --sidebar-foreground: oklch(0.3 0.06 255);
   --sidebar-border: oklch(0.93 0.012 60);
-  --sidebar-accent: oklch(0.96 0.05 60);
-  --sidebar-accent-foreground: oklch(0.55 0.18 50);
+  --sidebar-accent: oklch(0.955 0.03 250);
+  --sidebar-accent-foreground: oklch(0.45 0.12 250);
 
-  --gradient-primary: linear-gradient(135deg, oklch(0.76 0.18 55) 0%, oklch(0.66 0.21 40) 100%);
-  --gradient-hero: linear-gradient(135deg, oklch(0.78 0.16 55) 0%, oklch(0.62 0.22 35) 60%, oklch(0.42 0.14 265) 100%);
-  --gradient-navy: linear-gradient(135deg, oklch(0.32 0.1 255) 0%, oklch(0.22 0.06 260) 100%);
-  --gradient-soft: linear-gradient(135deg, oklch(0.98 0.03 60) 0%, oklch(0.97 0.02 250) 100%);
+  /* Owner decision 2026-09-07: NO gradients — all brand surfaces are solid.
+     The gradient-* tokens are kept as single-stop solid colors so existing
+     component classes keep working, but nothing renders a gradient. */
+  --gradient-primary: linear-gradient(oklch(0.55 0.13 250), oklch(0.55 0.13 250));
+  --gradient-hero: linear-gradient(oklch(0.32 0.1 255), oklch(0.32 0.1 255));
+  --gradient-navy: linear-gradient(oklch(0.32 0.1 255), oklch(0.32 0.1 255));
+  --gradient-soft: linear-gradient(oklch(0.955 0.02 250), oklch(0.955 0.02 250));
 
   --shadow-card: 0 1px 2px 0 oklch(0.2 0.04 255 / 0.04), 0 1px 3px 0 oklch(0.2 0.04 255 / 0.06);
   --shadow-elevated: 0 10px 30px -12px oklch(0.2 0.04 255 / 0.18), 0 4px 12px -4px oklch(0.2 0.04 255 / 0.08);
-  --shadow-glow: 0 20px 50px -20px oklch(0.72 0.19 50 / 0.45);
+  --shadow-glow: 0 16px 40px -18px oklch(0.55 0.13 250 / 0.28);
 
   /* Chart palette (token-driven, may be re-mapped per chart) */
-  --chart-1: oklch(0.72 0.19 50);
+  --chart-1: oklch(0.55 0.13 250);
   --chart-2: oklch(0.58 0.14 250);
   --chart-3: oklch(0.78 0.15 85);
   --chart-4: oklch(0.62 0.14 155);
@@ -91,10 +95,10 @@
   --popover: oklch(0.22 0.03 260);
   --popover-foreground: oklch(0.96 0.01 60);
 
-  --primary: oklch(0.75 0.18 55);
-  --primary-foreground: oklch(0.18 0.03 260);
-  --primary-soft: oklch(0.3 0.08 55);
-  --primary-glow: oklch(0.8 0.17 60);
+  --primary: oklch(0.68 0.12 250);
+  --primary-foreground: oklch(0.16 0.03 258);
+  --primary-soft: oklch(0.3 0.06 252);
+  --primary-glow: oklch(0.72 0.12 250);
 
   --secondary: oklch(0.26 0.03 260);
   --secondary-foreground: oklch(0.96 0.01 60);
@@ -123,15 +127,15 @@
 
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.75 0.18 55);
+  --ring: oklch(0.68 0.12 250);
 
   --sidebar: oklch(0.2 0.025 260);
   --sidebar-foreground: oklch(0.92 0.01 60);
   --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-accent: oklch(0.3 0.08 55);
-  --sidebar-accent-foreground: oklch(0.85 0.14 60);
+  --sidebar-accent: oklch(0.3 0.06 252);
+  --sidebar-accent-foreground: oklch(0.8 0.1 250);
 
-  --chart-1: oklch(0.75 0.18 55);
+  --chart-1: oklch(0.68 0.12 250);
   --chart-2: oklch(0.72 0.13 250);
   --chart-3: oklch(0.82 0.15 85);
   --chart-4: oklch(0.7 0.14 155);
@@ -244,8 +248,7 @@ h4,
 }
 
 .app-canvas {
-  background: radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 28rem),
-    var(--background);
+  background: var(--background);
 }
 
 * {
