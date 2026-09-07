@@ -69,10 +69,24 @@ export default function Home() {
       {/* ambient brand orbs (solid, layered — no gradients per owner rule) */}
       <div aria-hidden="true" className="orb orb-a" />
       <div aria-hidden="true" className="orb orb-b" />
+      {/* giant watermark logo behind the hero — brand immersion */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- decorative watermark */}
+      <img
+        src="/brand/mark-white.png"
+        alt=""
+        className="hero-watermark"
+      />
 
       <header className="landing-header">
         <div className="brand">
-          <span className="brand-mark">T</span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, no optimization needed */}
+          <img
+            src="/brand/logo-48.png"
+            alt="شعار Ticketty"
+            className="brand-logo"
+            width={48}
+            height={48}
+          />
           <div>
             <strong>Ticketty</strong>
             <small>Transport Operating System</small>
@@ -128,7 +142,14 @@ export default function Home() {
             <div className="mock-body">
               <aside className="mock-sidebar">
                 <div className="mock-brand-row">
-                  <span className="mock-logo">T</span>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- decorative mockup */}
+                  <img
+                    src="/brand/mark-white.png"
+                    alt=""
+                    className="mock-logo-img"
+                    width={26}
+                    height={26}
+                  />
                   <span className="mock-logo-text">Ticketty</span>
                 </div>
                 {["لوحة التحكم", "نقطة البيع", "الرحلات", "التذاكر", "التقارير", "الإعدادات"].map(

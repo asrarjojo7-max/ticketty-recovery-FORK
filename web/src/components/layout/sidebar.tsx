@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, TicketCheck } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { navigation } from "@/config/navigation";
 import { useSession } from "@/components/layout/session-context";
 import { filterNavigation } from "@/lib/permissions";
@@ -53,9 +53,14 @@ export function Sidebar({ collapsed, onClose }: SidebarProps) {
                 className="absolute inset-0 rounded-xl bg-gradient-primary opacity-30 blur-md"
                 aria-hidden="true"
               />
-              <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-card">
-                <TicketCheck className="h-6 w-6" />
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+              <img
+                src="/brand/logo-48.png"
+                alt="شعار Ticketty"
+                className="relative h-10 w-10 rounded-xl object-cover shadow-card"
+                width={40}
+                height={40}
+              />
             </div>
             <div className="leading-tight">
               <p className="font-display text-sm font-extrabold tracking-tight text-primary">

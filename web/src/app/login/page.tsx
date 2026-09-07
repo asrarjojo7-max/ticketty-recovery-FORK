@@ -18,7 +18,13 @@ export default function LoginPage() {
       <section className="login-panel">
         <div className="login-card">
           <div className="mobile-brand">
-            <span className="brand-mark">T</span>
+            {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+            <img
+              src="/brand/logo-48.png"
+              alt="شعار Ticketty"
+              width={44}
+              height={44}
+            />
             <strong>Ticketty</strong>
           </div>
 
@@ -42,12 +48,27 @@ export default function LoginPage() {
 
       <aside className="brand-panel">
         <div className="brand">
-          <span className="brand-mark">T</span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+          <img
+            src="/brand/logo-48.png"
+            alt="شعار Ticketty"
+            className="brand-logo"
+            width={48}
+            height={48}
+          />
           <div>
             <strong>Ticketty</strong>
             <small>Transport Operating System</small>
           </div>
         </div>
+
+        {/* large watermark logo on the brand panel */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- decorative watermark */}
+        <img
+          src="/brand/mark-white.png"
+          alt=""
+          className="panel-watermark"
+        />
 
         <div className="brand-message">
           <span className="eyebrow eyebrow-light">إدارة النقل، بثقة</span>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Cairo, Mada } from "next/font/google";
+import { Cairo } from "next/font/google";
+import { besport } from "./fonts/besport";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -10,16 +11,13 @@ const cairo = Cairo({
   display: "swap",
 });
 
-const mada = Mada({
-  subsets: ["arabic", "latin"],
-  weight: ["600", "700", "800", "900"],
-  variable: "--font-display",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "Ticketty | نظام إدارة النقل",
   description: "منصة تشغيل وإدارة شركات النقل والحجوزات والمدفوعات",
+  icons: {
+    icon: [{ url: "/brand/logo-48.png", type: "image/png" }],
+    apple: "/brand/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -31,7 +29,7 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${cairo.variable} ${mada.variable}`}
+      className={`${cairo.variable} ${besport.variable}`}
       suppressHydrationWarning
     >
       <body className={cairo.className}>
