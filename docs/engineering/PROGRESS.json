@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-08-27T12:48:17+02:00",
-  "overall": 71,
-  "productionReadiness": 83,
+  "measuredAt": "2026-09-01T11:41:21+02:00",
+  "overall": 83,
+  "productionReadiness": 89,
   "weights": {
     "architecture": 8,
     "database": 10,
@@ -16,49 +16,49 @@
     "documentation": 5
   },
   "domains": {
-    "architecture": 45,
-    "database": 78,
-    "security": 74,
-    "backend": 75,
-    "erpBusinessLogic": 52,
-    "accounting": 30,
-    "frontend": 62,
-    "testing": 55,
-    "devopsObservability": 55,
-    "documentation": 58
+    "architecture": 70,
+    "database": 92,
+    "security": 94,
+    "backend": 96,
+    "erpBusinessLogic": 69,
+    "accounting": 92,
+    "frontend": 65,
+    "testing": 86,
+    "devopsObservability": 62,
+    "documentation": 70
   },
   "criticalBlockers": [
-    "Verified transaction-bound runtime RLS is absent",
-    "Missing authoritative double-entry accounting",
-    "Missing frontend and broad authorization/load coverage",
-    "No completed staging deployment and backup/restore drill"
+    "Missing detailed reconciliation discrepancy workflows and accounting policy operator UI",
+    "Missing frontend browser and broad authorization/load coverage",
+    "No completed production-like container deployment and hosted telemetry verification"
   ],
   "highRisks": [
     "Financial policy decisions and reconciliation remain open",
+    "Runtime database deployments must preserve tested non-owner RLS role separation",
     "Hosted metrics, alerts, tracing, and SLO evidence are absent",
-    "Repository still has no reviewed version-control baseline",
-    "Production container execution has not yet been verified"
+    "Repository still lacks a reviewed version-control baseline"
   ],
-  "lastValidatedAt": "2026-08-27T12:48:17+02:00",
+  "lastValidatedAt": "2026-09-01T11:41:21+02:00",
   "lastValidated": {
-    "backendTests": "21 suites, 83 tests passed; e2e 3 suites, 9 tests passed",
-    "databaseContracts": "refund, tenant consistency, and settlement integrity passed",
+    "backendTests": "24 suites, 91 tests passed",
+    "backendE2E": "5 suites, 19 tests passed including runtime RLS, accounting lifecycle/event posting, and concurrency",
+    "databaseContracts": "refund, tenant consistency, settlement, and accounting integrity passed",
     "backendBuild": "passed",
+    "backendLint": "passed",
     "prismaValidate": "passed",
-    "webTests": "2 suites, 7 security and configuration helper tests passed",
-    "webBuild": "passed with 16 routes and standalone output; production server liveness and security headers verified",
+    "migrations": "27 migrations applied; database up to date",
+    "webTests": "3 suites, 10 tests passed",
     "webLint": "passed",
     "webTypecheck": "passed",
     "webAudit": "passed",
-    "backendAudit": "passed after patched transitive override",
-    "composeConfig": "passed; image builds await a Docker-enabled environment",
-    "restoreDrill": "local isolated PostgreSQL restore passed in approximately 8 seconds with checksum, 18 migrations, and all SQL integrity contracts"
+    "backendAudit": "passed",
+    "runtime": "backend readiness HTTP 200 on 4000; frontend and web readiness HTTP 200 on 3000"
   },
   "nextActions": [
-    "Implement and prove transaction-bound runtime RLS",
-    "Resolve finance policies and implement double-entry accounting",
+    "Add detailed reconciliation discrepancy workflows and accounting policy UI",
+    "Add subledger-to-ledger reconciliation and accounting audit events",
     "Add frontend browser tests and broader authorization/load coverage",
-    "Run container smoke tests and a documented scratch restore drill",
-    "Configure hosted telemetry, alerts, and SLOs"
+    "Verify container deployment and hosted telemetry in staging",
+    "Establish a reviewed version-control baseline"
   ]
 }

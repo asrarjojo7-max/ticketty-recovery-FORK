@@ -5,7 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CommissionType, Prisma, SeatType, TripStatus } from '@prisma/client';
+import {
+  AccountingEventType,
+  CommissionType,
+  Prisma,
+  SeatType,
+  TripStatus,
+} from '@prisma/client';
+import { enqueueAccountingEvent } from '../accounting/accounting-events';
 import { resolveAgentId } from '../common/agent-scope';
 import { AuditService } from '../common/audit/audit.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
@@ -286,6 +293,14 @@ export class BookingsService {
           data: { ticketId: ticket.id },
         });
       }
+      for (const payment of booking.payments) {
+        await enqueueAccountingEvent(
+          tx,
+          orgId,
+          AccountingEventType.PAYMENT_RECEIVED,
+          payment.id,
+        );
+      }
 
       if (agent) {
         for (const ticket of booking.tickets) {
@@ -452,7 +467,7 @@ export class BookingsService {
         if (refundable.lte(0)) continue;
         const refundAmount = refundable.mul(refundRatio).toDecimalPlaces(2);
         if (refundAmount.gt(0)) {
-          await tx.refund.create({
+          const refund = await tx.refund.create({
             data: {
               organizationId: orgId,
               bookingId: booking.id,
@@ -462,6 +477,12 @@ export class BookingsService {
               processedById: user.sub,
             },
           });
+          await enqueueAccountingEvent(
+            tx,
+            orgId,
+            AccountingEventType.REFUND_COMPLETED,
+            refund.id,
+          );
           refundedTotal = refundedTotal.plus(refundAmount);
         }
         // PostgreSQL trigger atomically increments refundedAmount while holding

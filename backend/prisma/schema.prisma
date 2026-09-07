@@ -48,6 +48,13 @@ model Organization {
   expenseAdjustments ExpenseAdjustment[]
   idempotencyRecords IdempotencyRecord[]
   settlementLines    SettlementLine[]
+  accounts           Account[]
+  fiscalPeriods      FiscalPeriod[]
+  journals           Journal[]
+  journalEntries     JournalEntry[]
+  journalEntryLines  JournalEntryLine[]
+  accountingPolicies AccountingPolicy[]
+  accountingEvents   AccountingEvent[]
 
   @@map("organizations")
 }
@@ -99,20 +106,20 @@ model Role {
 }
 
 model User {
-  id             String   @id @default(cuid())
-  organizationId String?
-  roleId         String
-  branchId       String?
-  name           String
-  email          String   @unique
-  phone          String?
+  id                  String    @id @default(cuid())
+  organizationId      String?
+  roleId              String
+  branchId            String?
+  name                String
+  email               String    @unique
+  phone               String?
   passwordHash        String
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
   active              Boolean   @default(true)
   createdAt           DateTime  @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt           DateTime  @updatedAt
 
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   role         Role          @relation(fields: [roleId], references: [id])
@@ -742,6 +749,202 @@ model SettlementLine {
 
   @@index([organizationId, settlementId])
   @@map("settlement_lines")
+}
+
+// ─────────────────────────────────────────────────────────────
+// المحاسبة المزدوجة
+// ─────────────────────────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum FiscalPeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+model Account {
+  id             String      @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  type           AccountType
+  parentId       String?
+  active         Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         Account?           @relation("AccountHierarchy", fields: [organizationId, parentId], references: [organizationId, id], onDelete: Restrict)
+  children       Account[]          @relation("AccountHierarchy")
+  journalLines   JournalEntryLine[]
+  debitPolicies  AccountingPolicy[] @relation("PolicyDebitAccount")
+  creditPolicies AccountingPolicy[] @relation("PolicyCreditAccount")
+
+  @@unique([organizationId, code])
+  @@unique([organizationId, id])
+  @@index([organizationId, type, active])
+  @@map("accounts")
+}
+
+model FiscalPeriod {
+  id             String             @id @default(cuid())
+  organizationId String
+  fiscalYear     Int
+  periodNumber   Int
+  startsAt       DateTime           @db.Date
+  endsAt         DateTime           @db.Date
+  status         FiscalPeriodStatus @default(OPEN)
+  closedAt       DateTime?
+  createdAt      DateTime           @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries      JournalEntry[]
+
+  @@unique([organizationId, fiscalYear, periodNumber])
+  @@unique([organizationId, id])
+  @@index([organizationId, status, startsAt, endsAt])
+  @@map("fiscal_periods")
+}
+
+model Journal {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries      JournalEntry[]
+  policies     AccountingPolicy[]
+
+  @@unique([organizationId, code])
+  @@unique([organizationId, id])
+  @@map("journals")
+}
+
+enum AccountingEventType {
+  PAYMENT_RECEIVED
+  REFUND_COMPLETED
+  EXPENSE_APPROVED
+  AGENT_SETTLEMENT
+}
+
+model AccountingPolicy {
+  id              String              @id @default(cuid())
+  organizationId  String
+  eventType       AccountingEventType
+  journalId       String
+  debitAccountId  String
+  creditAccountId String
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  journal       Journal      @relation(fields: [organizationId, journalId], references: [organizationId, id], onDelete: Restrict)
+  debitAccount  Account      @relation("PolicyDebitAccount", fields: [organizationId, debitAccountId], references: [organizationId, id], onDelete: Restrict)
+  creditAccount Account      @relation("PolicyCreditAccount", fields: [organizationId, creditAccountId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([organizationId, eventType])
+  @@unique([organizationId, id])
+  @@map("accounting_policies")
+}
+
+enum AccountingEventStatus {
+  PENDING
+  POSTED
+  FAILED
+}
+
+model AccountingEvent {
+  id             String                @id @default(cuid())
+  organizationId String
+  eventType      AccountingEventType
+  sourceId       String
+  status         AccountingEventStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  lastError      String?
+  journalEntryId String?               @unique
+  availableAt    DateTime              @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  createdAt      DateTime              @default(now())
+  processedAt    DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  journalEntry JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, eventType, sourceId])
+  @@index([organizationId, status, availableAt, lockedAt])
+  @@map("accounting_events")
+}
+
+model JournalEntry {
+  id             String             @id @default(cuid())
+  organizationId String
+  journalId      String
+  fiscalPeriodId String
+  entryNumber    String
+  entryDate      DateTime           @db.Date
+  sourceType     String
+  sourceId       String
+  currency       String
+  status         JournalEntryStatus @default(DRAFT)
+  description    String
+  reversalOfId   String?
+  postedById     String?
+  postedAt       DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  journal         Journal            @relation(fields: [organizationId, journalId], references: [organizationId, id], onDelete: Restrict)
+  fiscalPeriod    FiscalPeriod       @relation(fields: [organizationId, fiscalPeriodId], references: [organizationId, id], onDelete: Restrict)
+  reversalOf      JournalEntry?      @relation("EntryReversal", fields: [organizationId, reversalOfId], references: [organizationId, id], onDelete: Restrict)
+  reversedBy      JournalEntry?      @relation("EntryReversal")
+  accountingEvent AccountingEvent?
+  lines           JournalEntryLine[]
+
+  @@unique([organizationId, entryNumber])
+  @@unique([organizationId, sourceType, sourceId])
+  @@unique([organizationId, reversalOfId])
+  @@unique([organizationId, id])
+  @@index([organizationId, fiscalPeriodId, entryDate])
+  @@index([organizationId, status])
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id             String   @id @default(cuid())
+  organizationId String
+  journalEntryId String
+  lineNumber     Int
+  accountId      String
+  debit          Decimal  @default(0) @db.Decimal(19, 4)
+  credit         Decimal  @default(0) @db.Decimal(19, 4)
+  currency       String
+  description    String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entry        JournalEntry @relation(fields: [organizationId, journalEntryId], references: [organizationId, id], onDelete: Restrict)
+  account      Account      @relation(fields: [organizationId, accountId], references: [organizationId, id], onDelete: Restrict)
+
+  @@unique([journalEntryId, lineNumber])
+  @@index([organizationId, accountId, journalEntryId])
+  @@map("journal_entry_lines")
 }
 
 // ─────────────────────────────────────────────────────────────

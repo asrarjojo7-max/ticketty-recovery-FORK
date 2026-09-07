@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AccountingEventType, Prisma } from '@prisma/client';
+import { enqueueAccountingEvent } from '../accounting/accounting-events';
 import { AuditService } from '../common/audit/audit.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { paginationArgs } from '../common/dto/pagination-query.dto';
@@ -125,7 +126,7 @@ export class ExpensesService {
       if (!existing) throw new NotFoundException('المصروف غير موجود');
       if (existing.status !== 'DRAFT')
         throw new ConflictException('تم اعتماد المصروف مسبقاً');
-      return tx.expense.update({
+      const approved = await tx.expense.update({
         where: { id },
         data: {
           status: 'APPROVED',
@@ -134,6 +135,13 @@ export class ExpensesService {
         },
         include: { adjustments: true, trip: true, bus: true },
       });
+      await enqueueAccountingEvent(
+        tx,
+        orgId,
+        AccountingEventType.EXPENSE_APPROVED,
+        approved.id,
+      );
+      return approved;
     });
     await this.audit.log(user, 'EXPENSE_APPROVED', 'Expense', id, {
       amount: expense.amount.toFixed(2),

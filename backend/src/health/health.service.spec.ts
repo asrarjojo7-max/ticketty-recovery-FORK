@@ -10,7 +10,7 @@ describe('HealthService', () => {
 
   it('reports readiness when PostgreSQL responds', async () => {
     const prisma = {
-      $queryRaw: jest.fn().mockResolvedValue([{ ready: 1 }]),
+      ping: jest.fn().mockResolvedValue(undefined),
     } as unknown as PrismaService;
     await expect(new HealthService(prisma).readiness()).resolves.toEqual({
       status: 'ready',
@@ -20,9 +20,7 @@ describe('HealthService', () => {
 
   it('fails readiness without leaking the database error', async () => {
     const prisma = {
-      $queryRaw: jest
-        .fn()
-        .mockRejectedValue(new Error('secret connection data')),
+      ping: jest.fn().mockRejectedValue(new Error('secret connection data')),
     } as unknown as PrismaService;
     await expect(new HealthService(prisma).readiness()).rejects.toBeInstanceOf(
       ServiceUnavailableException,

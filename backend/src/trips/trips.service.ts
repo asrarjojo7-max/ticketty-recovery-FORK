@@ -4,7 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, SeatStatus, SeatType, TripStatus } from '@prisma/client';
+import {
+  AccountingEventType,
+  Prisma,
+  SeatStatus,
+  SeatType,
+  TripStatus,
+} from '@prisma/client';
+import { enqueueAccountingEvent } from '../accounting/accounting-events';
 import { AuditService } from '../common/audit/audit.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { paginationArgs } from '../common/dto/pagination-query.dto';
@@ -330,7 +337,7 @@ export class TripsService {
           if (refundable.lte(0)) continue;
           const refundAmount = refundable.mul(refundRatio).toDecimalPlaces(2);
           if (refundAmount.gt(0)) {
-            await tx.refund.create({
+            const refund = await tx.refund.create({
               data: {
                 organizationId: orgId,
                 bookingId: booking.id,
@@ -340,6 +347,12 @@ export class TripsService {
                 processedById: user.sub,
               },
             });
+            await enqueueAccountingEvent(
+              tx,
+              orgId,
+              AccountingEventType.REFUND_COMPLETED,
+              refund.id,
+            );
             bookingRefund = bookingRefund.plus(refundAmount);
             refundsCount += 1;
           }

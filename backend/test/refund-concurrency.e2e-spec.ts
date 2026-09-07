@@ -150,6 +150,7 @@ describe('refund integrity concurrency (PostgreSQL)', () => {
 });
 
 describe('booking cancellation versus trip cancellation', () => {
+  const owner = new PrismaClient();
   const bookingClient = new PrismaService();
   const tripClient = new PrismaService();
   const audit = {
@@ -179,10 +180,10 @@ describe('booking cancellation versus trip cancellation', () => {
     const templateId = `test-race-template-${suffix}`;
     const busId = `test-race-bus-${suffix}`;
     const routeId = `test-race-route-${suffix}`;
-    await bookingClient.organization.create({
+    await owner.organization.create({
       data: { id: organizationId, name: 'Race Test', slug: organizationId },
     });
-    await bookingClient.seatTemplate.create({
+    await owner.seatTemplate.create({
       data: {
         id: templateId,
         organizationId,
@@ -192,7 +193,7 @@ describe('booking cancellation versus trip cancellation', () => {
         aisleAfterColumn: 1,
       },
     });
-    await bookingClient.bus.create({
+    await owner.bus.create({
       data: {
         id: busId,
         organizationId,
@@ -200,7 +201,7 @@ describe('booking cancellation versus trip cancellation', () => {
         seatTemplateId: templateId,
       },
     });
-    await bookingClient.route.create({
+    await owner.route.create({
       data: {
         id: routeId,
         organizationId,
@@ -209,7 +210,7 @@ describe('booking cancellation versus trip cancellation', () => {
         toCity: 'B',
       },
     });
-    await bookingClient.trip.create({
+    await owner.trip.create({
       data: {
         id: tripId,
         organizationId,
@@ -219,7 +220,7 @@ describe('booking cancellation versus trip cancellation', () => {
         status: 'OPEN',
       },
     });
-    await bookingClient.booking.create({
+    await owner.booking.create({
       data: {
         id: bookingId,
         organizationId,
@@ -229,7 +230,7 @@ describe('booking cancellation versus trip cancellation', () => {
         status: 'CONFIRMED',
       },
     });
-    await bookingClient.payment.create({
+    await owner.payment.create({
       data: {
         organizationId,
         bookingId,
@@ -241,26 +242,39 @@ describe('booking cancellation versus trip cancellation', () => {
   });
 
   afterAll(async () => {
-    await bookingClient.organization.delete({ where: { id: organizationId } });
-    await Promise.all([bookingClient.$disconnect(), tripClient.$disconnect()]);
+    await owner.organization.delete({ where: { id: organizationId } });
+    await Promise.all([
+      owner.$disconnect(),
+      bookingClient.$disconnect(),
+      tripClient.$disconnect(),
+    ]);
   });
 
   it('never leaves duplicate refunds or a confirmed booking on a cancelled trip', async () => {
     const outcomes = await Promise.allSettled([
-      bookings.cancel(
-        user,
-        bookingId,
-        'customer cancellation',
-        'booking-cancel-key',
+      bookingClient.withTenantContext(organizationId, () =>
+        bookings.cancel(
+          user,
+          bookingId,
+          'customer cancellation',
+          'booking-cancel-key',
+        ),
       ),
-      trips.cancel(user, tripId, 'operator cancellation', 'trip-cancel-key-1'),
+      tripClient.withTenantContext(organizationId, () =>
+        trips.cancel(
+          user,
+          tripId,
+          'operator cancellation',
+          'trip-cancel-key-1',
+        ),
+      ),
     ]);
     if (outcomes[1]?.status === 'rejected') throw outcomes[1].reason;
 
     const [booking, trip, refunds] = await Promise.all([
-      bookingClient.booking.findUniqueOrThrow({ where: { id: bookingId } }),
-      bookingClient.trip.findUniqueOrThrow({ where: { id: tripId } }),
-      bookingClient.refund.findMany({ where: { bookingId } }),
+      owner.booking.findUniqueOrThrow({ where: { id: bookingId } }),
+      owner.trip.findUniqueOrThrow({ where: { id: tripId } }),
+      owner.refund.findMany({ where: { bookingId } }),
     ]);
     expect(trip.status).toBe('CANCELLED');
     expect(booking.status).not.toBe('CONFIRMED');

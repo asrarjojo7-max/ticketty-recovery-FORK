@@ -23,7 +23,7 @@ Organization and branch IDs from the client are identifiers to validate, never a
 
 ## Open high risks
 
-- Known writable related-ID paths now validate tenant/branch scope transactionally, but database-level tenant consistency and RLS remain absent.
+- Tenant/branch consistency is enforced in application code and database constraints/triggers. Runtime requests additionally execute inside a transaction-local organization context under the non-owner `ticketty_app` role; missing context fails closed under RLS.
 - Agent own-vs-all is implemented for core resources, but the complete endpoint authorization matrix is not yet proven.
 - Core refund/trip-state races have contention tests; broader lifecycle and load proof remains.
 - Database-backed account lockout now limits repeated password attempts; JWT key rotation/revocation and centralized secret management remain absent.

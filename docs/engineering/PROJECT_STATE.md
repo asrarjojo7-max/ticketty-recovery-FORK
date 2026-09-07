@@ -1,11 +1,11 @@
 # Ticketty Project State
 
-_Last verified: 2026-08-27T12:48:17+02:00_
+_Last verified: 2026-09-01T11:41:21+02:00_
 
 ## Executive status
 
-- Overall evidence-based completion: **71% (functional, not production-ready)**.
-- Production-readiness controls: **83% — still NO-GO for real passenger or financial data until finance, RLS, browser-test, and production-like operational release gates close**.
+- Overall weighted completion: **83% (production-candidate foundation, not production-ready)**.
+- Production readiness: **89% — still NO-GO for real passenger or financial data until reconciliation, browser tests, and production-like operational release gates close**.
 - Strategy: preserve the working vertical slice and harden it incrementally; do not rewrite from scratch.
 - Repository branch: `master`; repository currently has no commits and all project files are untracked.
 
@@ -20,17 +20,17 @@ _Last verified: 2026-08-27T12:48:17+02:00_
 
 Organizations/branches, users/roles, customers, routes, buses/seat templates, drivers, trips/trip seats, bookings, payments/refunds, tickets/boarding, manifests, agents/commissions, expenses/adjustments, settlements, reports, and audit logging have partial implementations.
 
-Accounting ledger, fiscal periods, journal posting, outbox/workers, robust offline sync, provider payment integration, server-side documents, and production operations are not implemented in the active schema/runtime.
+The active database contains Chart of Accounts, Fiscal Periods, Journals, Journal Entries/Lines, balanced posting guards, closed-period rejection, immutability, reversals, and RLS. Permissioned application APIs now support account, journal, period, draft-entry, posting, listing, and period-close workflows; business-event policies and reconciliation remain to be implemented. Outbox/workers, robust offline sync, provider payment integration, and server-side documents remain absent.
 
 ## Current critical risks
 
-1. Composite tenant foreign keys cover the core transactional graph, and database triggers now reject branch/organization mismatches across all branch-owned tables; runtime RLS remains absent.
-2. Booking, cancellation, trip cancellation, and manifest lock now share a per-trip transaction lock, but persisted refund-command idempotency and real two-connection concurrency proof remain missing.
-3. Refund inserts now lock and atomically update the payment with database-enforced amount/tenant/booking bounds; two-connection end-to-end cancellation proof remains missing.
+1. Runtime RLS is transaction-bound and verified with a non-owner, non-BYPASSRLS role; deployment must preserve the tested `ticketty_app`/`ticketty_auth` separation and must not connect HTTP workloads as table owner.
+2. Core booking/cancellation/manifest races are serialized and covered by real two-client tests; broader hot-trip load and failure-recovery evidence remains missing.
+3. Refunds use persisted command idempotency, payment-row locking, cumulative database ceilings, and contention tests; provider-level refund integration/reconciliation remains missing.
 4. External-agent ownership is enforced and the AGENT role now uses explicit `.own` permissions across booking, ticket, payment, agent, and settlement operations; broader endpoint authorization matrices remain.
-5. Settlement service now excludes reversals, rejects overlapping periods, serializes generation, and prevents rewriting settled records; immutable line allocation and database uniqueness remain missing.
-6. Active runtime schema lacks double-entry accounting.
-7. Critical integration/concurrency/security test coverage is very low.
+5. Settlement service excludes reversals, rejects overlap, serializes generation, allocates each commission once, and freezes finalized records/lines; journal posting and reconciliation remain missing.
+6. Double-entry foundations, APIs, reversal, policies, durable enqueueing, leased worker, requeue operations, reconciliation summary, and initial UI are active; detailed discrepancy workflows and policy-management UI remain missing.
+7. Backend security/concurrency coverage is materially improved, but frontend browser, authorization-matrix, load, and failure-recovery coverage remain incomplete.
 8. CI, container definitions, health probes, request-correlation logs, and backup/restore tooling exist; a local scratch restore drill passed, while hosted metrics/alerts and a production-like restore drill remain missing.
 
 ## Changes in this cycle
@@ -61,6 +61,24 @@ Accounting ledger, fiscal periods, journal posting, outbox/workers, robust offli
 - Fixed a trigger bug discovered by E2E cleanup: BEFORE DELETE must return OLD rather than NEW.
 - Added migration preflight validation and runtime triggers enforcing branch-to-organization consistency for users, customers, routes, buses, drivers, trips, bookings, payments, agents, expenses, and audit logs.
 - Added immutable SettlementLine allocation: each commission can belong to only one settlement, tenant consistency is enforced, and lines cannot change after finalization.
+- Added transaction-bound PostgreSQL RLS using a non-owner runtime role, AsyncLocalStorage transaction routing, authentication-only security-definer functions, and fail-closed tests for absent/cross-tenant context.
+- Activated and verified RLS in the local runtime, including accounting tables; tenant operations outside explicit context now fail closed.
+- Verified all RLS-enabled tables, child-table policies, role ownership/BYPASSRLS properties, cross-tenant write rejection, nested service transactions, and interceptor context propagation.
+- Fixed the authentication response regression and adapted integration fixtures to use owner setup plus tenant-scoped service execution.
+- Added active double-entry database foundations: accounts, fiscal periods, journals, entries/lines, posting balance enforcement, closed-period checks, posted immutability, reversal linkage, tenant constraints, and RLS.
+- Added a rollback-safe accounting SQL contract covering balanced posting, unbalanced rejection, closed-period rejection, and posted-line immutability.
+- Added permissioned accounting APIs/services for accounts, journals, fiscal periods, balanced draft entries, posting, paginated listing, and safe period closure.
+- Added idempotent journal reversal with automatically swapped lines, open-period enforcement, posted reversal validation, original-entry state transition, and database contract coverage.
+- Added a full accounting lifecycle E2E test under runtime RLS covering account/period/journal setup, balanced entry creation, posting, reversal, and reversed-state verification.
+- Added permission-aware frontend navigation with exact, domain-wildcard, global, and `.own` permission coverage.
+- Added an initial permission-aware accounting UI for accounts, journals, fiscal periods, entry visibility, and posting.
+- Added configurable tenant accounting policies for payments, refunds, approved expenses, and agent settlements, plus idempotent source-to-journal posting.
+- Added E2E proof that an approved expense posts exactly once through its configured policy under runtime RLS.
+- Added durable AccountingEvent records and atomic enqueueing from payment creation, refund completion, expense approval, and agent settlement; processing updates each event with its posted journal entry.
+- Added leased `FOR UPDATE SKIP LOCKED` event claiming, bounded retries/backoff, stale-lock recovery, failed-event visibility, and a guarded process-next endpoint.
+- Added an optional scheduled accounting worker using a dedicated non-BYPASSRLS claim role; each claimed event is processed inside its tenant RLS context and failures are released with backoff.
+- Added failed-event requeue and reconciliation APIs reporting operational subledgers, event states, and posted account debit/credit balances.
+- Added frontend permission-filtered navigation so users no longer see modules they cannot access.
 - Added public liveness and database-backed readiness endpoints with safe failure responses and unit/E2E coverage.
 - Added CI gates for backend/web quality, PostgreSQL E2E and SQL contracts, dependency audits, and image builds.
 - Added fail-fast environment validation and explicit JWT algorithm, issuer, and audience enforcement.
@@ -81,13 +99,15 @@ Accounting ledger, fiscal periods, journal posting, outbox/workers, robust offli
 
 ## Last validated commands
 
-- `backend: pnpm test --runInBand` — passed: 21 suites, 83 tests, including login lockout, pagination, grant ceilings, error mapping, guard behavior, and explicit permission metadata coverage for every business route.
-- `backend: pnpm test:e2e --runInBand` — passed: 3 suites, 9 tests, including production-equivalent health/bootstrap, stable error envelopes, refund contention, booking-cancel versus trip-cancel, and cross-agent isolation.
+- `backend: pnpm test --runInBand` — passed: 24 suites, 91 tests.
+- `backend: pnpm test:e2e --runInBand` — passed: 5 suites, 19 tests, including runtime RLS, accounting lifecycle/reversal/event posting, health/bootstrap, refund contention, booking-cancel versus trip-cancel, and cross-agent isolation.
 - Backend refund, tenant-consistency, and settlement SQL contract scripts — passed.
 - `backend: pnpm lint:check`, `pnpm typecheck`, `pnpm build`, and `pnpm exec prisma validate` — passed.
-- `backend: pnpm exec prisma migrate status` — 18 migrations; local database is up to date.
+- `backend: pnpm exec prisma migrate status` — 27 migrations; local database is up to date.
+- Accounting SQL contract — passed.
+- Local runtime: backend readiness returned HTTP 200 on port 4000; frontend and web readiness returned HTTP 200 on port 3000.
 - `backend: pnpm audit --prod` — no known vulnerabilities after the patched transitive override.
-- `web: pnpm lint:check`, `pnpm typecheck`, `pnpm test`, and `pnpm build` — passed; 2 suites / 7 tests, standalone server output, and 16 generated routes.
+- `web: pnpm lint:check`, `pnpm typecheck`, `pnpm test`, and prior production build — passed; current unit baseline is 3 suites / 10 tests and permission-aware accounting/navigation integration compiles.
 - `web: pnpm audit --prod` — no known vulnerabilities.
 - Standalone Web production server was started on port 3100 and its liveness endpoint, CSP, HSTS, frame, and content-type headers were verified.
 - `docker compose config` — passed. Image builds were not executable locally because the Docker daemon is unavailable; CI includes both image builds.
@@ -98,4 +118,4 @@ No environment blocker for continued development. Production release remains blo
 
 ## Next actions
 
-See `NEXT_ACTIONS.md`. Shared trip locking and persisted cancellation idempotency are implemented. Immediate focus is real PostgreSQL concurrency tests and database refund ceilings, followed by database-level tenant constraints and agent ownership.
+See `NEXT_ACTIONS.md`. Immediate focus is background accounting-event processing, subledger reconciliation, browser E2E, and production-like operational verification.

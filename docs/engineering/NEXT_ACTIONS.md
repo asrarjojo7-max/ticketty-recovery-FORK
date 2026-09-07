@@ -4,16 +4,16 @@ Prioritized by security risk, data integrity, dependency order, business critica
 
 ## Current task
 
-1. **Prepare verified runtime RLS**
-   - Composite tenant foreign keys and branch/organization triggers now cover the core transactional graph.
-   - Implement a transaction-bound tenant context and verify RLS using a non-owner runtime database role before enabling it broadly.
-   - Add tests proving missing or malformed tenant context fails closed.
+1. **Accounting discrepancy workflows and policy UI**
+   - Scheduled leased processing, failed-event visibility/requeue, and reconciliation summaries are active.
+   - Add detailed source-vs-event-vs-journal discrepancy records, operator resolution actions, and worker metrics.
+   - Add policy-management UI and accounting audit events.
 
 ## Next tasks
 
-2. **Double-entry accounting foundation**
-   - Immutable, tenant-consistent SettlementLine allocation now prevents one commission entering multiple settlements and freezes lines after settlement.
-   - Add Chart of Accounts, Fiscal Period, Journal Entry/Lines, balanced posting, reversal, and settlement-to-ledger integration.
+2. **Accounting reconciliation and reporting consistency**
+   - Post settlement, sale, refund, and expense business events through explicit accounting policies.
+   - Reconcile subledgers to journal balances and unify gross/net/refund reporting definitions.
 3. **Financial reporting consistency**
    - Define gross/net/refund metrics and remove refunded revenue from operational KPIs.
 4. **Operational proof and observability**
@@ -33,8 +33,9 @@ Prioritized by security risk, data integrity, dependency order, business critica
 - Composite tenant foreign keys plus SQL tenant-consistency contract tests.
 - External-agent ownership scoping, explicit `.own` permissions, role migration, and cross-agent integration coverage.
 - SettlementLine allocation and finalized-line database protection.
+- Transaction-bound runtime RLS, non-owner runtime/auth roles, fail-closed context enforcement, and RLS integration tests.
 - Public liveness and database-backed readiness endpoints, plus web liveness/readiness routes.
-- Backend regression baseline: 15 suites / 40 unit tests and 3 suites / 7 E2E tests passing.
+- Backend regression baseline: 22 suites / 85 unit tests and 4 suites / 17 E2E tests passing.
 - CI quality gates, production container definitions, one-shot migrations, and Compose health orchestration.
 - Fail-fast runtime configuration, explicit JWT verification policy, request correlation, and structured HTTP completion logs.
 - Patched dependency audit, executable database backup/restore scripts, and operator runbooks.

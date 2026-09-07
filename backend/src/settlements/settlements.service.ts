@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { AccountingEventType, Prisma } from '@prisma/client';
+import { enqueueAccountingEvent } from '../accounting/accounting-events';
 import { resolveAgentId } from '../common/agent-scope';
 import { AuditService } from '../common/audit/audit.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
@@ -170,7 +171,7 @@ export class SettlementsService {
         throw new ConflictException('تم إنهاء التسوية مسبقاً');
       }
 
-      return tx.settlement.update({
+      const finalized = await tx.settlement.update({
         where: { id },
         data: {
           status: 'SETTLED',
@@ -179,6 +180,13 @@ export class SettlementsService {
         },
         include: { agent: true },
       });
+      await enqueueAccountingEvent(
+        tx,
+        orgId,
+        AccountingEventType.AGENT_SETTLEMENT,
+        finalized.id,
+      );
+      return finalized;
     });
     await this.audit.log(user, 'SETTLEMENT_SETTLED', 'Settlement', id);
     return updated;

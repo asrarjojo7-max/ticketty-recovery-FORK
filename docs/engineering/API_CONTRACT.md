@@ -15,6 +15,7 @@
 - Errors use a stable `{ statusCode, code, message, requestId }` envelope. Implemented codes include `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `DUPLICATE_OPERATION`, `RATE_LIMITED`, `REQUEST_FAILED`, and `INTERNAL_ERROR`.
 - Prisma uniqueness/FK/not-found failures map to sanitized 409/400/404 responses without exposing database details.
 - Sensitive projections are permission-aware; passenger PII and financial details are not included by default.
+- Accounting APIs expose account setup, journals, fiscal periods, balanced drafts, posting, idempotent reversal, policy configuration, durable event queue visibility/processing, source posting, paginated listing, and guarded period closure under granular permissions.
 - API versioning and generated OpenAPI documentation remain missing.
 
 ## Pagination compatibility

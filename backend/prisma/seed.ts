@@ -18,6 +18,7 @@ const READ_ALL = [
   'settlements.read',
   'manifests.read',
   'reports.read',
+  'accounting.read',
 ];
 
 interface RoleSeed {
@@ -52,6 +53,9 @@ const ROLES: RoleSeed[] = [
       'expenses.write',
       'expenses.approve',
       'settlements.write',
+      'accounting.write',
+      'accounting.post',
+      'accounting.close',
     ],
   },
   {

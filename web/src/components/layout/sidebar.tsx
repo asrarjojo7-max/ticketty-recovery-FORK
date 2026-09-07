@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, Radio, TicketCheck } from "lucide-react";
 import { navigation } from "@/config/navigation";
+import { useSession } from "@/components/layout/session-context";
+import { filterNavigation } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +21,8 @@ function isActive(pathname: string, href: string): boolean {
 
 export function Sidebar({ collapsed, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const user = useSession();
+  const visibleNavigation = filterNavigation(navigation, user.permissions);
 
   return (
     <>
@@ -52,7 +56,7 @@ export function Sidebar({ collapsed, onClose }: SidebarProps) {
         </div>
 
         <nav className="relative flex-1 space-y-7 overflow-y-auto px-3 py-6" aria-label="التنقل الرئيسي">
-          {navigation.map((section) => (
+          {visibleNavigation.map((section) => (
             <section key={section.label ?? "main"}>
               {section.label ? <p className="mb-2.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{section.label}</p> : null}
               <div className="space-y-1.5">

@@ -28,6 +28,8 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketty-web}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+      ACCOUNTING_WORKER_ENABLED: ${ACCOUNTING_WORKER_ENABLED:-true}
+      ACCOUNTING_WORKER_INTERVAL_MS: ${ACCOUNTING_WORKER_INTERVAL_MS:-5000}
       PORT: 3001
     depends_on:
       postgres:

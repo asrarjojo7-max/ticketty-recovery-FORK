@@ -1,5 +1,43 @@
 # Engineering Changelog
 
+## 2026-09-01 — Runtime RLS activation
+
+### Added
+
+- Transaction-bound tenant database context routed through AsyncLocalStorage and Prisma interactive transactions.
+- Non-owner `ticketty_app` runtime role with RLS policies for tenant-owned and inherited-scope tables.
+- Narrow `ticketty_auth` security-definer functions for login, JWT revalidation, lockout counters, and successful-login updates.
+- Global tenant RLS interceptor and fail-closed protection for tenant delegates outside explicit context.
+- Runtime RLS integration coverage for role properties, tenant reads, child-table inheritance, cross-tenant writes, missing context, nested transactions, and interceptor propagation.
+- Active double-entry accounting schema with accounts, fiscal periods, journals, journal entries/lines, reversal links, tenant RLS, and database posting guards.
+- Accounting SQL contract covering balanced posting, unbalanced rejection, closed-period rejection, and posted-line immutability.
+- Permissioned accounting module for accounts, fiscal periods, journals, balanced draft entries, posting, paginated listing, safe period closure, and idempotent reversal.
+- Journal reversal database transition permits only a posted reversal pair and preserves all original financial fields.
+- Added an accounting lifecycle E2E test under runtime RLS covering setup, balanced posting, reversal, and final state.
+- Added an initial permission-aware accounting UI for accounts, journals, fiscal periods, entry listing, and posting.
+- Added configurable accounting policies for payment, refund, expense, and agent-settlement sources with idempotent source-to-journal posting.
+- Added E2E proof that an approved expense posts exactly once under runtime RLS.
+- Added durable AccountingEvent enqueueing from payment creation, refund completion, expense approval, and agent settlement.
+- Added event queue listing and guarded processing that links posted JournalEntry records back to their source event.
+- Added leased event claiming with `FOR UPDATE SKIP LOCKED`, bounded retries, backoff, and stale-lock recovery.
+- Added an optional scheduled accounting worker using a dedicated non-BYPASSRLS claim role and tenant-scoped processing.
+- Added worker configuration to local/production environment examples and Compose.
+- Added failed-event requeue and reconciliation APIs covering subledger counts, accounting-event states, and posted account balances.
+- Added E2E assertions for posted-event linkage and reconciliation visibility.
+- Added permission-filtered frontend navigation with exact, wildcard, global, and `.own` semantics.
+
+### Fixed
+
+- Authentication response mapping after replacing Prisma relation objects with typed authentication records.
+- RLS-aware E2E fixtures use owner setup/cleanup and tenant-scoped service execution.
+- Corrected tenant-context test regressions and verified accounting models are included in the RLS table set.
+
+### Validation
+
+- Backend: 23 suites / 88 unit tests and 5 suites / 18 E2E tests passed.
+- Backend build, lint, Prisma validation, 23 migrations, all SQL integrity contracts, and production dependency audit passed.
+- Web typecheck, lint, 3 suites / 10 tests, production dependency audit, localhost, and readiness passed.
+
 ## 2026-08-27 — Release-engineering baseline
 
 ### Added

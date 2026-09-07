@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { PaymentMethod } from '@prisma/client';
+import { PaymentMethod, PrismaClient } from '@prisma/client';
 import { AgentsService } from '../src/agents/agents.service';
 import { AuditService } from '../src/common/audit/audit.service';
 import type { AuthUser } from '../src/common/decorators/current-user.decorator';
@@ -11,6 +11,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { SettlementsService } from '../src/settlements/settlements.service';
 
 describe('external agent ownership isolation (PostgreSQL)', () => {
+  const owner = new PrismaClient();
   const prisma = new PrismaService();
   const audit = { log: jest.fn() } as unknown as AuditService;
   const agentsService = new AgentsService(prisma);
@@ -36,14 +37,14 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
     const routeId = `test-agent-route-${suffix}`;
     const tripId = `test-agent-trip-${suffix}`;
 
-    await prisma.organization.create({
+    await owner.organization.create({
       data: {
         id: organizationId,
         name: 'Agent Isolation',
         slug: organizationId,
       },
     });
-    await prisma.role.create({
+    await owner.role.create({
       data: {
         id: roleId,
         organizationId,
@@ -53,7 +54,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         permissions: ['bookings.read', 'tickets.read', 'payments.read'],
       },
     });
-    await prisma.user.createMany({
+    await owner.user.createMany({
       data: [userOneId, userTwoId].map((id, index) => ({
         id,
         organizationId,
@@ -63,7 +64,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         passwordHash: 'not-a-real-hash',
       })),
     });
-    await prisma.seatTemplate.create({
+    await owner.seatTemplate.create({
       data: {
         id: templateId,
         organizationId,
@@ -73,7 +74,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         aisleAfterColumn: 1,
       },
     });
-    await prisma.bus.create({
+    await owner.bus.create({
       data: {
         id: busId,
         organizationId,
@@ -81,7 +82,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         seatTemplateId: templateId,
       },
     });
-    await prisma.route.create({
+    await owner.route.create({
       data: {
         id: routeId,
         organizationId,
@@ -90,7 +91,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         toCity: 'B',
       },
     });
-    await prisma.trip.create({
+    await owner.trip.create({
       data: {
         id: tripId,
         organizationId,
@@ -99,7 +100,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         departureAt: new Date(),
       },
     });
-    await prisma.agent.createMany({
+    await owner.agent.createMany({
       data: [
         {
           id: agentOneId,
@@ -119,7 +120,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
       `test-agent-seat-1-${suffix}`,
       `test-agent-seat-2-${suffix}`,
     ];
-    await prisma.tripSeat.createMany({
+    await owner.tripSeat.createMany({
       data: seatIds.map((id, index) => ({
         id,
         tripId,
@@ -132,7 +133,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
     });
     for (const [index, agentId] of [agentOneId, agentTwoId].entries()) {
       const bookingId = `test-agent-booking-${index}-${suffix}`;
-      await prisma.booking.create({
+      await owner.booking.create({
         data: {
           id: bookingId,
           organizationId,
@@ -143,7 +144,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
           status: 'CONFIRMED',
         },
       });
-      await prisma.payment.create({
+      await owner.payment.create({
         data: {
           organizationId,
           bookingId,
@@ -152,7 +153,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
           receivedById: index ? userTwoId : userOneId,
         },
       });
-      await prisma.ticket.create({
+      await owner.ticket.create({
         data: {
           organizationId,
           bookingId,
@@ -166,7 +167,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
           qrCode: `QR-${index}-${suffix}`,
         },
       });
-      await prisma.settlement.create({
+      await owner.settlement.create({
         data: {
           organizationId,
           agentId,
@@ -193,35 +194,37 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    await prisma.settlement.deleteMany({
+    await owner.settlement.deleteMany({
       where: { agentId: { in: [agentOneId, agentTwoId] } },
     });
-    await prisma.commission.deleteMany({ where: { organizationId } });
-    await prisma.ticket.deleteMany({ where: { organizationId } });
-    await prisma.refund.deleteMany({ where: { organizationId } });
-    await prisma.payment.deleteMany({ where: { organizationId } });
-    await prisma.booking.deleteMany({ where: { organizationId } });
-    await prisma.tripSeat.deleteMany({ where: { trip: { organizationId } } });
-    await prisma.trip.deleteMany({ where: { organizationId } });
-    await prisma.agent.deleteMany({ where: { organizationId } });
-    await prisma.bus.deleteMany({ where: { organizationId } });
-    await prisma.route.deleteMany({ where: { organizationId } });
-    await prisma.seatTemplate.deleteMany({ where: { organizationId } });
-    await prisma.user.deleteMany({ where: { organizationId } });
-    await prisma.role.deleteMany({ where: { organizationId } });
-    await prisma.organization.delete({ where: { id: organizationId } });
-    await prisma.$disconnect();
+    await owner.commission.deleteMany({ where: { organizationId } });
+    await owner.ticket.deleteMany({ where: { organizationId } });
+    await owner.refund.deleteMany({ where: { organizationId } });
+    await owner.payment.deleteMany({ where: { organizationId } });
+    await owner.booking.deleteMany({ where: { organizationId } });
+    await owner.tripSeat.deleteMany({ where: { trip: { organizationId } } });
+    await owner.trip.deleteMany({ where: { organizationId } });
+    await owner.agent.deleteMany({ where: { organizationId } });
+    await owner.bus.deleteMany({ where: { organizationId } });
+    await owner.route.deleteMany({ where: { organizationId } });
+    await owner.seatTemplate.deleteMany({ where: { organizationId } });
+    await owner.user.deleteMany({ where: { organizationId } });
+    await owner.role.deleteMany({ where: { organizationId } });
+    await owner.organization.delete({ where: { id: organizationId } });
+    await Promise.all([owner.$disconnect(), prisma.$disconnect()]);
   });
 
   it('returns only resources owned by the authenticated agent', async () => {
     const [agents, bookings, tickets, payments, settlements] =
-      await Promise.all([
-        agentsService.findAll(userOne, {}),
-        bookingsService.findAll(userOne, {}),
-        ticketsService.findAll(userOne, {}),
-        paymentsService.findAll(userOne, {}),
-        settlementsService.findAll(userOne, {}),
-      ]);
+      await prisma.withTenantContext(organizationId, () =>
+        Promise.all([
+          agentsService.findAll(userOne, {}),
+          bookingsService.findAll(userOne, {}),
+          ticketsService.findAll(userOne, {}),
+          paymentsService.findAll(userOne, {}),
+          settlementsService.findAll(userOne, {}),
+        ]),
+      );
     expect(agents.map((item) => item.id)).toEqual([agentOneId]);
     expect(bookings).toHaveLength(1);
     expect(bookings[0]?.agentId).toBe(agentOneId);
@@ -234,6 +237,10 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
   });
 
   it('does not expose another agent by direct identifier', async () => {
-    await expect(agentsService.findOne(userOne, agentTwoId)).rejects.toThrow();
+    await expect(
+      prisma.withTenantContext(organizationId, () =>
+        agentsService.findOne(userOne, agentTwoId),
+      ),
+    ).rejects.toThrow();
   });
 });

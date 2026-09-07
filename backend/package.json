@@ -27,6 +27,7 @@
     "test:db:refund-integrity": "prisma db execute --schema prisma/schema.prisma --file test/sql/refund-integrity.sql",
     "test:db:tenant-consistency": "prisma db execute --schema prisma/schema.prisma --file test/sql/tenant-consistency.sql",
     "test:db:settlement-integrity": "prisma db execute --schema prisma/schema.prisma --file test/sql/settlement-integrity.sql",
+    "test:db:accounting-integrity": "prisma db execute --schema prisma/schema.prisma --file test/sql/accounting-integrity.sql",
     "db:seed": "prisma db seed"
   },
   "dependencies": {

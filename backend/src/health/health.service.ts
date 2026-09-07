@@ -11,7 +11,7 @@ export class HealthService {
 
   async readiness() {
     try {
-      await this.prisma.$queryRaw`SELECT 1::integer AS ready`;
+      await this.prisma.ping();
       return { status: 'ready' as const, database: 'up' as const };
     } catch {
       throw new ServiceUnavailableException({

@@ -39,20 +39,9 @@ export class JwtAuthGuard implements CanActivate {
       const claims = await this.jwt.verifyAsync<Pick<AuthUser, 'sub'>>(token);
       if (!claims.sub) throw new Error('Token subject is missing');
 
-      const user = await this.prisma.user.findUnique({
-        where: { id: claims.sub },
-        include: {
-          role: true,
-          organization: { select: { active: true } },
-        },
-      });
+      const user = await this.prisma.findAuthUserById(claims.sub);
 
-      if (
-        !user ||
-        !user.active ||
-        !user.organizationId ||
-        !user.organization?.active
-      ) {
+      if (!user || !user.active || !user.organizationActive) {
         throw new Error('User or organization is inactive');
       }
 
@@ -62,8 +51,8 @@ export class JwtAuthGuard implements CanActivate {
         branchId: user.branchId,
         name: user.name,
         email: user.email,
-        roleKey: user.role.key,
-        permissions: user.role.permissions,
+        roleKey: user.roleKey,
+        permissions: user.permissions,
       } satisfies AuthUser;
 
       return true;

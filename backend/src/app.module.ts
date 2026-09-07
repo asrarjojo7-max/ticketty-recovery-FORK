@@ -1,10 +1,11 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AccountingModule } from './accounting/accounting.module';
 import { AdministrationModule } from './administration/administration.module';
 import { AgentsModule } from './agents/agents.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,6 +19,7 @@ import { DriversModule } from './drivers/drivers.module';
 import { FleetModule } from './fleet/fleet.module';
 import { HealthModule } from './health/health.module';
 import { RequestContextMiddleware } from './common/http/request-context.middleware';
+import { TenantRlsInterceptor } from './common/interceptors/tenant-rls.interceptor';
 import { ManifestsModule } from './manifests/manifests.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -60,6 +62,7 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     }),
     AuthModule,
     AuditModule,
+    AccountingModule,
     AdministrationModule,
     CustomersModule,
     RoutesModule,
@@ -80,6 +83,7 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_INTERCEPTOR, useClass: TenantRlsInterceptor },
   ],
 })
 export class AppModule implements NestModule {

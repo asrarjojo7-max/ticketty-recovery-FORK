@@ -5,12 +5,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
 
 describe('AuthService', () => {
-  const findUnique = jest.fn();
-  const updateUser = jest.fn();
+  const findAuthUserByEmail = jest.fn();
+  const recordFailedLogin = jest.fn();
+  const recordSuccessfulLogin = jest.fn();
   const createAuditLog = jest.fn();
+  const withTenantContext = jest.fn(
+    (_orgId: string, callback: () => Promise<unknown>) => callback(),
+  );
   const signAsync = jest.fn();
   const prisma = {
-    user: { findUnique, update: updateUser },
+    findAuthUserByEmail,
+    recordFailedLogin,
+    recordSuccessfulLogin,
+    withTenantContext,
     auditLog: { create: createAuditLog },
   } as unknown as PrismaService;
   const jwt = { signAsync } as unknown as JwtService;
@@ -18,12 +25,13 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    updateUser.mockResolvedValue({ failedLoginAttempts: 1 });
+    recordFailedLogin.mockResolvedValue(1);
+    recordSuccessfulLogin.mockResolvedValue(undefined);
   });
 
   it('normalizes the email, signs a token, and records the login', async () => {
     const passwordHash = await bcrypt.hash('strong-password', 4);
-    findUnique.mockResolvedValue({
+    findAuthUserByEmail.mockResolvedValue({
       id: 'user-1',
       organizationId: 'org-1',
       branchId: null,
@@ -31,8 +39,11 @@ describe('AuthService', () => {
       email: 'owner@ticketty.sd',
       passwordHash,
       active: true,
-      role: { key: 'OWNER', permissions: ['*'] },
-      organization: { active: true },
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      roleKey: 'OWNER',
+      permissions: ['*'],
+      organizationActive: true,
     });
     signAsync.mockResolvedValue('signed-token');
     createAuditLog.mockResolvedValue({ id: 'audit-1' });
@@ -42,19 +53,14 @@ describe('AuthService', () => {
       'strong-password',
     );
 
-    expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: 'owner@ticketty.sd' } }),
-    );
-    expect(updateUser).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: {
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        lastLoginAt: expect.any(Date) as unknown,
-      },
-    });
+    expect(findAuthUserByEmail).toHaveBeenCalledWith('owner@ticketty.sd');
+    expect(recordSuccessfulLogin).toHaveBeenCalledWith('user-1');
     expect(signAsync).toHaveBeenCalledWith(
       expect.objectContaining({ sub: 'user-1', orgId: 'org-1' }),
+    );
+    expect(withTenantContext).toHaveBeenCalledWith(
+      'org-1',
+      expect.any(Function),
     );
     expect(createAuditLog).toHaveBeenCalledWith({
       data: {
@@ -69,37 +75,35 @@ describe('AuthService', () => {
     expect(result.user.permissions).toEqual(['*']);
   });
 
-  it('rejects a wrong password without signing a token', async () => {
-    findUnique.mockResolvedValue({
+  it('records a wrong password without signing a token', async () => {
+    findAuthUserByEmail.mockResolvedValue({
       id: 'user-1',
       organizationId: 'org-1',
       active: true,
       failedLoginAttempts: 0,
       lockedUntil: null,
       passwordHash: await bcrypt.hash('correct-password', 4),
-      role: { key: 'OWNER', permissions: ['*'] },
-      organization: { active: true },
+      roleKey: 'OWNER',
+      permissions: ['*'],
+      organizationActive: true,
     });
 
     await expect(
       service.login('owner@ticketty.sd', 'wrong-password'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(updateUser).toHaveBeenCalledWith({
-      where: { id: 'user-1' },
-      data: { failedLoginAttempts: { increment: 1 } },
-      select: { failedLoginAttempts: true },
-    });
+    expect(recordFailedLogin).toHaveBeenCalledWith('user-1');
     expect(signAsync).not.toHaveBeenCalled();
     expect(createAuditLog).not.toHaveBeenCalled();
   });
 
   it('rejects a user whose organization is inactive', async () => {
-    findUnique.mockResolvedValue({
+    findAuthUserByEmail.mockResolvedValue({
       organizationId: 'org-1',
       active: true,
       passwordHash: await bcrypt.hash('strong-password', 4),
-      role: { key: 'OWNER', permissions: ['*'] },
-      organization: { active: false },
+      roleKey: 'OWNER',
+      permissions: ['*'],
+      organizationActive: false,
     });
 
     await expect(
@@ -108,53 +112,28 @@ describe('AuthService', () => {
     expect(signAsync).not.toHaveBeenCalled();
   });
 
-  it('rejects a currently locked user without checking the password', async () => {
-    findUnique.mockResolvedValue({
+  it('rejects a currently locked user without updating login state', async () => {
+    findAuthUserByEmail.mockResolvedValue({
       id: 'user-1',
       organizationId: 'org-1',
       active: true,
       lockedUntil: new Date(Date.now() + 60_000),
       passwordHash: await bcrypt.hash('strong-password', 4),
-      role: { key: 'OWNER', permissions: ['*'] },
-      organization: { active: true },
+      roleKey: 'OWNER',
+      permissions: ['*'],
+      organizationActive: true,
     });
+
     await expect(
       service.login('owner@ticketty.sd', 'strong-password'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
 
-    expect(updateUser).not.toHaveBeenCalled();
-  });
-
-  it('locks the account after the fifth failed attempt', async () => {
-    findUnique.mockResolvedValue({
-      id: 'user-1',
-      organizationId: 'org-1',
-      active: true,
-      lockedUntil: null,
-      passwordHash: await bcrypt.hash('correct-password', 4),
-      role: { key: 'OWNER', permissions: ['*'] },
-      organization: { active: true },
-    });
-    updateUser.mockResolvedValueOnce({ failedLoginAttempts: 5 });
-
-    await expect(
-      service.login('owner@ticketty.sd', 'wrong-password'),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-
-    expect(updateUser).toHaveBeenNthCalledWith(2, {
-      where: { id: 'user-1' },
-      data: { lockedUntil: expect.any(Date) as unknown },
-    });
+    expect(recordFailedLogin).not.toHaveBeenCalled();
+    expect(recordSuccessfulLogin).not.toHaveBeenCalled();
   });
 
   it('rejects an organization-less tenant user', async () => {
-    findUnique.mockResolvedValue({
-      organizationId: null,
-      active: true,
-      passwordHash: await bcrypt.hash('strong-password', 4),
-      role: { key: 'OWNER', permissions: ['*'] },
-      organization: null,
-    });
+    findAuthUserByEmail.mockResolvedValue(null);
 
     await expect(
       service.login('owner@ticketty.sd', 'strong-password'),
