@@ -75,6 +75,103 @@ export class TripsService {
       throw new ConflictException('لا يمكن تعيين سائق غير نشط أو منتهي الرخصة');
     }
 
+    // Scheduling overlap guard (DB enforces it via exclusion constraints; this
+    // app-side check produces a friendly Arabic error and runs inside the same
+    // request so the user never sees a raw constraint violation).
+    const newDeparture = new Date(departureAt);
+    const newArrival = arrivalAt ? new Date(arrivalAt) : null;
+    const activeStatuses = [
+      TripStatus.SCHEDULED,
+      TripStatus.OPEN,
+      TripStatus.FULL,
+      TripStatus.DEPARTED,
+    ];
+
+    const formatTime = (d: Date) =>
+      d.toLocaleString('ar-EG', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'UTC',
+      });
+
+    const overlappingBusTrip = await this.prisma.trip.findFirst({
+      where: {
+        organizationId: orgId,
+        busId,
+        status: { in: activeStatuses },
+        ...(newArrival
+          ? {
+              OR: [
+                {
+                  departureAt: { lt: newArrival },
+                  arrivalAt: { gt: newDeparture },
+                },
+                {
+                  departureAt: { gte: newDeparture, lt: newArrival },
+                  arrivalAt: null,
+                },
+              ],
+            }
+          : {
+              OR: [
+                { departureAt: { lte: newDeparture }, arrivalAt: null },
+                {
+                  departureAt: { lte: newDeparture },
+                  arrivalAt: { gt: newDeparture },
+                },
+              ],
+            }),
+      },
+      select: { departureAt: true, arrivalAt: true },
+    });
+    if (overlappingBusTrip) {
+      throw new ConflictException(
+        `الحافلة مشغولة برحلة أخرى في هذه الفترة (${formatTime(
+          overlappingBusTrip.departureAt,
+        )}${overlappingBusTrip.arrivalAt ? ` → ${formatTime(overlappingBusTrip.arrivalAt)}` : ''})`,
+      );
+    }
+
+    if (driver) {
+      const overlappingDriverTrip = await this.prisma.trip.findFirst({
+        where: {
+          organizationId: orgId,
+          driverId: driver.id,
+          status: { in: activeStatuses },
+          ...(newArrival
+            ? {
+                OR: [
+                  {
+                    departureAt: { lt: newArrival },
+                    arrivalAt: { gt: newDeparture },
+                  },
+                  {
+                    departureAt: { gte: newDeparture, lt: newArrival },
+                    arrivalAt: null,
+                  },
+                ],
+              }
+            : {
+                OR: [
+                  { departureAt: { lte: newDeparture }, arrivalAt: null },
+                  {
+                    departureAt: { lte: newDeparture },
+                    arrivalAt: { gt: newDeparture },
+                  },
+                ],
+              }),
+        },
+        select: { departureAt: true, arrivalAt: true },
+      });
+      if (overlappingDriverTrip) {
+        throw new ConflictException(
+          `السائق مشغول برحلة أخرى في هذه الفترة (${formatTime(
+            overlappingDriverTrip.departureAt,
+          )}${overlappingDriverTrip.arrivalAt ? ` → ${formatTime(overlappingDriverTrip.arrivalAt)}` : ''})`,
+        );
+      }
+    }
+
     return this.prisma.trip.create({
       data: {
         organizationId: orgId,
