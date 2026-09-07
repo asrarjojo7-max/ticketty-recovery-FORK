@@ -7,7 +7,23 @@ describe("parseServerEnvironment", () => {
       apiBaseUrl: "http://127.0.0.1:3001/api",
       appOrigin: "http://localhost:3000",
       isProduction: false,
+      cookieSecure: false,
     });
+  });
+
+  it("marks the session cookie secure for HTTPS origins", () => {
+    expect(
+      parseServerEnvironment({
+        NODE_ENV: "test",
+        APP_ORIGIN: "https://app.suda-technologies.com",
+      }).cookieSecure,
+    ).toBe(true);
+    expect(
+      parseServerEnvironment({
+        NODE_ENV: "test",
+        APP_ORIGIN: "http://localhost:3000",
+      }).cookieSecure,
+    ).toBe(false);
   });
 
   it("requires explicit production URLs", () => {

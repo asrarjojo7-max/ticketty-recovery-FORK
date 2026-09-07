@@ -42,3 +42,23 @@ describe("request security helpers", () => {
     expect(jwtRemainingSeconds("malformed", 1_000)).toBeNull();
   });
 });
+
+describe("hasTrustedOrigin with extra origins", () => {
+  const req = (origin: string) => new Request("https://x/api", { headers: { origin } });
+
+  it("accepts a tunnel origin listed in APP_ORIGIN_ALT", () => {
+    expect(
+      hasTrustedOrigin(req("https://app.suda-technologies.com"), "http://localhost:3000", [
+        "https://app.suda-technologies.com",
+      ]),
+    ).toBe(true);
+  });
+
+  it("still rejects unknown sites", () => {
+    expect(
+      hasTrustedOrigin(req("https://evil.example.com"), "http://localhost:3000", [
+        "https://app.suda-technologies.com",
+      ]),
+    ).toBe(false);
+  });
+});

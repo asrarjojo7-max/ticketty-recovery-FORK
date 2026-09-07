@@ -7,8 +7,14 @@ export function requestIdFrom(headers: Headers): string {
   return candidate && SAFE_REQUEST_ID.test(candidate) ? candidate : randomUUID();
 }
 
-export function hasTrustedOrigin(request: Request, appOrigin: string): boolean {
-  return request.headers.get("origin") === appOrigin;
+export function hasTrustedOrigin(
+  request: Request,
+  appOrigin: string,
+  extraOrigins: readonly string[] = [],
+): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  return origin === appOrigin || extraOrigins.includes(origin);
 }
 
 export function jwtRemainingSeconds(

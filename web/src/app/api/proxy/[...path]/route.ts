@@ -1,4 +1,7 @@
-import { getServerEnvironment } from "@/lib/server/env";
+import {
+  getServerEnvironment,
+  trustedOrigins,
+} from "@/lib/server/env";
 import {
   hasTrustedOrigin,
   requestIdFrom,
@@ -34,7 +37,7 @@ async function proxy(
 
   if (
     !["GET", "HEAD", "OPTIONS"].includes(method) &&
-    !hasTrustedOrigin(request, environment.appOrigin)
+    !hasTrustedOrigin(request, environment.appOrigin, trustedOrigins(environment))
   ) {
     return NextResponse.json(
       { message: "طلب غير موثوق" },

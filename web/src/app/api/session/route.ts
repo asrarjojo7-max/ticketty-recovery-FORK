@@ -1,4 +1,4 @@
-import { getServerEnvironment } from "@/lib/server/env";
+import { getServerEnvironment, trustedOrigins } from "@/lib/server/env";
 import {
   hasTrustedOrigin,
   jwtRemainingSeconds,
@@ -32,7 +32,7 @@ function jsonResponse(body: unknown, status: number, requestId: string) {
 export async function POST(request: Request) {
   const requestId = requestIdFrom(request.headers);
   const environment = getServerEnvironment();
-  if (!hasTrustedOrigin(request, environment.appOrigin)) {
+  if (!hasTrustedOrigin(request, environment.appOrigin, trustedOrigins(environment))) {
     return jsonResponse({ message: "طلب غير موثوق" }, 403, requestId);
   }
 
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE, login.access_token, {
       httpOnly: true,
-      secure: environment.isProduction,
+      secure: environment.cookieSecure,
       sameSite: "lax",
       path: "/",
       maxAge,
@@ -97,8 +97,8 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   const requestId = requestIdFrom(request.headers);
-  const { appOrigin } = getServerEnvironment();
-  if (!hasTrustedOrigin(request, appOrigin)) {
+  const environment = getServerEnvironment();
+  if (!hasTrustedOrigin(request, environment.appOrigin, trustedOrigins(environment))) {
     return jsonResponse({ message: "طلب غير موثوق" }, 403, requestId);
   }
   const cookieStore = await cookies();

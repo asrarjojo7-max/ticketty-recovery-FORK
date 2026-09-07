@@ -28,14 +28,6 @@ const screens = [
   ["/", "الدخول"],
 ];
 
-// The DNA tokens every screen must resolve through.
-const TOKENS = {
-  primary: "var(--primary)", // orange oklch(0.72 0.19 50)
-  radius: "var(--radius)", // 1rem
-  sans: "var(--font-sans)", // Cairo
-  display: "var(--font-display)", // Mada
-};
-
 const b = await chromium.launch();
 const ctx = await b.newContext({ locale: "ar-EG" });
 const p = await ctx.newPage();

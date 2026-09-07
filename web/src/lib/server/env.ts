@@ -4,6 +4,7 @@ export interface ServerEnvironment {
   apiBaseUrl: string;
   appOrigin: string;
   isProduction: boolean;
+  cookieSecure: boolean;
 }
 
 function normalizedUrl(value: string, name: string, originOnly: boolean): string {
@@ -54,9 +55,27 @@ export function parseServerEnvironment(
     apiBaseUrl: normalizedUrl(apiBaseUrl, "API_BASE_URL", false),
     appOrigin: normalizedOrigin,
     isProduction: production,
+    // The session cookie must carry `secure` whenever the app is served
+    // over HTTPS (e.g. behind a Cloudflare tunnel), even in dev mode.
+    cookieSecure: originUrl.protocol === "https:",
   };
 }
 
 export function getServerEnvironment(): ServerEnvironment {
   return parseServerEnvironment(process.env);
+}
+
+/** True when the browser-facing origin differs from APP_ORIGIN (e.g. the
+ *  dev server is reached through a tunnel like app.suda-technologies.com).
+ *  `hasTrustedOrigin` then accepts both, keeping CSRF protection for
+ *  unknown sites. Configure via APP_ORIGIN_ALT (comma-separated origins). */
+export function trustedOrigins(environment: ServerEnvironment): string[] {
+  const alt = process.env.APP_ORIGIN_ALT ?? "";
+  return [
+    environment.appOrigin,
+    ...alt
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean),
+  ];
 }
