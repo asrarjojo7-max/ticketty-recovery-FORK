@@ -25,7 +25,8 @@ const screens = [
   ["/manifests", "المنافست"],
   ["/boarding", "بوابة الصعود"],
   ["/settings", "الإعدادات"],
-  ["/", "الدخول"],
+  ["/login", "الدخول"],
+  ["/", "الصفحة الرئيسية"],
 ];
 
 const b = await chromium.launch();
@@ -33,7 +34,7 @@ const ctx = await b.newContext({ locale: "ar-EG" });
 const p = await ctx.newPage();
 
 // login once (owner storageState equivalent)
-await p.goto(BASE + "/");
+await p.goto(BASE + "/login");
 await p.fill("#email", OWNER.email);
 await p.fill("#password", OWNER.password);
 await p.click('button[type="submit"]');
