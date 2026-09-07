@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { SessionProvider } from "./session-context";
@@ -12,26 +13,34 @@ interface AppShellProps {
 }
 
 /**
- * الهيكل العام للتطبيق: Sidebar على اليمين + Header في الأعلى + منطقة المحتوى.
+ * App shell: RTL start-side sidebar + sticky topbar + content canvas.
+ * Mobile drawer slides from the start side and closes when the pathname
+ * changes (ticket-master DNA behavior) — derived via render-time key reset
+ * instead of an effect to satisfy the no-setState-in-effect rule.
  */
 export function AppShell({ user, children }: AppShellProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [lastPathname, setLastPathname] = useState<string | null>(null);
+  const pathname = usePathname();
+
+  // Close the mobile drawer on route change (render-time derivation).
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname);
+    if (open) setOpen(false);
+  }
 
   return (
     <SessionProvider user={user}>
-      <div className="app-canvas flex min-h-screen">
-        <Sidebar
-          collapsed={!sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-        <div className="flex min-w-0 flex-1 flex-col lg:mr-[17.5rem]">
-          <Header
-            user={user}
-            onMenuClick={() => setSidebarOpen((o) => !o)}
-          />
-          <main className="flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7 xl:px-10">{children}</main>
+      <div className="app-canvas flex min-h-screen bg-background text-foreground">
+        <Sidebar collapsed={!open} onClose={() => setOpen(false)} />
+        <div className="flex min-w-0 flex-1 flex-col lg:ps-64">
+          <Header user={user} onMenuClick={() => setOpen((o) => !o)} />
+          <main className="flex-1 p-4 lg:p-6 lg:px-8">
+            <div className="mx-auto max-w-7xl">{children}</div>
+          </main>
         </div>
       </div>
     </SessionProvider>
   );
 }
+
