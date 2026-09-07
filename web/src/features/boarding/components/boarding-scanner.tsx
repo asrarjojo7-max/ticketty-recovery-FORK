@@ -70,9 +70,9 @@ export function BoardingScanner() {
         <Card className="overflow-hidden">
           <CardHeader className="border-b border-border/60"><CardTitle className="flex items-center gap-2 font-display text-lg"><QrCode className="text-primary" />ماسح رمز QR</CardTitle></CardHeader>
           <CardContent className="space-y-5 p-5 sm:p-6">
-            <div className="relative aspect-video overflow-hidden rounded-2xl border border-dashed bg-[#081a2b]">
+            <div className="relative aspect-video overflow-hidden rounded-2xl border border-dashed bg-gradient-navy">
               <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
-              {!scanning ? <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white/60"><Camera className="mb-3 h-10 w-10" /><p className="text-sm font-semibold text-white/80">الكاميرا متوقفة</p><p className="mt-1 text-xs">شغّل الكاميرا ووجّهها نحو رمز التذكرة</p></div> : <div className="pointer-events-none absolute inset-[18%] rounded-2xl border-2 border-[#55dfcd] shadow-[0_0_0_999px_rgba(0,0,0,0.25)]"><span className="absolute -right-0.5 -top-0.5 h-5 w-5 border-r-4 border-t-4 border-white" /><span className="absolute -bottom-0.5 -left-0.5 h-5 w-5 border-b-4 border-l-4 border-white" /></div>}
+              {!scanning ? <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white/60"><Camera className="mb-3 h-10 w-10" /><p className="text-sm font-semibold text-white/80">الكاميرا متوقفة</p><p className="mt-1 text-xs">شغّل الكاميرا ووجّهها نحو رمز التذكرة</p></div> : <div className="pointer-events-none absolute inset-[18%] rounded-2xl border-2 border-primary-glow shadow-[0_0_0_999px_rgba(0,0,0,0.25)]"><span className="absolute -end-0.5 -top-0.5 h-5 w-5 border-s-4 border-t-4 border-white" /><span className="absolute -bottom-0.5 -start-0.5 h-5 w-5 border-b-4 border-e-4 border-white" /></div>}
             </div>
             {cameraError ? <p className="flex items-center gap-2 text-sm text-destructive"><AlertCircle className="h-4 w-4" />{cameraError}</p> : null}
             <Button type="button" className="w-full" variant={scanning ? "outline" : "default"} onClick={scanning ? stopCamera : () => void startCamera()}>{scanning ? <><CameraOff /> إيقاف الكاميرا</> : <><Camera /> تشغيل الكاميرا</>}</Button>
