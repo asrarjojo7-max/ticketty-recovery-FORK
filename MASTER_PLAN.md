@@ -269,7 +269,7 @@ ticketty يملك BusSeatMap عاملاً بالفعل (hold/release/vip/regular
 | Phase 5 — POS | ✅ | 2026-09-01 | مسار `/pos` كامل: بطاقات رحلات + خريطة مقاعد 4-حالات + سلة ببيانات الركاب + Idempotency-Key لكل محاولة + dialog التذاكر فور النجاح + toasts sonner. **قرار موثق**: لا حقل خصم في v1 (لا يوجد policy خصم في الـ backend، وحساب المال client-side محظور) |
 | Phase 6 — Tables & Forms | ✅ | 2026-09-01 | `ui/data-table.tsx` server-paginated (قصر الصفحة = الأخيرة)؛ booking-history مُهاجَر + page/limit في BookingFilters/TripFilters؛ hooks الوكلاء/الأسطول/المالية أُعيدت كتابتها من minified مع toasts عربية لكل mutation |
 | Phase 7 — بقية الشاشات | ✅ | 2026-09-01 | PageHeader contract على كل الشاشات (agents/fleet/trips/accounting/finance/manifests/boarding/settings/bookings)؛ ترحيل palette قديم → tokens في 8 ملفات؛ seat map الحجوزات أعيد بناؤها بلغة الـ4-حالات؛ أيقونات البحث المطلقة start-3؛ صفر ألوان hex يدوية (عدا print) |
-| Phase 8 — Backend Hardening | ⬜ | — | — |
+| Phase 8 — Backend Hardening | ✅ | 2026-09-01 | migration `20260901120000_trip_overlap_guard` (EXCLUDE gist للحافلة والسائق، [departure, arrival)) + فحص app-side برسائل عربية + 5 unit tests + عقد SQL `test:db:trip-overlap` (5 حالات). إصلاح بيانات: 3 رحلات SCHEDULED متقادمة → COMPLETED كانت تحجب الأسطول. **ملاحظة**: القيد غير مُنمذج في schema.prisma لأن Prisma لا يدعم EXCLUDE — مسجّل في تعليق الـ migration |
 | Phase 9 — Playwright | ⬜ | — | — |
 | Phase 10 — Payment Provider | ⬜ | — | يحتاج موافقة المالك |
 
