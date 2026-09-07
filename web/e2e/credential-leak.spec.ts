@@ -21,7 +21,7 @@ test("login flow never places credentials in a URL", async ({ page }) => {
   const seen: { method: string; url: string }[] = [];
   page.on("request", (r) => seen.push({ method: r.method(), url: r.url() }));
 
-  await page.goto("/");
+  await page.goto("/login");
   await page.fill("#email", OWNER.email);
   await page.fill("#password", OWNER.password);
   await page.click('button[type="submit"]');
@@ -49,7 +49,7 @@ test("login flow never places credentials in a URL", async ({ page }) => {
 
   // 4) The form tag itself is structurally POST-only (defense in depth:
   //    even a hydration failure cannot produce a GET submission).
-  await page.goto("/");
+  await page.goto("/login");
   const method = await page.locator("form.login-form").getAttribute("method");
   expect(method).toBe("POST");
   const action = await page
@@ -73,7 +73,7 @@ test("native form submission (no React handlers) is POST with body-only credenti
   // submit programmatically immediately after DOM ready. The request must
   // be a POST to the session route with credentials in the body — never
   // in the URL — regardless of whether React handlers attached.
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.locator("#email").fill(OWNER.email, { timeout: 15_000 });
   await page.locator("#password").fill(OWNER.password);
 

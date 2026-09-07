@@ -8,7 +8,7 @@ import { OWNER, AGENT } from "./roles";
 const stateDir = "playwright/.auth";
 
 setup("authenticate as owner", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/login");
   await page.fill("#email", OWNER.email);
   await page.fill("#password", OWNER.password);
   await page.click('button[type="submit"]');
@@ -22,7 +22,7 @@ setup("authenticate as agent", async ({ browser }) => {
   // whichever allowed screen it lands on, then persist the session.
   const ctx = await browser.newContext({ locale: "ar-EG" });
   const page = await ctx.newPage();
-  await page.goto("/");
+  await page.goto("/login");
   await page.fill("#email", AGENT.email);
   await page.fill("#password", AGENT.password);
   await page.click('button[type="submit"]');

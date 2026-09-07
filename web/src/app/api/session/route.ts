@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       // 303 to a bare URL — the error flag never includes what the user typed
       ? new NextResponse(null, {
           status: 303,
-          headers: { Location: "/?error=1", "X-Request-Id": requestId },
+          headers: { Location: "/login?error=1", "X-Request-Id": requestId },
         })
       : jsonResponse({ message: "تعذر تسجيل الدخول. تحقق من البيانات وحاول مجدداً." }, 401, requestId);
 

@@ -10,7 +10,7 @@ export function LogoutButton() {
   async function logout() {
     setPending(true);
     await fetch("/api/session", { method: "DELETE" });
-    router.replace("/");
+    router.replace("/login");
     router.refresh();
   }
 

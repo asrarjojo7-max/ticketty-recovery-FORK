@@ -44,7 +44,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
   async function handleLogout() {
     await fetch("/api/session", { method: "DELETE" });
-    router.replace("/");
+    router.replace("/login");
     router.refresh();
   }
 

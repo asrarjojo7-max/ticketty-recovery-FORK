@@ -1,40 +1,58 @@
-import { LoginForm } from "./login-form";
+import Link from "next/link";
+import type { Metadata } from "next";
+import {
+  Ticket,
+  Bus,
+  ChartColumn,
+  ShieldCheck,
+  LogIn,
+  LayoutDashboard,
+  ArrowLeft,
+} from "lucide-react";
 
-const trustPoints = [
-  "صلاحيات دقيقة لكل مستخدم وفرع",
-  "سجل تدقيق للعمليات الحساسة",
-  "بنية جاهزة للتوسع والامتثال",
+export const metadata: Metadata = {
+  title: "Ticketty — منظومة إدارة شركات النقل البري",
+  description:
+    "منصة ERP تشغيلية لشركات النقل في السودان: الرحلات، المبيعات، التحصيل، والتقارير في نظام واحد آمن.",
+};
+
+const capabilities = [
+  {
+    icon: Bus,
+    title: "تشغيل الأسطول",
+    description:
+      "جدولة الرحلات، إدارة المركبات، ومتابعة الحضور والانطلاق في الوقت الحقيقي.",
+  },
+  {
+    icon: Ticket,
+    title: "المبيعات والتذاكر",
+    description:
+      "نقطة بيع سريعة، إصدار تذاكر بباركود، وسياسات إرجاع واضحة لكل فرع.",
+  },
+  {
+    icon: ChartColumn,
+    title: "التقارير والمالية",
+    description:
+      "لوحات تحكم تشغيلية، تسويات نقدية، وتقارير أداء يومية موثوقة.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "الأمان والصلاحيات",
+    description:
+      "عزل بيانات لكل منظمة وفرع، صلاحيات دقيقة لكل مستخدم، وسجل تدقيق كامل.",
+  },
+];
+
+const stats = [
+  { value: "12", label: "شاشة تشغيلية" },
+  { value: "19", label: "خدمة API" },
+  { value: "100%", label: "تغطية اختبارات الأمان" },
 ];
 
 export default function Home() {
   return (
-    <main className="login-page">
-      <section className="login-panel">
-        <div className="login-card">
-          <div className="mobile-brand">
-            <span className="brand-mark">T</span>
-            <strong>Ticketty</strong>
-          </div>
-
-          <div className="login-heading">
-            <span className="eyebrow">بوابة الموظفين</span>
-            <h1>مرحباً بعودتك</h1>
-            <p>أدخل بياناتك للوصول إلى مساحة العمل الآمنة.</p>
-          </div>
-
-          <LoginForm />
-
-          <div className="security-note">
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 3 5.5 5.5v5.8c0 4.2 2.7 7.9 6.5 9.7 3.8-1.8 6.5-5.5 6.5-9.7V5.5z" />
-              <path d="m9.5 12 1.7 1.7 3.5-3.7" />
-            </svg>
-            جلسة مشفرة ومحمية. لا تشارك بيانات الدخول مع أي شخص.
-          </div>
-        </div>
-      </section>
-
-      <aside className="brand-panel">
+    <main className="landing-page">
+      <header className="landing-header">
         <div className="brand">
           <span className="brand-mark">T</span>
           <div>
@@ -42,33 +60,81 @@ export default function Home() {
             <small>Transport Operating System</small>
           </div>
         </div>
+        <nav className="landing-nav">
+          <Link href="/login" className="ghost-link">
+            دخول الموظفين
+          </Link>
+          <Link href="/login" className="primary-link">
+            <LogIn aria-hidden="true" className="link-icon" />
+            ابدأ الآن
+          </Link>
+        </nav>
+      </header>
 
-        <div className="brand-message">
-          <span className="eyebrow eyebrow-light">إدارة النقل، بثقة</span>
-          <h2>
-            منصة واحدة.
-            <br /> رؤية تشغيلية كاملة.
-          </h2>
-          <p>
-            شغّل الرحلات، أدِر الحجوزات، وراقب الأداء المالي من منظومة صُممت
-            لشركات النقل في السودان.
-          </p>
-
-          <ul className="trust-list">
-            {trustPoints.map((point) => (
-              <li key={point}>
-                <span aria-hidden="true">✓</span>
-                {point}
-              </li>
-            ))}
-          </ul>
+      <section className="landing-hero">
+        <span className="eyebrow">منصة إدارة شركات النقل البري</span>
+        <h1>
+          منظومة واحدة.
+          <br />
+          تشغيل كامل من الحجز حتى التقرير.
+        </h1>
+        <p>
+          Ticketty هو نظام ERP تشغيلي لشركات النقل في السودان: الرحلات،
+          المبيعات، التحصيل النقدي، والتقارير — في مكان واحد بمعايير أمان
+          مصرفية.
+        </p>
+        <div className="hero-actions">
+          <Link href="/login" className="primary-link">
+            <LogIn aria-hidden="true" className="link-icon" />
+            بوابة الموظفين
+          </Link>
+          <Link href="/login" className="ghost-link">
+            <LayoutDashboard aria-hidden="true" className="link-icon" />
+            استعراض النظام
+          </Link>
         </div>
+      </section>
 
-        <div className="panel-footer">
+      <section className="landing-capabilities">
+        {capabilities.map(({ icon: Icon, title, description }) => (
+          <article key={title} className="capability-card">
+            <span className="capability-icon">
+              <Icon aria-hidden="true" className="cap-icon" />
+            </span>
+            <h2>{title}</h2>
+            <p>{description}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="landing-cta">
+        <div className="cta-panel">
+          <h2>جاهز لتشغيل أسطولك على Ticketty؟</h2>
+          <p>
+            سجّل الدخول للوصول إلى مساحة عملك، أو تواصل مع فريق Suda
+            Technologies لتفعيل حساب منظمتك.
+          </p>
+          <Link href="/login" className="primary-link">
+            <ArrowLeft aria-hidden="true" className="link-icon" />
+            الدخول إلى النظام
+          </Link>
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <div className="footer-stats">
+          {stats.map(({ value, label }) => (
+            <div key={label} className="footer-stat">
+              <strong>{value}</strong>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="footer-note">
           <span>منتج من Suda-Technologies</span>
           <span className="status-dot">الأنظمة تعمل</span>
         </div>
-      </aside>
+      </footer>
     </main>
   );
 }
