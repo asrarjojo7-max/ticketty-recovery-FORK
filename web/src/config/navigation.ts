@@ -9,6 +9,7 @@ import {
   HandCoins,
   ClipboardList,
   BookOpen,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 
@@ -44,6 +45,13 @@ export const navigation: NavSection[] = [
   {
     label: "العمليات",
     items: [
+      {
+        title: "نقطة البيع",
+        href: "/pos",
+        icon: Store,
+        permissions: ["bookings.write", "bookings.write.own"],
+        badge: "جديد",
+      },
       {
         title: "الحجوزات والتذاكر",
         href: "/bookings",
