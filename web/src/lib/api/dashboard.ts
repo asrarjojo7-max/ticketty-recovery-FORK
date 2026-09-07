@@ -7,10 +7,14 @@ import type {
   ActivityItem,
   ActivityStatus,
   TrendDirection,
+  BusCounts,
+  UpcomingTrip,
 } from "@/types/dashboard";
 
 /**
  * Raw response shape from `GET /api/reports/dashboard`.
+ * Every number is server-computed (Prisma aggregation) — the client never
+ * derives financial figures.
  */
 interface ReportsDashboardResponse {
   totalBookings: number;
@@ -24,6 +28,9 @@ interface ReportsDashboardResponse {
   expensesToday: number;
   revenueSeries: RevenuePoint[];
   bookingDistribution: { method: string; label: string; count: number }[];
+  busCounts: BusCounts;
+  avgOccupancy: number;
+  upcomingTrips: UpcomingTrip[];
   recentActivity: {
     id: string;
     action: string;
@@ -81,7 +88,7 @@ function mapToDashboardStats(raw: ReportsDashboardResponse): DashboardStats {
     },
     {
       id: "tripsToday",
-      title: "الرحلات اليوم",
+      title: "رحلات اليوم",
       value: raw.tripsToday,
       format: "number",
       change: 0,
@@ -91,7 +98,7 @@ function mapToDashboardStats(raw: ReportsDashboardResponse): DashboardStats {
     },
     {
       id: "ticketsSoldToday",
-      title: "التذاكر المباعة",
+      title: "تذاكر مباعة اليوم",
       value: raw.ticketsSoldToday,
       format: "number",
       change: 0,
@@ -123,6 +130,9 @@ function mapToDashboardStats(raw: ReportsDashboardResponse): DashboardStats {
     revenueSeries: raw.revenueSeries,
     bookingDistribution,
     recentActivity,
+    busCounts: raw.busCounts,
+    avgOccupancy: raw.avgOccupancy,
+    upcomingTrips: raw.upcomingTrips,
   };
 }
 

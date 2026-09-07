@@ -12,6 +12,7 @@ export function useDashboardStats() {
     queryKey: ["dashboard", "stats"],
     queryFn: fetchDashboardStats,
     staleTime: 60_000, // 1 min
+    refetchInterval: 60_000, // live board: auto-refresh every minute
   });
 }
 

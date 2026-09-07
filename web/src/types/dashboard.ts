@@ -38,9 +38,30 @@ export interface ActivityItem {
   status: ActivityStatus;
 }
 
+/** Fleet readiness counts (server-side aggregation — BusStatus vocabulary). */
+export interface BusCounts {
+  active: number;
+  maintenance: number;
+  inactive: number;
+}
+
+/** Upcoming trip with server-computed capacity/occupancy (no client math). */
+export interface UpcomingTrip {
+  id: string;
+  departureAt: string;
+  route: string;
+  busPlate: string | null;
+  capacity: number;
+  booked: number;
+  occupancy: number; // 0..100
+}
+
 export interface DashboardStats {
   kpis: KpiStat[];
   revenueSeries: RevenuePoint[];
   bookingDistribution: BookingDistribution[];
   recentActivity: ActivityItem[];
+  busCounts: BusCounts;
+  avgOccupancy: number;
+  upcomingTrips: UpcomingTrip[];
 }

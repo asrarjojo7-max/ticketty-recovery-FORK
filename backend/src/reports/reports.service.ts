@@ -63,6 +63,7 @@ export class ReportsService {
     const yesterdayStart = new Date(start.getTime() - 24 * 60 * 60 * 1000);
     const sevenDaysAgo = new Date(start.getTime() - 6 * 24 * 60 * 60 * 1000);
 
+    const now = new Date();
     const [
       totalBookings,
       revenueToday,
@@ -76,6 +77,8 @@ export class ReportsService {
       recentBookings,
       paymentsLast7Days,
       paymentsByMethod,
+      busStatusGroups,
+      upcomingTripRows,
     ] = await Promise.all([
       this.prisma.booking.count({
         where: { organizationId: orgId, ...branch },
@@ -150,10 +153,68 @@ export class ReportsService {
         where: { organizationId: orgId, ...branch },
         _count: true,
       }),
+      this.prisma.bus.groupBy({
+        by: ['status'],
+        where: { organizationId: orgId, ...branch },
+        _count: true,
+      }),
+      this.prisma.trip.findMany({
+        where: {
+          organizationId: orgId,
+          ...branch,
+          departureAt: {
+            gte: now,
+            lt: new Date(now.getTime() + 48 * 60 * 60 * 1000),
+          },
+          status: { in: ['SCHEDULED', 'OPEN'] },
+        },
+        include: {
+          route: true,
+          bus: { include: { seatTemplate: true } },
+          tripSeats: { select: { status: true } },
+        },
+        orderBy: { departureAt: 'asc' },
+        take: 5,
+      }),
     ]);
 
     const revenueTodayValue = Number(revenueToday._sum.amount ?? 0);
     const revenueYesterdayValue = Number(revenueYesterday._sum.amount ?? 0);
+
+    // Fleet readiness (bus status vocabulary: READY/MAINTENANCE/OUT_OF_SERVICE)
+    const busCounts = { active: 0, maintenance: 0, inactive: 0 };
+    for (const group of busStatusGroups) {
+      if (group.status === 'READY') busCounts.active = group._count;
+      else if (group.status === 'MAINTENANCE')
+        busCounts.maintenance = group._count;
+      else if (group.status === 'OUT_OF_SERVICE')
+        busCounts.inactive = group._count;
+    }
+
+    // Upcoming trips (48h window) with capacity/occupancy computed server-side
+    const upcomingTrips = upcomingTripRows.map((t) => {
+      const capacity = t.tripSeats.length;
+      const booked = t.tripSeats.filter((s) => s.status === 'BOOKED').length;
+      return {
+        id: t.id,
+        departureAt: t.departureAt.toISOString(),
+        route: `${t.route.fromCity} → ${t.route.toCity}`,
+        busPlate: t.bus?.plateNumber ?? null,
+        capacity,
+        booked,
+        occupancy: capacity > 0 ? Math.round((booked / capacity) * 100) : 0,
+      };
+    });
+
+    // Average occupancy across sampled upcoming trips (server-side math only)
+    const occSamples = upcomingTrips.filter((t) => t.capacity > 0);
+    const avgOccupancy = occSamples.length
+      ? Math.round(
+          (occSamples.reduce((s, t) => s + t.booked / t.capacity, 0) /
+            occSamples.length) *
+            100,
+        )
+      : 0;
 
     return {
       // KPI raw values
@@ -174,6 +235,11 @@ export class ReportsService {
         label: PAYMENT_METHOD_LABELS[p.method] ?? p.method,
         count: p._count,
       })),
+
+      // Fleet + occupancy (server-side aggregation)
+      busCounts,
+      avgOccupancy,
+      upcomingTrips,
 
       // Activity
       recentActivity: recentBookings.map((b) => {
