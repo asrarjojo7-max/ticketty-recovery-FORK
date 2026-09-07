@@ -79,7 +79,7 @@ export function BoardingScanner() {
             <div className="relative flex items-center"><div className="h-px flex-1 bg-border" /><span className="px-3 text-[11px] text-muted-foreground">أو تحقق يدويًا</span><div className="h-px flex-1 bg-border" /></div>
             <div className="flex gap-2">
               <select className="h-10 rounded-xl border border-input bg-card px-3 text-sm" value={mode} onChange={(event) => setMode(event.target.value as "qr" | "id")}><option value="qr">رمز QR</option><option value="id">معرّف التذكرة</option></select>
-              <div className="relative flex-1"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pr-9" dir="ltr" value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") search(); }} placeholder={mode === "qr" ? "ألصق رمز التحقق" : "أدخل معرف التذكرة"} /></div>
+              <div className="relative flex-1"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="ps-9" dir="ltr" value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") search(); }} placeholder={mode === "qr" ? "ألصق رمز التحقق" : "أدخل معرف التذكرة"} /></div>
               <Button type="button" variant="outline" onClick={() => search()} disabled={!value.trim() || findTicket.isPending}>{findTicket.isPending ? <Loader2 className="animate-spin" /> : "تحقق"}</Button>
             </div>
           </CardContent>

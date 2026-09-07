@@ -76,7 +76,7 @@ function TicketCard({ ticket, booking, trip }: { ticket: Ticket; booking: Bookin
             <span className="font-bold text-primary">{formatCurrency(Number(ticket.fare))} ج.س</span>
           </div>
         </div>
-        <div className="flex min-w-40 flex-col items-center justify-center border-t border-dashed pt-4 sm:border-r sm:border-t-0 sm:pr-5 sm:pt-0">
+        <div className="flex min-w-40 flex-col items-center justify-center border-t border-dashed pt-4 sm:border-r sm:border-t-0 sm:ps-5 sm:pt-0">
           {qrDataUrl ? <Image src={qrDataUrl} width={150} height={150} unoptimized alt={`رمز QR للتذكرة ${ticket.number}`} /> : <div className="h-[150px] w-[150px] animate-pulse rounded bg-muted" />}
           <p className="mt-2 text-center text-[10px] text-muted-foreground">رمز تحقق فريد</p>
         </div>

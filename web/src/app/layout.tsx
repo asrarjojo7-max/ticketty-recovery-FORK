@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Alexandria, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Cairo, Mada } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
+const cairo = Cairo({
   subsets: ["arabic", "latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-body",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
   display: "swap",
 });
 
-const alexandria = Alexandria({
+const mada = Mada({
   subsets: ["arabic", "latin"],
-  weight: ["500", "600", "700"],
+  weight: ["600", "700", "800", "900"],
   variable: "--font-display",
   display: "swap",
 });
@@ -31,10 +31,10 @@ export default function RootLayout({
     <html
       lang="ar"
       dir="rtl"
-      className={`${ibmPlexSansArabic.variable} ${alexandria.variable}`}
+      className={`${cairo.variable} ${mada.variable}`}
       suppressHydrationWarning
     >
-      <body className={ibmPlexSansArabic.className}>
+      <body className={cairo.className}>
         <Providers>{children}</Providers>
       </body>
     </html>

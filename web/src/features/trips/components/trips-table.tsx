@@ -91,7 +91,7 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
             <TableHead>السائق</TableHead>
             <TableHead>الإشغال</TableHead>
             <TableHead>الحالة</TableHead>
-            <TableHead className="text-left">إجراء سريع</TableHead>
+            <TableHead className="text-end">إجراء سريع</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -113,7 +113,7 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
                 <TableCell>{trip.driverName ?? "غير معيّن"}</TableCell>
                 <TableCell>{trip._count.tickets} / {trip._count.tripSeats}</TableCell>
                 <TableCell><Badge variant={badgeVariants[trip.status]}>{tripStatusLabels[trip.status]}</Badge></TableCell>
-                <TableCell className="text-left">
+                <TableCell className="text-end">
                   <div className="flex justify-end gap-2">
                     {canManage && action && ActionIcon ? (
                       <Button

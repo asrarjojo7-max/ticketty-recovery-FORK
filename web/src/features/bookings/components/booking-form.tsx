@@ -93,7 +93,7 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
         <div className="rounded-xl bg-primary/10 p-2 text-primary"><TicketCheck className="h-5 w-5" /></div>
       </div>
 
-      <div className="max-h-[38vh] space-y-4 overflow-y-auto pl-1">
+      <div className="max-h-[38vh] space-y-4 overflow-y-auto pe-1">
         {seats.map((seat, index) => {
           const passenger = passengers[seat.id];
           return (
@@ -138,7 +138,7 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
           <label htmlFor="payment-reference" className="text-sm font-medium">مرجع عملية البطاقة</label>
           <div className="relative">
             <CreditCard className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input id="payment-reference" className="pr-9" maxLength={100} value={form.paymentReference} onChange={(event) => updateField("paymentReference", event.target.value)} placeholder="رقم العملية" required />
+            <Input id="payment-reference" className="ps-9" maxLength={100} value={form.paymentReference} onChange={(event) => updateField("paymentReference", event.target.value)} placeholder="رقم العملية" required />
           </div>
         </div>
       ) : null}

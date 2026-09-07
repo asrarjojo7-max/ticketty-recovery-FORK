@@ -81,7 +81,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex items-center gap-2.5 rounded-xl p-1.5 text-right transition-colors hover:bg-muted" aria-label="قائمة المستخدم">
+          <button className="flex items-center gap-2.5 rounded-xl p-1.5 text-start transition-colors hover:bg-muted" aria-label="قائمة المستخدم">
             <Avatar className="h-9 w-9 ring-2 ring-primary/10">
               <AvatarFallback className="bg-gradient-to-br from-primary to-teal-600 font-bold text-primary-foreground">{user.name.slice(0, 1)}</AvatarFallback>
             </Avatar>

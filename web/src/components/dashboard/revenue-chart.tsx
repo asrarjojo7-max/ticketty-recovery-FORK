@@ -52,7 +52,7 @@ function RevenueTooltip({
           <span className="text-muted-foreground">
             {entry.dataKey === "revenue" ? "الإيرادات" : "الحجوزات"}
           </span>
-          <span className="mr-auto font-semibold">
+          <span className="ms-auto font-semibold">
             {entry.dataKey === "revenue"
               ? `${formatCompact(entry.value ?? 0)} ج.س`
               : formatCompact(entry.value ?? 0)}
@@ -76,7 +76,7 @@ export function RevenueChart({ data }: RevenueChartProps) {
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-chart-2" />الحجوزات</span>
         </div>
       </CardHeader>
-      <CardContent className="h-72 pl-3">
+      <CardContent className="h-72 pe-3">
         {/* Recharts renders LTR internally; wrap for correct axis direction */}
         <div dir="ltr" className="h-full w-full">
           <ResponsiveContainer width="100%" height="100%">

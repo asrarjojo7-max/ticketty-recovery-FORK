@@ -34,7 +34,7 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div><CardTitle className="font-display text-lg">سجل الحجوزات</CardTitle><p className="mt-1 text-xs text-muted-foreground">ابحث عن مسافر أو تذكرة، وراجع حالة الدفع والاسترداد.</p></div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pr-9 sm:w-64" placeholder="اسم، هاتف، رقم تذكرة..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+            <div className="relative"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="ps-9 sm:w-64" placeholder="اسم، هاتف، رقم تذكرة..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
             <Input type="date" className="sm:w-40" value={date} onChange={(event) => setDate(event.target.value)} aria-label="تاريخ الرحلة" />
             <select className={selectClass} value={status} onChange={(event) => setStatus(event.target.value as BookingStatus | "")} aria-label="حالة الحجز"><option value="">كل الحالات</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           </div>
@@ -52,7 +52,7 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
                 <TableCell className="font-semibold">{formatCurrency(Number(booking.totalAmount))} ج.س</TableCell>
                 <TableCell>{booking.payments[0]?.method === "CASH" ? "نقدًا" : booking.payments[0]?.method === "CARD" ? "بطاقة" : booking.payments[0]?.method ?? "—"}</TableCell>
                 <TableCell><Badge variant={statusVariants[booking.status]}>{statusLabels[booking.status]}</Badge></TableCell>
-                <TableCell className="text-left">{canManage && booking.status === "CONFIRMED" ? <Button type="button" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setSelected(booking)}><Ban /> إلغاء واسترداد</Button> : null}</TableCell>
+                <TableCell className="text-end">{canManage && booking.status === "CONFIRMED" ? <Button type="button" variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setSelected(booking)}><Ban /> إلغاء واسترداد</Button> : null}</TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>

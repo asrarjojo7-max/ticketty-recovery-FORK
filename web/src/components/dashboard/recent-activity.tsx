@@ -158,7 +158,7 @@ export function RecentActivity({ data, isLoading }: RecentActivityProps) {
             placeholder="بحث في النشاطات..."
             value={globalFilter}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="bg-muted/50 pr-9"
+            className="bg-muted/50 ps-9"
           />
         </div>
         <span className="hidden text-xs text-muted-foreground sm:block">
