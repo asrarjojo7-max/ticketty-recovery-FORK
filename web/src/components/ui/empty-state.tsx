@@ -1,33 +1,69 @@
+"use client";
+
+import Link from "next/link";
+import { PlusCircle, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { type ReactNode } from "react";
 
-interface EmptyStateProps {
-  icon?: ReactNode;
-  title: string;
-  description?: string;
-  className?: string;
-}
-
+/**
+ * ticket-master DNA empty state: glowing icon tile, bold title, muted
+ * description, optional CTA link. Pure presentation.
+ * `icon` accepts either a LucideIcon component or a ReactNode (legacy call
+ * sites pass <Icon className/> nodes) — both render inside the glowing tile.
+ */
 export function EmptyState({
   icon,
   title,
+  desc,
   description,
+  ctaLabel,
+  ctaHref,
   className,
-}: EmptyStateProps) {
+}: {
+  icon?: LucideIcon | ReactNode;
+  title: string;
+  desc?: string;
+  description?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  className?: string;
+}) {
+  const text = desc ?? description;
+  const renderedIcon =
+    typeof icon === "function" && "displayName" in icon
+      ? (() => {
+          const Icon = icon as LucideIcon;
+          return <Icon className="h-6 w-6" />;
+        })()
+      : (icon as ReactNode);
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-muted/20 px-6 py-16 text-center",
+        "flex flex-col items-center justify-center gap-2 py-10 text-center",
         className,
       )}
     >
-      {icon ? (
-        <div className="mb-4 rounded-2xl bg-muted p-3 text-muted-foreground">{icon}</div>
+      {renderedIcon ? (
+        <div className="relative inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary [&_svg]:h-6 [&_svg]:w-6">
+          <div
+            className="pointer-events-none absolute inset-0 rounded-2xl opacity-40 blur-xl"
+            style={{ background: "var(--color-primary)" }}
+            aria-hidden="true"
+          />
+          {renderedIcon}
+        </div>
       ) : null}
-      <h3 className="text-base font-semibold text-foreground">{title}</h3>
-      {description ? (
-        <p className="mt-1.5 max-w-sm text-sm leading-6 text-muted-foreground">{description}</p>
-      ) : null}
+      <p className="mt-1 text-sm font-bold text-foreground">{title}</p>
+      {text && <p className="max-w-xs text-xs text-muted-foreground">{text}</p>}
+      {ctaLabel && ctaHref && (
+        <Link
+          href={ctaHref}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-glow transition hover:-translate-y-0.5"
+        >
+          <PlusCircle className="h-3.5 w-3.5" />
+          {ctaLabel}
+        </Link>
+      )}
     </div>
   );
 }
