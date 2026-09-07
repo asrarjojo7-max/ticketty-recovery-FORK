@@ -264,7 +264,7 @@ ticketty يملك BusSeatMap عاملاً بالفعل (hold/release/vip/regular
 | Phase 0 — Git baseline + docs sync | ✅ | 2026-09-01 | commit `60672a6` (49 ملفاً محمياً)، PROJECT_STATE/TECH_DEBT/TEST_STRATEGY مُزامنة، TD-014 → Resolved |
 | Phase 1 — Design System Core | ✅ | 2026-09-01 | commit `fee2a63` — oklch tokens كاملة + Cairo/Mada + sonner + RTL lint guard + إصلاح 23 مخالفة RTL في 16 ملفاً. **مؤجل للمراحل 3-4**: ألوان teal القديمة في sidebar.tsx وwelcome-header.tsx (تُعاد كتابتها هناك) |
 | Phase 2 — Component Library | ✅ | 2026-09-01 | page-header + status-badge (6 domains) + empty-state (متوافق مع الاستدعاءات القديمة) + kpi-card/DeltaPill + charts (Sparkline/RevenueAreaChart/FleetDonut/FleetRow SVG) + skeletons. كلها presentational props-only |
-| Phase 3 — Shell | ⬜ | — | — |
+| Phase 3 — Shell | ✅ | 2026-09-01 | commit `1f1bde1` — sidebar فاتح بالـ tokens (شعار TICKETTY متدرج، active=gradient+glow)، header sticky blur، drawer موبايل يغلق تلقائياً عند تغيير المسار. filterNavigation/الصلاحيات لم تُمس |
 | Phase 4 — Dashboard | ⬜ | — | — |
 | Phase 5 — POS | ⬜ | — | — |
 | Phase 6 — Tables & Forms | ⬜ | — | — |
