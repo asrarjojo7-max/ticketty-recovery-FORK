@@ -35,7 +35,20 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      {
+        source: "/(.*)",
+        headers: securityHeaders,
+      },
+      {
+        // Dev-server asset URLs are not content-hashed, so intermediate caches
+        // (Cloudflare in front of the tunnel, browsers) must always
+        // revalidate them — otherwise code changes stay invisible for hours on
+        // the preview domain while the local server already serves them.
+        source: "/_next/static/:path*",
+        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
+      },
+    ];
   },
 };
 
