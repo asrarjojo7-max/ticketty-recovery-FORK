@@ -261,7 +261,7 @@ ticketty يملك BusSeatMap عاملاً بالفعل (hold/release/vip/regular
 
 | المرحلة | الحالة | تاريخ | ملاحظات/ملفات |
 |---|---|---|---|
-| Phase 0 — Git baseline + docs sync | ⏳ | — | 49 untracked + docs |
+| Phase 0 — Git baseline + docs sync | ✅ | 2026-09-01 | commit `60672a6` (49 ملفاً محمياً)، PROJECT_STATE/TECH_DEBT/TEST_STRATEGY مُزامنة، TD-014 → Resolved |
 | Phase 1 — Design System Core | ⬜ | — | — |
 | Phase 2 — Component Library | ⬜ | — | — |
 | Phase 3 — Shell | ⬜ | — | — |

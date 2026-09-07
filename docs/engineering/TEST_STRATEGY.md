@@ -2,11 +2,11 @@
 
 ## Current evidence
 
-- Backend: 21 Jest suites / 83 tests after the current hardening cycle, including login lockout, pagination, grant ceilings, error mapping, guard behavior, and a metadata gate requiring explicit permissions on every business route.
-- Backend E2E: 3 suites / 9 tests covering production-equivalent app bootstrap, stable error envelopes, health, refund contention, booking-vs-trip cancellation, and cross-agent isolation.
-- PostgreSQL contract scripts cover refund, tenant, and settlement integrity and pass against the migrated local database.
-- Frontend: 2 Vitest suites / 7 tests cover server environment, origin, request-ID, and JWT-expiry helpers; lint, strict TypeScript, and production build pass. Component/browser tests remain absent.
-- Active Prisma schema validation and all 17 runtime migrations pass; candidate database v1 remains a separate, inactive contract.
+- Backend: 24 Jest suites / 91 tests after the current hardening cycle, including login lockout, pagination, grant ceilings, error mapping, guard behavior, and a metadata gate requiring explicit permissions on every business route.
+- Backend E2E: 5 suites / 19 tests covering production-equivalent app bootstrap, stable error envelopes, health, refund contention, booking-vs-trip cancellation, cross-agent isolation, runtime RLS, and the accounting lifecycle/reversal/event posting.
+- PostgreSQL contract scripts cover refund, tenant, settlement, and accounting integrity and pass against the migrated local database.
+- Frontend: 3 Vitest suites / 10 tests cover server environment, origin, request-ID, JWT-expiry helpers, and permission-aware navigation; lint, strict TypeScript, and production build pass. Component/browser tests remain absent — Playwright golden paths are planned as `MASTER_PLAN.md` Phase 9.
+- All 27 runtime migrations pass; candidate database v1 remains a separate, inactive contract.
 - GitHub CI now enforces backend/web quality, database integration contracts, dependency audits, and container builds.
 
 ## Test pyramid
