@@ -17,7 +17,7 @@ export function Spinner({ size = "md", className, ...rest }: SpinnerProps) {
       role="status"
       aria-label="جارٍ التحميل"
       className={cn(
-        "animate-spin rounded-full border-gray-200 border-t-teal-600",
+        "animate-spin rounded-full border-muted border-t-primary",
         sizeMap[size],
         className,
       )}
