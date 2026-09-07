@@ -33,6 +33,20 @@ Three independent findings combined; no layer intentionally put credentials in a
 
 The credential used in testing (`e2e-owner@ticketty.local`) is a dedicated E2E fixture account, not a real user credential. Its password is rotated by re-running `pnpm e2e:setup` (regenerates a fresh bcrypt hash). Real user passwords were never exposed by this bug — the leak depended on each user typing their password into the form while hydration was broken. **Action for owner:** rotate any account that was logged into through the tunnel domain during 2026-09-07 before the fix, and treat browser history entries on machines that used the preview domain during that window as containing plaintext passwords.
 
+## Post-fix follow-up (2026-09-07, second pass)
+
+The owner reported the Next.js dev indicator showing 2 issues on the tunnel after the fix. Both were investigated and resolved:
+
+1. **React dev `eval()` blocked by CSP** — React's development build requires `eval()` for stack-frame reconstruction (production React does not). Fixed in `next.config.ts`: `'unsafe-eval'` is appended to `script-src` **only when `NODE_ENV !== "production"`**. Verified: the production build's `routes-manifest.json` contains `script-src 'self' 'unsafe-inline'` — no `unsafe-eval` — so production CSP remains fully hardened. The dev server now serves `script-src 'self' 'unsafe-inline' 'unsafe-eval'`.
+2. **Hydration mismatch on the login form** (server lacked `action`/`method`, client had them) — this was a stale-module window: the dev server had cached pre-fix server markup while the Turbopack client bundle already carried the fix (the "Next.js 16.3.2 (stale)" indicator pointed at the same stale `.next` state). Resolved by a clean dev-server restart with `.next` removed. Verified: server-rendered HTML, source, and live DOM all show `<form class="login-form" action="/api/session" method="POST">`; console is clean (zero errors/warnings) on both localhost and the tunnel domain.
+
+Re-verification after the cleanup (all through the live domain where applicable):
+- Credential-leak regression suite re-run: 4/4 pass (both tests), including a strengthened assertion that the **server-rendered HTML** itself carries `action="/api/session"` + `method="POST"` (locked in before any JS runs).
+- Login is `POST /api/session` with body-only credentials; no URL in the entire flow contains a credential.
+- Native/no-JS submission remains safe (POST to /api/session, URL stays clean).
+- Application logs (web dev server, both backend instances) scanned: zero credential occurrences.
+- Full gates: lint, typecheck, 13/13 vitest, 10/10 Playwright (including the 2 security regression tests), production build green.
+
 ## Log hygiene confirmation
 
 The backend completion logger emits `{requestId, method, path, statusCode, clientIp, durationMs}` — no query strings (the Nest logger records `request.path` without the search string for POSTs; GETs carry no credentials in this app). The Next.js BFF does not log request bodies. Cloudflare tunnel logs were not accessible from the machine (no API token); the owner may check the Cloudflare dashboard — any logged URLs from the incident window may contain credentials and should be aged out per the plan's retention settings.

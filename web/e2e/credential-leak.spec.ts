@@ -52,6 +52,18 @@ test("login flow never places credentials in a URL", async ({ page }) => {
   await page.goto("/");
   const method = await page.locator("form.login-form").getAttribute("method");
   expect(method).toBe("POST");
+  const action = await page
+    .locator("form.login-form")
+    .getAttribute("action");
+  expect(action).toBe("/api/session");
+
+  // 5) The SERVER-RENDERED HTML itself carries the POST contract — so the
+  //    guarantee exists before any JavaScript runs (no-JS browsers and
+  //    pre-hydration states included).
+  const html = await page.content();
+  expect(html).toMatch(
+    /<form[^>]*action="\/api\/session"[^>]*method="POST"[^>]*>|<form[^>]*method="POST"[^>]*action="\/api\/session"[^>]*>/,
+  );
 });
 
 test("native form submission (no React handlers) is POST with body-only credentials", async ({
