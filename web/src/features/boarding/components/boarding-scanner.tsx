@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import { AlertCircle, Camera, CameraOff, CheckCircle2, Loader2, QrCode, Search, ShieldCheck, TicketCheck, User } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +64,7 @@ export function BoardingScanner() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div><p className="mb-1.5 text-xs font-bold text-primary">بوابة الصعود</p><h1 className="font-display text-2xl font-bold sm:text-3xl">مسح التذاكر وتسجيل الركاب</h1><p className="mt-2 text-sm text-muted-foreground">تحقق من صلاحية التذكرة وسجّل الصعود في ثوانٍ.</p></div>
+      <PageHeader eyebrow="بوابة الصعود" title="مسح التذاكر وتسجيل الركاب" subtitle="تحقق من صلاحية التذكرة وسجّل الصعود في ثوانٍ." icon={QrCode} />
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
         <Card className="overflow-hidden">

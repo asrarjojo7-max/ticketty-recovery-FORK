@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Bus, CalendarClock, CheckCircle2, Plus, Search } from "lucide-react";
+import { Bus, CalendarClock, CheckCircle2, MapPin, Plus, Search } from "lucide-react";
 import { useSession } from "@/components/layout/session-context";
+import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -57,18 +58,19 @@ export function TripsFeature() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="mb-1.5 text-xs font-bold text-primary">مركز العمليات</p>
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">الرحلات والمسارات</h1>
-          <p className="mt-2 text-sm text-muted-foreground">خطط خطوط السير، جدوِل الرحلات، وتابع جاهزية التشغيل من واجهة واحدة.</p>
-        </div>
-        {activeTab === "trips" && canManageTrips ? (
-          <Button onClick={() => setShowTripForm((value) => !value)}><Plus /> إضافة رحلة</Button>
-        ) : activeTab === "routes" && canManageRoutes ? (
-          <Button onClick={() => { setEditingRoute(undefined); setShowRouteForm((value) => !value); }}><Plus /> إضافة مسار</Button>
-        ) : null}
-      </div>
+      <PageHeader
+        eyebrow="مركز العمليات"
+        title="الرحلات والمسارات"
+        subtitle="خطط خطوط السير، جدوِل الرحلات، وتابع جاهزية التشغيل من واجهة واحدة."
+        icon={MapPin}
+        actions={
+          activeTab === "trips" && canManageTrips ? (
+            <Button onClick={() => setShowTripForm((value) => !value)}><Plus /> إضافة رحلة</Button>
+          ) : activeTab === "routes" && canManageRoutes ? (
+            <Button onClick={() => { setEditingRoute(undefined); setShowRouteForm((value) => !value); }}><Plus /> إضافة مسار</Button>
+          ) : null
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
         <TabsList>

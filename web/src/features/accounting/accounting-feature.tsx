@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { BookOpen, Loader2, Plus } from "lucide-react";
+import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,11 +27,7 @@ export function AccountingFeature() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-6">
-      <div>
-        <p className="mb-1.5 text-xs font-bold text-primary">المحاسبة العامة</p>
-        <h1 className="font-display text-2xl font-bold sm:text-3xl">دفتر الأستاذ والقيود</h1>
-        <p className="mt-2 text-sm text-muted-foreground">حسابات وفترات وقيود مزدوجة محمية من التعديل بعد الترحيل.</p>
-      </div>
+      <PageHeader eyebrow="المحاسبة العامة" title="دفتر الأستاذ والقيود" subtitle="حسابات وفترات وقيود مزدوجة محمية من التعديل بعد الترحيل." icon={BookOpen} />
       {canWrite ? <SetupForms /> : null}
       <div className="grid gap-4 md:grid-cols-3">
         <Metric title="الحسابات" value={accounts.data?.length ?? 0} loading={accounts.isLoading} />

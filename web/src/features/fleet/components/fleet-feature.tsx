@@ -1,12 +1,13 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { AlertCircle, Armchair, BusFront, Loader2, Plus, Search, ShieldCheck, UserRound, X } from "lucide-react";
+import { AlertCircle, Armchair, BusFront, Loader2, Plus, Search, ShieldCheck, UserRound, X, Bus} from "lucide-react";
 import { useSession } from "@/components/layout/session-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -35,7 +36,7 @@ export function FleetFeature() {
 
   return (
     <div className="mx-auto max-w-[96rem] space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1.5 text-xs font-bold text-primary">إدارة الأصول</p><h1 className="font-display text-2xl font-bold sm:text-3xl">الأسطول والسائقون</h1><p className="mt-2 text-sm text-muted-foreground">راقب جاهزية الحافلات وصلاحية السائقين وقوالب المقاعد.</p></div>{canManage ? <Button onClick={() => setModal(actions.type)}><Plus />{actions.label}</Button> : null}</div>
+      <PageHeader eyebrow="إدارة الأصول" title="الأسطول والسائقون" subtitle="راقب جاهزية الحافلات وصلاحية السائقين وقوالب المقاعد." icon={Bus} actions={canManage ? <Button onClick={() => setModal(actions.type)}><Plus />{actions.label}</Button> : null} />
 
       <Tabs value={tab} onValueChange={setTab} dir="rtl"><TabsList><TabsTrigger value="buses">الحافلات</TabsTrigger><TabsTrigger value="drivers">السائقون</TabsTrigger><TabsTrigger value="templates">قوالب المقاعد</TabsTrigger></TabsList>
         <div className="mt-5 max-w-md"><div className="relative"><Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="ps-9" placeholder="ابحث في السجل..." value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
