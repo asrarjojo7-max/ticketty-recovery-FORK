@@ -14,18 +14,21 @@ const OPERATOR = {
 test("platform operator provisions a new transport company end-to-end", async ({
   browser,
 }) => {
+  test.setTimeout(120_000); // باب دخول المالك ينتظر نافذة الثروتل عند الحاجة
   const slug = `e2e-company-${Date.now().toString(36)}`;
   const ownerEmail = `${slug}-owner@ticketty.local`;
   const ownerName = "مالك شركة الاختبار";
 
-  // 1) Operator session
-  const operatorCtx = await browser.newContext({ locale: "ar-EG" });
+  // 1) Operator session — from the setup storageState (OWNER = platform
+  //    operator; a manual login here would burn the 5/min login throttle
+  //    that step 6 (the new owner's login) also needs).
+  const operatorCtx = await browser.newContext({
+    storageState: "playwright/.auth/owner.json",
+    locale: "ar-EG",
+  });
   const operator = await operatorCtx.newPage();
-  await operator.goto("/login");
-  await operator.fill("#email", OPERATOR.email);
-  await operator.fill("#password", OPERATOR.password);
-  await operator.click('button[type="submit"]');
-  await operator.waitForURL("**/dashboard", { timeout: 30_000 });
+  await operator.goto("/dashboard");
+  await operator.waitForLoadState("networkidle");
 
   // 2) Platform page shows the roster + provision modal
   await operator.goto("/platform");

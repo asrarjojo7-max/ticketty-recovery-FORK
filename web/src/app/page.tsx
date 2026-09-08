@@ -93,6 +93,12 @@ export default function Home() {
           </div>
         </div>
         <nav className="landing-nav">
+          <Link href="/about" className="ghost-link landing-nav-page">
+            من نحن
+          </Link>
+          <Link href="/#pricing" className="ghost-link landing-nav-page">
+            الأسعار
+          </Link>
           <Link href="/login" className="ghost-link">
             دخول الموظفين
           </Link>
@@ -293,6 +299,88 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="landing-pricing" id="pricing">
+        <div className="section-head">
+          <span className="eyebrow">الأسعار والاشتراكات</span>
+          <h2>خطة واحدة واضحة. بلا مفاجآت.</h2>
+          <p>
+            كل ما تحتاجه شركة النقل لتشغيل أسطولها بالكامل — سعر واحد
+            شهري بالجنيه السوداني، وتجربة مجانية كاملة أولاً.
+          </p>
+        </div>
+        <div className="pricing-grid">
+          <div className="pricing-card">
+            <span className="plan-tag">تجربة مجانية</span>
+            <h3 className="plan-name">شهر كامل مجاناً</h3>
+            <div className="plan-price">
+              <strong>0</strong>
+              <span>ج.س / 30 يوماً</span>
+            </div>
+            <p className="plan-desc">
+              كل الميزات كاملة دون أي قيود — جرّب التشغيل الحقيقي
+              لأسطولك قبل أي التزام مالي.
+            </p>
+            <ul className="plan-features">
+              <li>كل شاشات التشغيل الـ 12</li>
+              <li>عدد غير محدود من المستخدمين والفروع</li>
+              <li>الرحلات والتذاكر والتقارير المالية</li>
+              <li>دعم فني على مدار الأسبوع</li>
+            </ul>
+            <Link href="/login" className="ghost-link plan-cta">
+              ابدأ التجربة المجانية
+            </Link>
+          </div>
+          <div className="pricing-card pricing-featured">
+            <span className="plan-tag">الخطة التشغيلية</span>
+            <h3 className="plan-name">الاشتراك الشهري</h3>
+            <div className="plan-price">
+              <strong>199,000</strong>
+              <span>ج.س / شهرياً</span>
+            </div>
+            <p className="plan-desc">
+              المنظومة كاملة لكل فريقك: مبيعات، محاسبة مزدوجة، منفستو،
+              وكل التقارير — بسعر ثابت لا يتغير مع حجم عملياتك.
+            </p>
+            <ul className="plan-features">
+              <li>كل ميزات التجربة المجانية</li>
+              <li>عزل بيانات كامل بمعايير مصرفية</li>
+              <li>سجل تدقيق لكل عملية</li>
+              <li>نسخ احتياطي يومي مشفّر</li>
+              <li>ترقيات مستمرة بلا تكلفة إضافية</li>
+            </ul>
+            <Link href="/login" className="primary-link plan-cta">
+              اشترك الآن
+            </Link>
+          </div>
+          <div className="pricing-card">
+            <span className="plan-tag">وفر شهرين</span>
+            <h3 className="plan-name">الاشتراك السنوي</h3>
+            <div className="plan-price">
+              <strong>2,388,000</strong>
+              <span>ج.س / سنوياً</span>
+            </div>
+            <p className="plan-desc">
+              نفس الخطة الشهرية بسعر 12 شهراً بسعر 10 — وفّر 398,000
+              ج.س سنوياً مع أولوية دعم أعلى.
+            </p>
+            <ul className="plan-features">
+              <li>كل ميزات الخطة الشهرية</li>
+              <li>شهران مجاناً (وفّر 17%)</li>
+              <li>أولوية في الاستجابة والدعم</li>
+              <li>مدير حساب مخصص</li>
+            </ul>
+            <Link href="/login" className="ghost-link plan-cta">
+              اشترك سنوياً
+            </Link>
+          </div>
+        </div>
+        <p className="pricing-note">
+          الأسعار بالجنيه السوداني وتشمل كل المستخدمين والفروع — لا رسوم
+          خفية ولا عدّادات. التجربة المجانية 30 يوماً ثم تُحوّل تلقائياً
+          بالسعر الشهري عند رغبتك.
+        </p>
+      </section>
+
       <section className="landing-cta">
         <div className="cta-panel">
           <span className="eyebrow eyebrow-light">ابدأ التشغيل اليوم</span>
@@ -323,8 +411,21 @@ export default function Home() {
             <span>تغطية اختبارات الأمان</span>
           </div>
         </div>
+        <div className="footer-links">
+          <Link href="/privacy" className="footer-legal-link">
+            سياسة الخصوصية
+          </Link>
+          <span className="footer-dot" aria-hidden="true">·</span>
+          <Link href="/terms" className="footer-legal-link">
+            شروط الاستخدام
+          </Link>
+          <span className="footer-dot" aria-hidden="true">·</span>
+          <Link href="/about" className="footer-legal-link">
+            من نحن
+          </Link>
+        </div>
         <div className="footer-note">
-          <span>منتج من Suda-Technologies</span>
+          <span>منتج من Suda-Technologies — الخرطوم، السودان</span>
           <span className="status-dot">الأنظمة تعمل</span>
         </div>
       </footer>

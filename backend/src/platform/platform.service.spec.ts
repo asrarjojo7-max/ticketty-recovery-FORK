@@ -1,4 +1,8 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { PlatformService } from './platform.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
@@ -243,10 +247,178 @@ describe('PlatformService.listTenants', () => {
     };
     const service = new PlatformService(prisma as never);
     const list = await service.listTenants(platformAdmin(), 'نيل');
+    const rowFixture = (
+      queryRaw.mock.results[0]?.value as { tickets_count: number }[]
+    )?.[0];
 
     expect(list).toHaveLength(1);
-    expect(list[0]._count).toEqual({ users: 5, branches: 2, trips: 40 });
+    expect(list[0]._count).toEqual({
+      users: 5,
+      branches: 2,
+      trips: 40,
+      tickets: Number(rowFixture.tickets_count),
+    });
     expect(JSON.stringify(list)).not.toContain('password');
     expect(JSON.stringify(list)).not.toContain('Hash');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// الاشتراكات ودورة الحياة والمراقبة — حواجز وترجمة أخطاء
+// ═════════════════════════════════════════════════════════════
+
+describe('PlatformService — subscription & lifecycle', () => {
+  const ORG_ID = 'org-target';
+
+  function operatorMock(result: unknown[] = [], error?: Error) {
+    let call = 0;
+    const queryRaw = jest.fn(() => {
+      call += 1;
+      if (call === 1) return [{ org_id: PLATFORM_ORG_ID, org_active: true }];
+      if (error) throw error;
+      return result;
+    });
+    return {
+      withPlatformRole: jest.fn((cb: never) =>
+        Promise.resolve(
+          (cb as (tx: unknown) => unknown)({ $queryRaw: queryRaw }),
+        ),
+      ),
+    };
+  }
+
+  it('setSubscription rejects a price that does not match the server-side plan', async () => {
+    const service = new PlatformService(operatorMock() as never);
+    await expect(
+      service.setSubscription(platformAdmin(), {
+        organizationId: ORG_ID,
+        planKey: 'MONTHLY',
+        priceSdg: 1,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('setSubscription rejects unknown plan keys before touching the database', async () => {
+    const service = new PlatformService(operatorMock() as never);
+    await expect(
+      service.setSubscription(platformAdmin(), {
+        organizationId: ORG_ID,
+        planKey: 'FREE_FOREVER',
+      } as never),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('renewSubscription rejects any duration other than 1 or 12 months', async () => {
+    const service = new PlatformService(operatorMock() as never);
+    await expect(
+      service.renewSubscription(platformAdmin(), ORG_ID, 3),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('suspendTenant maps PLATFORM_OPERATOR_PROTECTED to a clear 400', async () => {
+    const service = new PlatformService(
+      operatorMock([], new Error('PLATFORM_OPERATOR_PROTECTED')) as never,
+    );
+    await expect(
+      service.suspendTenant(platformAdmin(), ORG_ID, 'اختبار'),
+    ).rejects.toThrow('لا يمكن تعليق منظمة مشغّل المنصة نفسها');
+  });
+
+  it('suspendTenant maps not-found to a 400 (not a 500)', async () => {
+    const service = new PlatformService(
+      operatorMock(
+        [],
+        new Error('PLATFORM_TENANT_NOT_FOUND_OR_ALREADY_SUSPENDED'),
+      ) as never,
+    );
+    await expect(
+      service.suspendTenant(platformAdmin(), ORG_ID, 'اختبار'),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('health returns normalized numbers (no BigInt leaking to JSON)', async () => {
+    const service = new PlatformService(
+      operatorMock([
+        {
+          tenants_total: 6n,
+          tenants_active: 5n,
+          tenants_suspended: 1n,
+          trials_running: 2n,
+          trials_expiring_soon: 1n,
+          subscriptions_active: 3n,
+          subscriptions_expired: 1n,
+          pending_accounting_events: 0n,
+          unacknowledged_events: 4n,
+          database_size: '12 MB',
+          app_version: '1.0',
+        },
+      ]) as never,
+    );
+    const health = await service.health(platformAdmin());
+    expect(health.tenantsTotal).toBe(6);
+    expect(health.tenantsActive).toBe(5);
+    expect(health.unacknowledgedEvents).toBe(4);
+    expect(health.databaseSize).toBe('12 MB');
+    // كل القيم أرقام JS سليمة — ليس BigInt
+    expect(health.tenantsTotal).not.toBeInstanceOf(Object);
+  });
+
+  it('listEvents normalizes level filter and maps rows', async () => {
+    const service = new PlatformService(
+      operatorMock([
+        {
+          id: 'ev1',
+          level: 'WARN',
+          category: 'SUBSCRIPTION',
+          message: 'انتهت فترة اشتراك شركة',
+          context: { organizationId: ORG_ID },
+          acknowledged_at: null,
+          created_at: new Date('2026-09-08T00:00:00Z'),
+        },
+      ]) as never,
+    );
+    const events = await service.listEvents(platformAdmin(), 'warn', 50);
+    expect(events).toHaveLength(1);
+    expect(events[0].level).toBe('WARN');
+    expect(events[0].acknowledgedAt).toBeNull();
+  });
+
+  it('tenantReport rejects invalid windows by clamping to 30 days', async () => {
+    const queryRaw = jest.fn(() => [
+      {
+        organization_id: ORG_ID,
+        organization_name: 'شركة اختبار',
+        trips_total: 10n,
+        trips_recent: 4n,
+        tickets_total: 120n,
+        tickets_recent: 40n,
+        revenue_total_sdg: 1000000,
+        revenue_recent_sdg: 250000,
+        active_users: 8n,
+        branches: 2n,
+        buses: 5n,
+        last_activity: null,
+      },
+    ]);
+    let call = 0;
+    const prisma = {
+      withPlatformRole: jest.fn((cb: never) =>
+        Promise.resolve(
+          (cb as (tx: unknown) => unknown)({
+            $queryRaw: jest.fn(() => {
+              call += 1;
+              if (call === 1)
+                return [{ org_id: PLATFORM_ORG_ID, org_active: true }];
+              return queryRaw();
+            }),
+          }),
+        ),
+      ),
+    };
+    const service = new PlatformService(prisma as never);
+    const report = await service.tenantReport(platformAdmin(), ORG_ID, 9999);
+    expect(report.ticketsTotal).toBe(120);
+    expect(report.activeUsers).toBe(8);
+    expect(report.lastActivity).toBeNull();
   });
 });

@@ -30,6 +30,7 @@ model Organization {
   branches           Branch[]
   users              User[]
   roles              Role[]
+  subscription       Subscription?
   customers          Customer[]
   routes             Route[]
   buses              Bus[]
@@ -950,6 +951,30 @@ model JournalEntryLine {
 // ─────────────────────────────────────────────────────────────
 // سجل التدقيق
 // ─────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────
+// اشتراكات المنصة (B2B) — بيانات مشغّل المنصة وليست بيانات Tenant
+// ─────────────────────────────────────────────────────────────
+
+model Subscription {
+  id               String    @id @default(cuid())
+  organizationId   String    @unique
+  planKey          String // TRIAL | MONTHLY | YEARLY
+  priceSdg         Int       @default(0)
+  currency         String    @default("SDG")
+  status           String    @default("TRIALING") // TRIALING | ACTIVE | PAST_DUE | EXPIRED | CANCELLED
+  startedAt        DateTime
+  currentPeriodEnd DateTime
+  cancelledAt      DateTime?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([status, currentPeriodEnd])
+  @@map("subscriptions")
+}
 
 model AuditLog {
   id             String   @id @default(cuid())

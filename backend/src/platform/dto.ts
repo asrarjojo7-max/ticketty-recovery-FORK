@@ -1,5 +1,7 @@
 import {
   IsEmail,
+  IsIn,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -7,6 +9,47 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+
+/** خطط الاشتراك المعتمدة للمنصة (مصدر الحقيقة في الخادم أيضاً). */
+export const SUBSCRIPTION_PLANS = ['TRIAL', 'MONTHLY', 'YEARLY'] as const;
+export type SubscriptionPlanKey = (typeof SUBSCRIPTION_PLANS)[number];
+
+/** تعيين اشتراك شركة — الأسعار ثابتة على الخادم ويُتجاهل أي سعر عميل. */
+export class SetSubscriptionDto {
+  @IsString()
+  @IsNotEmpty({ message: 'معرف الشركة مطلوب' })
+  organizationId: string;
+
+  @IsIn(SUBSCRIPTION_PLANS, {
+    message: 'الخطة يجب أن تكون تجربة أو شهرية أو سنوية',
+  })
+  planKey: SubscriptionPlanKey;
+
+  /** تحقق اختياري — إن أُرسل يجب أن يطابق سعر الخطة المعتمد. */
+  @IsOptional()
+  @IsInt()
+  priceSdg?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  notes?: string;
+}
+
+/** تجديد اشتراك مدفوع — شهر واحد أو اثنا عشر شهراً. */
+export class RenewSubscriptionDto {
+  @IsInt()
+  @IsIn([1, 12], { message: 'التجديد إما شهر واحد أو سنة كاملة' })
+  months: number;
+}
+
+/** تعليق شركة — سبب موثّق يذهب لسجل التدقيق. */
+export class SuspendTenantDto {
+  @IsString()
+  @IsNotEmpty({ message: 'سبب التعليق مطلوب للتوثيق' })
+  @MaxLength(300)
+  reason: string;
+}
 
 /**
  * إنشاء Tenant (منظمة + مالكها الأول) — عملية Provisioning مدارة.
