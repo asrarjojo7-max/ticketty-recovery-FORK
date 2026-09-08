@@ -18,11 +18,30 @@ export interface CartPassenger {
   passengerNationalId?: string;
 }
 
+/**
+ * Phase 5 (Option A — Owner-approved): CASH only.
+ * Digital methods (CARD/BANKAK/MTN_MOMO/ZAIN_CASH/BANK_TRANSFER) stay
+ * declared on the backend enum — reserved & documented — but cannot be
+ * recorded through the API until a provider verification + reconciliation
+ * policy exists (kills phantom payments: digital "confirmation" without
+ * external verification created confirmed tickets + revenue from nothing).
+ */
 export const PAYMENT_METHODS: Array<{
   value: PaymentMethod;
   label: string;
 }> = [
   { value: "CASH", label: "نقدي" },
+];
+
+/**
+ * Reserved digital methods — documented for the UI copy that explains
+ * why they are disabled (Option B: verification workflow, see
+ * PRE-LAUNCH_HARDENING_PLAN §5.3).
+ */
+export const RESERVED_PAYMENT_METHODS: Array<{
+  value: PaymentMethod;
+  label: string;
+}> = [
   { value: "CARD", label: "بطاقة" },
   { value: "BANKAK", label: "بنكك" },
   { value: "MTN_MOMO", label: "موبايل MTN" },

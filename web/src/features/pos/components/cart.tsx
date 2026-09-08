@@ -6,7 +6,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CartSeat, CartPassenger } from "../types";
-import { PAYMENT_METHODS } from "../types";
+import { PAYMENT_METHODS, RESERVED_PAYMENT_METHODS } from "../types";
 import type { PaymentMethod } from "@/features/bookings";
 
 /**
@@ -143,6 +143,9 @@ export function Cart({
           <p className="mb-1.5 text-[11px] font-bold text-muted-foreground">
             طريقة الدفع
           </p>
+          {/* Phase 5 (Option A — Owner-approved): النقد فقط. الطرق
+              الرقمية محفوظة وموثقة (enum كامل على الخادم) لكن تعطيلها
+              هنا يمنع البائع من محاولة ستُرفض بـ 400 من الخادم. */}
           <div className="grid grid-cols-3 gap-1.5">
             {PAYMENT_METHODS.map((m) => (
               <button
@@ -159,7 +162,22 @@ export function Cart({
                 {m.label}
               </button>
             ))}
+            {RESERVED_PAYMENT_METHODS.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                disabled
+                title="غير متاحة بعد — الطرق الرقمية تحتاج سياسة تحقق لدى مزودي الدفع"
+                className="cursor-not-allowed rounded-xl border border-dashed border-border px-2 py-2 text-[11px] font-bold text-muted-foreground/40"
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
+          <p className="mt-1.5 text-[10px] text-muted-foreground">
+            الدفع نقداً فقط حالياً — الطرق الرقمية غير متاحة حتى إقرار
+            سياسة التحقق لدى مزودي الدفع.
+          </p>
         </div>
         {showNotes ? (
           <div className="flex items-center gap-2">
