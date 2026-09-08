@@ -51,3 +51,29 @@ against the restored backup).
 
 Any failure raises `INVARIANT FAIL [...]` and exits non-zero. The check is
 self-rollback (read-only + `SET LOCAL ROLE` probes inside `DO` blocks).
+
+### Post-merge hardening (verification round 1)
+
+Two defects were found while **proving** the umbrella suite actually bites,
+and fixed in this session (they would have made several checks no-ops):
+
+1. **Catalog blindness after the behavioral probe (invariant 6)** — the
+   `SET LOCAL ROLE ticketty_app` inside the `DO` block was never followed by
+   `RESET ROLE`, so every later section (including the grants invariants
+   8–10) ran as `ticketty_app`. `information_schema` hides rows a role
+   cannot see, so the grant checks observed **zero** rows and passed
+   vacuously. Reproduced: isolated 4.2 fired (`ticketty_platform` held
+   SELECT/INSERT/UPDATE on `subscriptions`) while the full file passed.
+   Fix: `RESET ROLE` at the end of section 2.2 — checks 8–10 now see the
+   real catalog.
+2. **Legacy unused table grants (invariant 9)** — once check 9 became live
+   it failed against the live database. Investigation proved the grants were
+   dead weight: every platform read/write goes through SECURITY DEFINER
+   functions running with **owner** privileges (demonstrated on a scratch
+   database with the grants revoked: provisioning, set/renew subscription,
+   list tenants, health, tenant report — all reached their business logic;
+   no access denials). Migration
+   `20260910010000_revoke_unused_subscriptions_table_grants` removes them.
+   `subscriptions` now has zero application-role table grants, matching the
+   documented contract. The full e2e suite (54 tests, including the
+   platform provisioning/subscription lifecycle) passes after the revoke.

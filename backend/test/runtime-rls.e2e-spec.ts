@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaClient } from '@prisma/client';

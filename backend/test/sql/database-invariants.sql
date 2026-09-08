@@ -137,12 +137,18 @@ END;
 --     ملاحظة: لا نطلب FORCE ROW LEVEL SECURITY — المالك الحالي
 --     superuser (يتجاوز RLS بأي حال؛ عقد §11: لا تعديل core بلا
 --     عيب مثبت). الفحص السلوكي يغطي سطح الهجوم الفعلي.
+--     إلزامي: RESET ROLE بعد الفحص السلوكي — بدونها تُكمل الأقسام
+--     التالية العمل بدور ticketty_app و information_schema يحجب عنه
+--     رؤية المنح غير الخاصة به، فتصبح فحوص القسم 4 (المنح) ترى 0
+--     صفوف وتنجح زوراً (ثغرة كشفها تشغيل 4.2 معزولاً بعد الدمج:
+--     grants موجودة فعلاً لكن الفحص الشامل كان يمر — false green).
 BEGIN
   SET LOCAL ROLE ticketty_app;
   PERFORM 1; -- دور فعلي، لا تمويه
   IF EXISTS (SELECT 1 FROM public.organizations) THEN
     RAISE EXCEPTION 'INVARIANT FAIL [rls-behavioral]: ticketty_app without org context reads organizations rows — RLS not effectively enforced';
   END IF;
+  RESET ROLE; -- العودة لصاحب الامتياز — فحوص المنح تحتاج رؤية الكتالوج كاملة
 END;
 
 -- ═══════════════════════════════════════════════════════════════════════

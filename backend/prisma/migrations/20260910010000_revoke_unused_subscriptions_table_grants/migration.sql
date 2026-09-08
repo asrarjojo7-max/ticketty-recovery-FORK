@@ -1,0 +1,22 @@
+-- Phase 2 (TD-016) — إزالة منح جداول غير مستخدمة على subscriptions.
+--
+-- لماذا الآن: إثبات عملي (Phase 2 verification) كشف أن منح 20260908010000
+--   GRANT SELECT, INSERT, UPDATE ON "subscriptions" TO ticketty_platform
+-- كانت أوسع من اللازم: كل قراءة/كتابة للتطبيق تمر عبر دوال SECURITY
+-- DEFINER (platform_set_subscription / platform_renew_subscription /
+-- platform_expire_subscriptions / platform_list_tenants_v2 / ...) وهذه
+-- تعمل بامتياز المالك (definer) — لا تستعمل منح الجداول إطلاقاً.
+-- اختُبر عملياً على نسخة قاعدة بيانات مع سحب المنح: provisioning
+-- كامل، set/renew subscription، list_tenants، health، tenant_report،
+   -- list_events — كلها وصلت منطق عملها بلا أي رفض وصول.
+--
+-- النتيجة: subscriptions صفر منح جدول لأي دور تطبيق (invariant 4.2
+-- في database-invariants.sql — الآن فعّال بعد إصلاح RESET ROLE في
+-- الفحص السلوكي 2.2 الذي كان يحجب رؤية الكتالوج عن الأقسام اللاحقة).
+-- المنح المشروعة المتبقية: ticketty_platform على organizations
+-- (SELECT, UPDATE — تقييم RLS عند التحديث)، system_events (SELECT,
+-- UPDATE, INSERT — إشعارات المشغّل)، audit_logs (INSERT — التدقيق).
+--
+-- لا تغيير دوال، لا تغيير RLS، لا مساس protected core.
+
+REVOKE SELECT, INSERT, UPDATE ON TABLE "subscriptions" FROM ticketty_platform;
