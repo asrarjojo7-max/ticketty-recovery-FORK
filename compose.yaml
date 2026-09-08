@@ -30,11 +30,17 @@ services:
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
       ACCOUNTING_WORKER_ENABLED: ${ACCOUNTING_WORKER_ENABLED:-true}
       ACCOUNTING_WORKER_INTERVAL_MS: ${ACCOUNTING_WORKER_INTERVAL_MS:-5000}
+      SUBSCRIPTION_SWEEP_ENABLED: ${SUBSCRIPTION_SWEEP_ENABLED:-true}
+      SUBSCRIPTION_SWEEP_INTERVAL_MS: ${SUBSCRIPTION_SWEEP_INTERVAL_MS:-21600000}
       PORT: 3001
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    # TD-016 deploy-time enforcement: النشر نفسه يفشل إذا سقطت
+    # القيود/RLS/triggers/grants — migrate deploy ثم الفحص الشامل.
+    # السلسلة شرطية: الفحص يفشل = الحاوية تفشل = backend لا يبدأ
+    # (service_completed_successfully).
+    command: ["sh", "-c", "pnpm exec prisma migrate deploy && pnpm test:db:invariants"]
 
   backend:
     build:

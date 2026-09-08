@@ -30,7 +30,9 @@
     "test:db:accounting-integrity": "prisma db execute --schema prisma/schema.prisma --file test/sql/accounting-integrity.sql",
     "test:db:trip-overlap": "prisma db execute --schema prisma/schema.prisma --file test/sql/trip-overlap.sql",
     "db:seed": "prisma db seed",
-    "db:seed-demo": "ts-node prisma/seed-demo.ts"
+    "db:seed-demo": "ts-node prisma/seed-demo.ts",
+    "test:db:invariants": "prisma db execute --schema prisma/schema.prisma --file test/sql/database-invariants.sql",
+    "prestart:dev": "npm run --silent test:db:invariants --if-present"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

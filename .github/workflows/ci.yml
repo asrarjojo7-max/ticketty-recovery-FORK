@@ -87,9 +87,14 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm test:e2e --runInBand
+      # TD-016: المظلة الشاملة أولاً — أي قيد/RLS/trigger/grant يسقط
+      # يفشل البناء هنا قبل الفحوص الفردية (استبدال "تذكر" بآلة).
+      - run: pnpm test:db:invariants
       - run: pnpm test:db:refund-integrity
       - run: pnpm test:db:tenant-consistency
       - run: pnpm test:db:settlement-integrity
+      - run: pnpm test:db:accounting-integrity
+      - run: pnpm test:db:trip-overlap
 
   web-quality:
     runs-on: ubuntu-latest
