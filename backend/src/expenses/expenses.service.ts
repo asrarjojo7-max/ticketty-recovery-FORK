@@ -126,13 +126,20 @@ export class ExpensesService {
       if (!existing) throw new NotFoundException('المصروف غير موجود');
       if (existing.status !== 'DRAFT')
         throw new ConflictException('تم اعتماد المصروف مسبقاً');
-      const approved = await tx.expense.update({
-        where: { id },
+      // كتابة شرطية ذرّية: تفشل إذا سبق اعتماده بطلب متزامن (تدقيق P2-2)
+      // بدل قراءة-ثم-كتابة تسمح بمضاعفة حدث المحاسبة.
+      const claim = await tx.expense.updateMany({
+        where: { id, status: 'DRAFT' },
         data: {
           status: 'APPROVED',
           approvedAt: new Date(),
           approvedById: user.sub,
         },
+      });
+      if (claim.count === 0)
+        throw new ConflictException('تم اعتماد المصروف مسبقاً');
+      const approved = await tx.expense.findUniqueOrThrow({
+        where: { id },
         include: { adjustments: true, trip: true, bus: true },
       });
       await enqueueAccountingEvent(

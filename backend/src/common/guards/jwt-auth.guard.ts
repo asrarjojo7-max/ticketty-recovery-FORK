@@ -36,13 +36,26 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const token = header.slice(7);
-      const claims = await this.jwt.verifyAsync<Pick<AuthUser, 'sub'>>(token);
+      const claims = await this.jwt.verifyAsync<
+        Pick<AuthUser, 'sub'> & { iat?: number }
+      >(token);
       if (!claims.sub) throw new Error('Token subject is missing');
 
       const user = await this.prisma.findAuthUserById(claims.sub);
 
       if (!user || !user.active || !user.organizationActive) {
         throw new Error('User or organization is inactive');
+      }
+
+      // تدقيق P1-3: تغيير كلمة المرور يُبطل كل الجلسات الصادرة قبله —
+      // طابع زمني من قاعدة البيانات يُقارن بـ iat التوكِن (ثواني).
+      if (claims.iat !== undefined) {
+        const changedAtSeconds = Math.floor(
+          user.passwordChangedAt.getTime() / 1000,
+        );
+        if (claims.iat < changedAtSeconds) {
+          throw new Error('Token predates the current password');
+        }
       }
 
       request.user = {

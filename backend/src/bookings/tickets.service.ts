@@ -78,19 +78,48 @@ export class TicketsService {
   }
 
   async checkIn(user: AuthUser, id: string) {
-    const ticket = await this.findOne(user, id);
-    if (ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') {
-      throw new NotFoundException('التذكرة ملغاة');
+    const scope = tenantScope(user);
+    const agentId = await resolveAgentId(this.prisma, user);
+    const ticket = await this.prisma.ticket.findFirst({
+      where: {
+        id,
+        organizationId: scope.organizationId,
+        ...(scope.branchId ? { trip: { branchId: scope.branchId } } : {}),
+        ...(agentId ? { booking: { agentId } } : {}),
+      },
+      include: {
+        trip: { select: { status: true, departureAt: true } },
+      },
+    });
+    if (!ticket) throw new NotFoundException('التذكرة غير موجودة');
+    // بوابة الصعود مسؤولة عن عدّ الركاب الفعلي — لا يُسمح بصعود بعد
+    // مغادرة الرحلة أو إلغائها أو اكتمالها (سلامة المنفستو والأشغال).
+    const unboardable = ['DEPARTED', 'COMPLETED', 'CANCELLED'];
+    if (unboardable.includes(ticket.trip.status)) {
+      throw new ConflictException('لا يمكن تسجيل الصعود لهذه الرحلة الآن');
     }
-    if (ticket.status === 'CHECKED_IN') {
-      throw new ConflictException('تم تسجيل صعود صاحب هذه التذكرة مسبقاً');
-    }
-    const updated = await this.prisma.$transaction((tx) =>
-      tx.ticket.update({
-        where: { id },
+
+    // كتابة شرطية ذرّية: التذكرة يجب أن تكون BOOKED في لحظة التحديث.
+    // قراءة-ثم-كتابة تسمح بسباق تسجيل صعود متزامن مزدوج (تدقيق P1-1) —
+    // الشرط في WHERE يجعل التحديث فاشلاً ذرّياً عند أي سباق.
+    const claimed = await this.prisma.$transaction((tx) =>
+      tx.ticket.updateMany({
+        where: {
+          id,
+          status: 'BOOKED',
+          ...(agentId ? { booking: { agentId } } : {}),
+        },
         data: { status: 'CHECKED_IN' },
       }),
     );
+    if (claimed.count === 0) {
+      throw new ConflictException('تم تسجيل صعود صاحب هذه التذكرة مسبقاً');
+    }
+
+    const updated = await this.prisma.ticket.findUniqueOrThrow({
+      where: { id },
+      include: { booking: true, trip: true },
+    });
     await this.audit.log(user, 'TICKET_CHECKED_IN', 'Ticket', id, {
       tripId: ticket.tripId,
     });

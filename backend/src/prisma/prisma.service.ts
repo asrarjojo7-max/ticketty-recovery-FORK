@@ -69,7 +69,7 @@ export interface AuthLoginRecord {
 export type AuthRequestRecord = Omit<
   AuthLoginRecord,
   'passwordHash' | 'failedLoginAttempts' | 'lockedUntil'
->;
+> & { passwordChangedAt: Date };
 
 function bindClientValue(receiver: object, value: unknown): unknown {
   if (typeof value !== 'function') return value;
@@ -232,6 +232,30 @@ export class PrismaService
     return rows[0] ?? null;
   }
 
+  async findAuthUserWithHashById(
+    userId: string,
+  ): Promise<AuthLoginRecord | null> {
+    const rows = await this.withAuthRole(
+      (transaction) => transaction.$queryRaw<AuthLoginRecord[]>`
+        SELECT
+          user_id AS id,
+          organization_id AS "organizationId",
+          branch_id AS "branchId",
+          user_name AS name,
+          user_email AS email,
+          password_hash AS "passwordHash",
+          user_active AS active,
+          failed_login_attempts AS "failedLoginAttempts",
+          locked_until AS "lockedUntil",
+          role_key AS "roleKey",
+          role_permissions AS permissions,
+          organization_active AS "organizationActive"
+        FROM ticketty_security.auth_user_by_id_with_hash(${userId})
+      `,
+    );
+    return rows[0] ?? null;
+  }
+
   async findAuthUserById(userId: string): Promise<AuthRequestRecord | null> {
     const rows = await this.withAuthRole(
       (transaction) => transaction.$queryRaw<AuthRequestRecord[]>`
@@ -244,7 +268,8 @@ export class PrismaService
           user_active AS active,
           role_key AS "roleKey",
           role_permissions AS permissions,
-          organization_active AS "organizationActive"
+          organization_active AS "organizationActive",
+          password_changed_at AS "passwordChangedAt"
         FROM ticketty_security.auth_user_by_id(${userId})
       `,
     );
@@ -270,7 +295,7 @@ export class PrismaService
     );
   }
 
-  private async withAuthRole<T>(
+  async withAuthRole<T>(
     callback: (transaction: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
     if (this.tenantContext.current()) {

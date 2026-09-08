@@ -115,6 +115,7 @@ model User {
   email               String    @unique
   phone               String?
   passwordHash        String
+  passwordChangedAt   DateTime  @default("1970-01-01T00:00:00Z")
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
