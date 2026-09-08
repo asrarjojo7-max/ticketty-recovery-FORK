@@ -12,7 +12,30 @@ The script creates a custom-format dump atomically and writes a SHA-256 checksum
 
 Recommended initial policy: daily backups, retention aligned with the data-retention policy, and monitored upload failures.
 
-## Scratch restore drill
+## Automated restore drill (Phase 7 — `ops/verify-restore.sh`)
+
+The full drill is a single command. It fails fast at the first broken step and cleans up after itself:
+
+```bash
+DATABASE_URL='postgresql://...' BACKUP_DIR=/tmp/drill ./ops/verify-restore.sh
+```
+
+What it proves (each numbered step is a hard gate):
+
+1. **Backup** — real `pg_dump` custom format + SHA-256 from the live database.
+2. **Restore** — into a fresh scratch DB (never the original; in-place restore is refused).
+3. **Migrations** — `prisma migrate status` on the restored DB reports up-to-date.
+4. **Security ACL replay** — the drill's own discovery: `pg_restore --no-acl` (correct for cross-environment restores) strips *all* Phase 2 GRANT/REVOKE statements, leaving `ticketty_app` with zero table access — a security-dead system after a real disaster recovery. The script re-applies every GRANT/REVOKE statement (multi-line list grants, `ALTER DEFAULT PRIVILEGES`, REVOKEs) extracted from the migration files — the single source of truth — with a real SQL statement splitter (dollar-quoted `DO` blocks are tracked so grants inside `EXECUTE format(...)` role-membership blocks are not misparsed).
+5. **Phase 2 umbrella invariants** — RLS, triggers, grants floors, CHECKs all present *on the restored DB*, not just in the original.
+6. **Per-contract SQL suites** — refund, settlement, accounting, tenant-consistency, trip-overlap.
+7. **App bootstrap** — NestJS boots against the restored DB and readiness reports `{"status":"ready","database":"up"}`.
+8. **Live RLS probe** — as `ticketty_app` with no org context, `organizations` reads 0 rows (isolation alive after restore).
+9. **Row-count spot check** — organizations/users/trips/bookings/tickets/payments/accounting_events match between source and restored.
+10. **RTO report + cleanup** — total elapsed time; scratch DB and temp backup are removed.
+
+Latest drill result: **PASS — RTO 16s** (backup → restore → migrate → grants → invariants → contracts → bootstrap → RLS → counts).
+
+## Manual scratch restore (fallback)
 
 Create an empty, isolated database that is never the production database:
 
