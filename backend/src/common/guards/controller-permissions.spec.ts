@@ -10,6 +10,7 @@ import { BusesController } from '../../fleet/buses.controller';
 import { SeatTemplatesController } from '../../fleet/seat-templates.controller';
 import { ManifestsController } from '../../manifests/manifests.controller';
 import { PaymentsController } from '../../payments/payments.controller';
+import { PlatformController } from '../../platform/platform.controller';
 import { ReportsController } from '../../reports/reports.controller';
 import { RoutesController } from '../../routes/routes.controller';
 import { SettlementsController } from '../../settlements/settlements.controller';
@@ -28,6 +29,7 @@ const BUSINESS_CONTROLLERS = [
   SeatTemplatesController,
   ManifestsController,
   PaymentsController,
+  PlatformController,
   ReportsController,
   RoutesController,
   SettlementsController,

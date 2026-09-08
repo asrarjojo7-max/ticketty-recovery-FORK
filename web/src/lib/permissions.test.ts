@@ -21,10 +21,29 @@ describe("permission helpers", () => {
     expect(links).not.toContain("/financial");
   });
 
-  it("keeps all navigation entries for an owner", () => {
+  it("keeps all in-tenant navigation entries for an owner, but never the platform console", () => {
     const visible = filterNavigation(navigation, ["*"]);
-    expect(visible.flatMap((section) => section.items)).toHaveLength(
-      navigation.flatMap((section) => section.items).length,
+    const links = visible.flatMap((section) =>
+      section.items.map((item) => item.href),
     );
+
+    const allInTenant = navigation
+      .flatMap((section) => section.items)
+      .filter((item) =>
+        (item.permissions ?? []).every(
+          (permission) => permission !== "platform.admin",
+        ),
+      );
+
+    expect(links).toHaveLength(allInTenant.length);
+    expect(links).not.toContain("/platform");
+  });
+
+  it("grants platform.admin only when explicitly held (never via tenant wildcard)", () => {
+    expect(hasPermission(["*"], "platform.admin")).toBe(false);
+    expect(hasPermission(["platform.*"], "platform.admin")).toBe(false);
+    expect(hasPermission(["platform.admin"], "platform.admin")).toBe(true);
+    // نطاقات الأعمال العادية تتبع النجمة كالعادة
+    expect(hasPermission(["*"], "settings.write")).toBe(true);
   });
 });

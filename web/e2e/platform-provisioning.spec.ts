@@ -1,0 +1,104 @@
+import { test, expect } from "@playwright/test";
+
+/**
+ * Golden path: مشغّل المنصة يفعّل شركة نقل جديدة من لوحة المنصة،
+ * ثم مالكها الجديد يسجّل الدخول فعلياً عبر بوابة الموظفين.
+ * يتحقق أيضاً أن مستخدم بلا platform.admin لا يصل للشاشة.
+ */
+
+const OPERATOR = {
+  email: "e2e-owner@ticketty.local",
+  password: "E2eTest-Passw0rd-2026",
+};
+
+test("platform operator provisions a new transport company end-to-end", async ({
+  browser,
+}) => {
+  const slug = `e2e-company-${Date.now().toString(36)}`;
+  const ownerEmail = `${slug}-owner@ticketty.local`;
+  const ownerName = "مالك شركة الاختبار";
+
+  // 1) Operator session
+  const operatorCtx = await browser.newContext({ locale: "ar-EG" });
+  const operator = await operatorCtx.newPage();
+  await operator.goto("/login");
+  await operator.fill("#email", OPERATOR.email);
+  await operator.fill("#password", OPERATOR.password);
+  await operator.click('button[type="submit"]');
+  await operator.waitForURL("**/dashboard", { timeout: 30_000 });
+
+  // 2) Platform page shows the roster + provision modal
+  await operator.goto("/platform");
+  await operator.waitForLoadState("networkidle");
+  await expect(
+    operator.getByRole("heading", { name: "إدارة المنصة والعملاء" }),
+  ).toBeVisible();
+  await operator.getByRole("button", { name: "شركة جديدة" }).click();
+
+  const dialog = operator.locator('[role="dialog"]');
+  await expect(dialog).toBeVisible();
+
+  const generatedPassword = await dialog.locator("code").first().textContent();
+  expect(generatedPassword).toBeTruthy();
+  expect(generatedPassword!.length).toBeGreaterThanOrEqual(12);
+
+  // 3) Fill the provisioning form
+  await dialog.locator('input[name="name"]').fill("شركة اختبار المنصة");
+  await dialog.locator('input[name="slug"]').fill(slug);
+  await dialog.locator('input[name="ownerName"]').fill(ownerName);
+  await dialog.locator('input[name="ownerEmail"]').fill(ownerEmail);
+
+  // 4) Provision — the response must never leak the password into a URL
+  const requests: { method: string; url: string }[] = [];
+  operator.on("request", (r) => requests.push({ method: r.method(), url: r.url() }));
+  await dialog.getByRole("button", { name: "تفعيل الشركة" }).click();
+
+  await expect(
+    operator.getByText("تم تفعيل الشركة بنجاح"),
+  ).toBeVisible({ timeout: 20_000 });
+
+  for (const r of requests) {
+    expect(
+      decodeURIComponent(r.url).includes(generatedPassword!),
+      `credential leaked into URL: ${r.url}`,
+    ).toBe(false);
+  }
+
+  // 5) The new tenant appears in the live roster
+  await operator.getByRole("button", { name: "تم" }).click();
+  await expect(operator.getByText(slug)).toBeVisible({ timeout: 15_000 });
+
+  // 6) THE SALE: the new owner logs in through the employee gate.
+  //    Login throttle is 5/min per IP — e2e suites share the backend,
+  //    so retry patiently on 429 instead of failing the sale journey.
+  const ownerCtx = await browser.newContext({ locale: "ar-EG" });
+  const owner = await ownerCtx.newPage();
+  await owner.goto("/login");
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await owner.fill("#email", ownerEmail);
+    await owner.fill("#password", generatedPassword!);
+    await owner.click('button[type="submit"]');
+    const landed = await owner
+      .waitForURL("**/dashboard", { timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (landed) break;
+    // throttled (429) — wait out the window and retry
+    await owner.waitForTimeout(15_000);
+    await owner.goto("/login");
+  }
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText(ownerName);
+
+  // 7) The new owner must NOT see the platform console in the sidebar
+  const sidebarLinks = await owner
+    .locator("aside a")
+    .allTextContents();
+  expect(
+    sidebarLinks.some((t) => t.includes("إدارة المنصة")),
+    "tenant owner must not see the platform console",
+  ).toBe(false);
+
+  await operatorCtx.close();
+  await ownerCtx.close();
+});

@@ -4,6 +4,7 @@ import { TenantDatabaseContext } from './tenant-database-context';
 
 const RUNTIME_DATABASE_ROLE = 'ticketty_app';
 const AUTH_DATABASE_ROLE = 'ticketty_auth';
+const PLATFORM_DATABASE_ROLE = 'ticketty_platform';
 const ACCOUNTING_WORKER_ROLE = 'ticketty_accounting_worker';
 const TENANT_DELEGATES = new Set([
   'organization',
@@ -280,6 +281,28 @@ export class PrismaService
     return super.$transaction(async (transaction) => {
       await transaction.$executeRawUnsafe(
         `SET LOCAL ROLE ${AUTH_DATABASE_ROLE}`,
+      );
+      return callback(transaction);
+    });
+  }
+
+  /**
+   * بوابة المنصة — عمليات Provisioning الـ Tenants.
+   * خارج سياق RLS لأي منظمة قائمة (بالتصميم): إنشاء منظمة جديدة
+   * مستحيل داخل سياق tenant لأن RLS على organizations يقيّد
+   * id = current_organization_id(). لذا نستخدم SECURITY DEFINER
+   * functions محددة النطاق تحت دور ticketty_platform — نفس نمط
+   * الحدود الموثوقة في auth boundary، بلا أي وصول كتابة عام.
+   */
+  async withPlatformRole<T>(
+    callback: (transaction: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    if (this.tenantContext.current()) {
+      throw new Error('Platform database access cannot run in tenant context');
+    }
+    return super.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `SET LOCAL ROLE ${PLATFORM_DATABASE_ROLE}`,
       );
       return callback(transaction);
     });

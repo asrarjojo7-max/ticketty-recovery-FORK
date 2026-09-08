@@ -22,6 +22,7 @@ import { RequestContextMiddleware } from './common/http/request-context.middlewa
 import { TenantRlsInterceptor } from './common/interceptors/tenant-rls.interceptor';
 import { ManifestsModule } from './manifests/manifests.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PlatformModule } from './platform/platform.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
 import { RoutesModule } from './routes/routes.module';
@@ -71,6 +72,7 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     TripsModule,
     BookingsModule,
     PaymentsModule,
+    PlatformModule,
     AgentsModule,
     ExpensesModule,
     SettlementsModule,

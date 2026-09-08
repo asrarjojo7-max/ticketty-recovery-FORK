@@ -1,4 +1,5 @@
 import {
+  Globe2,
   LayoutDashboard,
   Ticket,
   MapPin,
@@ -39,6 +40,18 @@ export const navigation: NavSection[] = [
         href: "/dashboard",
         icon: LayoutDashboard,
         permissions: ["reports.read"],
+      },
+    ],
+  },
+  {
+    label: "المنصة",
+    items: [
+      {
+        title: "إدارة المنصة",
+        href: "/platform",
+        icon: Globe2,
+        badge: "Suda",
+        permissions: ["platform.admin"],
       },
     ],
   },
