@@ -17,6 +17,7 @@ export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
+  | 'SUBSCRIPTION_REQUIRED'
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'DUPLICATE_OPERATION'
@@ -32,6 +33,10 @@ export function errorCodeForStatus(status: number): ApiErrorCode {
       return 'UNAUTHORIZED';
     case 403:
       return 'FORBIDDEN';
+    // 402 مخصصة حصراً لمنع حالة الاشتراك عمليةً (عقد الهندسة §2) —
+    // المصادقة 401 والصلاحيات 403 تبقيان كما هما تماماً.
+    case 402:
+      return 'SUBSCRIPTION_REQUIRED';
     case 404:
       return 'NOT_FOUND';
     case 409:

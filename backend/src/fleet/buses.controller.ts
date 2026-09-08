@@ -11,9 +11,14 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { BusesService } from './buses.service';
 import { CreateBusDto, QueryFleetDto, UpdateBusDto } from './dto';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة الأسطول — قرار العقد §1: fleet متاحة عند الانتهاء',
+})
 @Controller('buses')
 export class BusesController {
   constructor(private readonly service: BusesService) {}

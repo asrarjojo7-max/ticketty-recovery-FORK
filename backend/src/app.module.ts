@@ -13,6 +13,7 @@ import { AuditModule } from './common/audit/audit.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { SubscriptionGuard } from './common/guards/subscription.guard';
 import { CustomersModule } from './customers/customers.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { DriversModule } from './drivers/drivers.module';
@@ -85,6 +86,9 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    // بوابة الاشتراك — بعد الصلاحيات (403 قبل 402: الرفض الأكثر
+    // تحديداً أولاً)، وقبل سياق RLS. إضافة فوق السلسلة القائمة.
+    { provide: APP_GUARD, useClass: SubscriptionGuard },
     { provide: APP_INTERCEPTOR, useClass: TenantRlsInterceptor },
   ],
 })

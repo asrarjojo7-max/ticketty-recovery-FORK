@@ -10,6 +10,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { AccountingService } from './accounting.service';
 import {
   ConfigureAccountingPolicyDto,
@@ -22,6 +23,13 @@ import {
   ReverseJournalEntryDto,
 } from './dto';
 
+/**
+ * المحاسبة — عقد الهندسة §1: "accounting posting" يُمنع عند
+ * EXPIRED/CANCELLED. لكل كتابة محاسبية بلا وسم (= 'full' —
+ * fail-closed): إنشاء حساب/فترة/يومية/سياسة/قيد، ترحيل قيد،
+ * عكس قيد، معالجة أحداث (process/requeue/post) — كلها 402.
+ * القراءات exempt (البيانات المالية ملك الشركة).
+ */
 @Controller('accounting')
 export class AccountingController {
   constructor(private readonly accounting: AccountingService) {}
@@ -34,12 +42,20 @@ export class AccountingController {
 
   @Get('accounts')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة دليل الحسابات — البيانات المالية ملك الشركة',
+  })
   listAccounts(@CurrentUser() user: AuthUser) {
     return this.accounting.listAccounts(user);
   }
 
   @Get('periods')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة الفترات المالية — البيانات المالية ملك الشركة',
+  })
   listPeriods(@CurrentUser() user: AuthUser) {
     return this.accounting.listPeriods(user);
   }
@@ -61,6 +77,10 @@ export class AccountingController {
 
   @Get('journals')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة اليوميات — البيانات المالية ملك الشركة',
+  })
   listJournals(@CurrentUser() user: AuthUser) {
     return this.accounting.listJournals(user);
   }
@@ -73,6 +93,10 @@ export class AccountingController {
 
   @Get('policies')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة سياسات المحاسبة — إعدادات قابلة للعرض دائماً',
+  })
   listPolicies(@CurrentUser() user: AuthUser) {
     return this.accounting.listPolicies(user);
   }
@@ -88,12 +112,20 @@ export class AccountingController {
 
   @Get('reconciliation')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة التسوية البنكية — البيانات المالية ملك الشركة',
+  })
   reconciliation(@CurrentUser() user: AuthUser) {
     return this.accounting.reconciliation(user);
   }
 
   @Get('events')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة أحداث المحاسبة — البيانات المالية ملك الشركة',
+  })
   listEvents(@CurrentUser() user: AuthUser) {
     return this.accounting.listEvents(user);
   }
@@ -137,6 +169,10 @@ export class AccountingController {
 
   @Get('entries')
   @Permissions('accounting.read')
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'قراءة القيود — البيانات المالية ملك الشركة',
+  })
   listEntries(
     @CurrentUser() user: AuthUser,
     @Query() query: QueryJournalEntryDto,

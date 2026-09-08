@@ -66,6 +66,10 @@ export class JwtAuthGuard implements CanActivate {
         email: user.email,
         roleKey: user.roleKey,
         permissions: user.permissions,
+        // اشتراك المنظمة من نفس قراءة DB هذه (auth_user_by_id v3) —
+        // مصدر سلطة SubscriptionGuard؛ لا قراءة إضافية ولا token.
+        subscriptionStatus: user.subscriptionStatus ?? null,
+        subscriptionPeriodEnd: user.subscriptionPeriodEnd ?? null,
       } satisfies AuthUser;
 
       return true;

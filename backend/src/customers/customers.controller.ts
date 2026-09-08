@@ -11,9 +11,14 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto, QueryCustomerDto, UpdateCustomerDto } from './dto';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة بيانات العملاء — ليست بيعاً ولا التزاماً مالياً',
+})
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}

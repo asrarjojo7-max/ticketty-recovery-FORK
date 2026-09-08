@@ -10,6 +10,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { AdministrationService } from './administration.service';
 import {
@@ -19,6 +20,11 @@ import {
   UpdateOrganizationDto,
   UpdateUserDto,
 } from './dto';
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason:
+    'إدارة تشغيلية كاملة (مستخدمون/أدوار/إعدادات/فروع) — تبقى متاحة لتسوية وضع الشركة (عقد §1)',
+})
 @Controller('administration')
 export class AdministrationController {
   constructor(private readonly service: AdministrationService) {}

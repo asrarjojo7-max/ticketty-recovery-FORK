@@ -2,9 +2,14 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { QueryPaymentDto } from './dto';
 import { PaymentsService } from './payments.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'قراءة مدفوعات قائمة — لا يوجد POST في هذا الصنف',
+})
 @Controller('payments')
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}

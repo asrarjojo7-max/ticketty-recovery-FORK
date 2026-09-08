@@ -2,9 +2,14 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { GenerateManifestDto } from './dto';
 import { ManifestsService } from './manifests.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'كشف الرحلة لما بِيع — خدمة ما بِيع',
+})
 @Controller('manifests')
 export class ManifestsController {
   constructor(private readonly manifestsService: ManifestsService) {}

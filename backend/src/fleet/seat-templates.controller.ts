@@ -11,6 +11,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { requireOrgId } from '../common/org';
 import {
   CreateSeatTemplateDto,
@@ -19,6 +20,10 @@ import {
 } from './dto';
 import { SeatTemplatesService } from './seat-templates.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة قوالب المقاعد — تجهيز بلا بيع',
+})
 @Controller('seat-templates')
 export class SeatTemplatesController {
   constructor(private readonly service: SeatTemplatesService) {}

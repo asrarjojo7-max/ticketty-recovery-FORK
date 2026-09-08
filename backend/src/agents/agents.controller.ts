@@ -11,6 +11,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { requireOrgId } from '../common/org';
 import { AgentsService } from './agents.service';
 import {
@@ -20,6 +21,10 @@ import {
   UpdateAgentDto,
 } from './dto';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة الوكلاء — بيانات تشغيلية، ليست بيعاً جديداً',
+})
 @Controller('agents')
 export class AgentsController {
   constructor(private readonly agentsService: AgentsService) {}

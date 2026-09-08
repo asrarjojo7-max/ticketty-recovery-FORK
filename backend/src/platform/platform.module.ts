@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PlatformController } from './platform.controller';
 import { PlatformService } from './platform.service';
+import { SubscriptionSweepWorker } from './subscription-sweep.worker';
 
 /**
  * وحدة إدارة المنصة — Provisioning الـ Tenants.
@@ -9,6 +10,6 @@ import { PlatformService } from './platform.service';
  */
 @Module({
   controllers: [PlatformController],
-  providers: [PlatformService],
+  providers: [PlatformService, SubscriptionSweepWorker],
 })
 export class PlatformModule {}

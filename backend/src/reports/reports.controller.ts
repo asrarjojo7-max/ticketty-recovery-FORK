@@ -2,9 +2,14 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { QueryReportDto } from './dto';
 import { ReportsService } from './reports.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'تقارير وقراءة — البيانات ملك الشركة (عقد §1: exports متاحة)',
+})
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}

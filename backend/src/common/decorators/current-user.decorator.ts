@@ -9,6 +9,15 @@ export interface AuthUser {
   email: string;
   roleKey: string;
   permissions: string[];
+  /**
+   * حالة اشتراك المنظمة من قراءة DB لكل طلب (auth_user_by_id v3):
+   * TRIALING | ACTIVE | PAST_DUE (مهلة سماح 7 أيام) | EXPIRED |
+   * CANCELLED — أو null عندما لا يوجد صف اشتراك إطلاقاً (نافذة
+   * pre-provisioning أو منظمة مشغّل المنصة). الاستهلاك الوحيد:
+   * SubscriptionGuard و/auth/me — لا يوضع في التوكِن أبداً.
+   */
+  subscriptionStatus?: string | null;
+  subscriptionPeriodEnd?: Date | null;
 }
 
 export interface AuthenticatedRequest extends Request {

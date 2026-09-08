@@ -11,9 +11,14 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { CreateDriverDto, QueryDriverDto, UpdateDriverDto } from './dto';
 import { DriversService } from './drivers.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة الأسطول البشري — قرار العقد §1: fleet متاحة عند الانتهاء',
+})
 @Controller('drivers')
 export class DriversController {
   constructor(private readonly drivers: DriversService) {}

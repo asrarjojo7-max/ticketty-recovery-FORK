@@ -69,7 +69,16 @@ export interface AuthLoginRecord {
 export type AuthRequestRecord = Omit<
   AuthLoginRecord,
   'passwordHash' | 'failedLoginAttempts' | 'lockedUntil'
-> & { passwordChangedAt: Date };
+> & {
+  passwordChangedAt: Date;
+  /**
+   * من auth_user_by_id v3 (هجرة 20260909000000): حالة آخر صف
+   * اشتراك للمنظمة بأي حالة، أو null عندما لا يوجد صف إطلاقاً.
+   * مصدر سلطة SubscriptionGuard — لا يوجد أي مصدر ثانٍ.
+   */
+  subscriptionStatus: string | null;
+  subscriptionPeriodEnd: Date | null;
+};
 
 function bindClientValue(receiver: object, value: unknown): unknown {
   if (typeof value !== 'function') return value;
@@ -210,6 +219,28 @@ export class PrismaService
       : null;
   }
 
+  /**
+   * سحب نضج الاشتراكات لـ SubscriptionSweepWorker — تحت دور
+   * ticketty_app نفسه: يثبت عملياً أن المنح الممنوحة هي فقط
+   * EXECUTE على دالة بلا معاملات (لا يمكن توجيهها)، والدالة
+   * SECURITY DEFINER فتتجاوز RLS بأمان داخل نطاقها.
+   * idempotent بالقاعدة الصرفة (currentPeriodEnd < now()).
+   */
+  async runSubscriptionSweep(): Promise<number> {
+    if (this.tenantContext.current()) {
+      throw new Error('Subscription sweep cannot run in tenant context');
+    }
+    const rows = await super.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `SET LOCAL ROLE ${RUNTIME_DATABASE_ROLE}`,
+      );
+      return transaction.$queryRaw<Array<{ expired: number }>>`
+        SELECT ticketty_security.expire_subscriptions_sweep()::int AS expired
+      `;
+    });
+    return Number(rows[0]?.expired ?? 0);
+  }
+
   async findAuthUserByEmail(email: string): Promise<AuthLoginRecord | null> {
     const rows = await this.withAuthRole(
       (transaction) => transaction.$queryRaw<AuthLoginRecord[]>`
@@ -269,7 +300,9 @@ export class PrismaService
           role_key AS "roleKey",
           role_permissions AS permissions,
           organization_active AS "organizationActive",
-          password_changed_at AS "passwordChangedAt"
+          password_changed_at AS "passwordChangedAt",
+          subscription_status AS "subscriptionStatus",
+          subscription_period_end AS "subscriptionPeriodEnd"
         FROM ticketty_security.auth_user_by_id(${userId})
       `,
     );

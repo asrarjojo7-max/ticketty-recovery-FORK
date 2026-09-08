@@ -11,9 +11,14 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { CreateRouteDto, QueryRouteDto, UpdateRouteDto } from './dto';
 import { RoutesService } from './routes.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة خطوط السير — تجهيز بلا بيع',
+})
 @Controller('routes')
 export class RoutesController {
   constructor(private readonly routesService: RoutesService) {}

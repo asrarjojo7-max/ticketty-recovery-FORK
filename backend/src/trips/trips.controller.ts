@@ -12,6 +12,7 @@ import {
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import {
   CancelTripDto,
   CreateTripDto,
@@ -20,6 +21,10 @@ import {
 } from './dto';
 import { TripsService } from './trips.service';
 
+@SubscriptionPolicy({
+  mode: 'exempt',
+  reason: 'إدارة الرحلات — قرار العقد §1: trips متاحة عند الانتهاء',
+})
 @Controller('trips')
 export class TripsController {
   constructor(private readonly tripsService: TripsService) {}
