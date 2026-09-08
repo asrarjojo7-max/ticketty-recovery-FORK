@@ -40,17 +40,26 @@ describe('AppController (e2e)', () => {
       request(app.getHttpServer())
         .get('/api/health/readiness')
         .expect(200)
-        // Phase 6: أضيف مؤشر تذبذب العامل (degraded، لا not-ready) —
-        // قيمة >= 0 عادية (0 = لا أحداث عالقة)، -1 إن تعذر القياس.
+        // Phase 6: مؤشر العامل (degraded، لا not-ready) — ثواني منذ
+        // آخر نجاح وعدد الفشل المتتابع. -1 = العامل لم يكمل دورة
+        // منذ الإقلاع (خمول dev شائع) — لا يؤثر على الجاهزية.
         .expect((res: { body: Record<string, unknown> }) => {
           if (res.body.status !== 'ready' || res.body.database !== 'up') {
             throw new Error(
               `unexpected readiness body: ${JSON.stringify(res.body)}`,
             );
           }
-          const stale = res.body.stalePendingAccountingEvents;
-          if (typeof stale !== 'number' || !Number.isInteger(stale)) {
-            throw new Error('stalePendingAccountingEvents must be an integer');
+          const worker = res.body.accountingWorker as
+            | { secondsSinceLastSuccess: unknown; consecutiveFailures: unknown }
+            | undefined;
+          if (!worker) {
+            throw new Error('accountingWorker object missing');
+          }
+          if (
+            typeof worker.secondsSinceLastSuccess !== 'number' ||
+            typeof worker.consecutiveFailures !== 'number'
+          ) {
+            throw new Error('accountingWorker fields must be numbers');
           }
         })
     );

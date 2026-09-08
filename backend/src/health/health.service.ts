@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { MetricsRegistryService } from '../monitoring/metrics-registry.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -8,10 +9,18 @@ import { PrismaService } from '../prisma/prisma.service';
  * تذبذب worker لا يقتل الحاوية (kubernetes readiness gate) لكنه
  * يظهر في الحمولة للمراقبة. القاعدة: DB up = ready؛ العامل جزء
  * من الحمولة فقط.
+ *
+ * ملاحظة تصميمية: مؤشر العامل هنا يُقرأ من عدادات prom-client
+ * (المصدر نفسه الذي تقرأه قواعد التنبيه) — لا استعلام DB إضافي
+ * في مسار الجاهزية، ولا تجاوز لسياق tenant (الـ PrismaService
+ * يرفض الاستعلامات الخام بلا سياق — fail-closed مقصود).
  */
 @Injectable()
 export class HealthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly metrics: MetricsRegistryService,
+  ) {}
 
   liveness() {
     return { status: 'ok' as const };
@@ -26,24 +35,29 @@ export class HealthService {
         database: 'down',
       });
     }
-    // جاهزية العامل: degraded وليس not-ready — لا تقتل الحاوية
-    // بسبب تذبذب worker؛ الظهور في الحمولة للمراقبة فقط. تعطل هذا
-    // الاستعلام كلياً (نوعيًا أو اتصالياً) لا يغير الجاهزية أبداً.
-    let stalePending = -1;
-    try {
-      const rows = await this.prisma.$queryRaw<Array<{ count: number }>>`
-        SELECT count(*)::int AS count FROM accounting_events
-        WHERE status = 'PENDING' AND "createdAt" < now() - interval '10 minutes'`;
-      stalePending = Number(rows[0]?.count ?? 0);
-    } catch {
-      /* -1 = تعذر القياس — الجاهزية لا تتأثر */
-    }
+    // ثوانٍ منذ آخر دورة ناجحة للعامل المحاسبي — من نفس العداد
+    // الذي تقرأه قواعد التنبيه (AccountingWorkerStale). gauge لا
+    // يُكتب إلا بعد أول دورة كاملة؛ 0 = لم يكتمل بعد (خمول dev
+    // شائع) → -1 = "غير معروف بعد" — degraded فقط، لا not-ready.
+    // prom-client v15: Gauge.get() وعد يعيد {values} — نستخرج
+    // قيمة الليبل الفارغ (العداد scalar بلا ليبلات).
+    const [lastSuccessAgg, failuresAgg] = await Promise.all([
+      this.metrics.accountingWorkerLastSuccess.get(),
+      this.metrics.accountingWorkerConsecutiveFailures.get(),
+    ]);
+    const lastSuccess = lastSuccessAgg.values[0]?.value ?? 0;
+    const failures = failuresAgg.values[0]?.value ?? 0;
+    const secondsSinceSuccess =
+      lastSuccess > 0
+        ? Math.max(0, Math.round(Date.now() / 1000 - lastSuccess))
+        : -1;
     return {
       status: 'ready' as const,
       database: 'up' as const,
-      // أحداث معلقة أقدم من 10 دقائق — إن ظهرت فالعامل متوقف
-      // عملياً (الرصد العملي في /metrics + alert rules).
-      stalePendingAccountingEvents: stalePending,
+      accountingWorker: {
+        secondsSinceLastSuccess: secondsSinceSuccess,
+        consecutiveFailures: failures,
+      },
     };
   }
 }
