@@ -70,25 +70,52 @@ DECLARE
   org record;
   bus_ready record;
   route record;
+  template record;
   tomorrow timestamptz := now() + interval '1 day';
+  v_trip_id text;
 BEGIN
   SELECT id INTO org FROM organizations LIMIT 1;
   SELECT id INTO route FROM routes WHERE "organizationId"=org.id LIMIT 1;
-  SELECT id INTO bus_ready FROM buses WHERE "organizationId"=org.id AND status='READY' LIMIT 1;
-  IF route IS NULL OR bus_ready IS NULL THEN
-    RAISE NOTICE 'e2e-setup: missing route/bus fixture for future trip (skipped)';
+  -- Dedicated fixture bus: old fixture trips carry REAL bookings and
+  -- their open-ended schedule ranges block ANY new trip on the same
+  -- bus (exclusion constraint). A fresh bus per need keeps the POS
+  -- golden path alive without touching historical data.
+  SELECT id INTO template FROM seat_templates WHERE "organizationId"=org.id LIMIT 1;
+  IF route IS NULL OR template IS NULL THEN
+    RAISE NOTICE 'e2e-setup: missing route/template fixture (skipped)';
     RETURN;
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM trips WHERE id='e2e-future-trip') THEN
-    INSERT INTO trips (id, "organizationId", "routeId", "busId", "departureAt", "status", "updatedAt")
-    VALUES ('e2e-future-trip', org.id, route.id, bus_ready.id, tomorrow, 'OPEN', now());
-    -- materialize seats from the bus template so the POS can sell
-    INSERT INTO trip_seats (id, "tripId", "row", "column", label, "seatType", status, price, "createdAt", "updatedAt")
-    SELECT 'e2e-seat-' || s.id, 'e2e-future-trip', s.row, s.column, s.label, s."seatType",
-      CASE WHEN s."seatType" IN ('DRIVER','BLOCKED','DISABLED') THEN 'BLOCKED'::\"SeatStatus\" ELSE 'AVAILABLE'::\"SeatStatus\" END,
-      2500, now(), now()
-    FROM seats s WHERE s."seatTemplateId" = (SELECT "seatTemplateId" FROM buses WHERE id=bus_ready.id);
+  INSERT INTO buses (id, "organizationId", "seatTemplateId", "plateNumber", status, "createdAt", "updatedAt")
+  VALUES ('e2e-bus-' || extract(epoch from now())::bigint::text, org.id, template.id,
+          'E2E-' || extract(epoch from now())::bigint::text, 'READY', now(), now())
+  RETURNING id INTO bus_ready;
+  -- Freshness WITHOUT touching real data: the POS golden path needs a
+  -- sellable future trip. Old fixture trips accumulate REAL bookings
+  -- (FK-protected — deleting them is impossible and wrong anyway), so
+  -- we never delete; we look for any still-sellable trip first, and
+  -- only provision a NEW uniquely-identified one when none exists.
+  IF EXISTS (
+    SELECT 1 FROM trips t
+    WHERE t."organizationId"=org.id
+      AND t.status IN ('OPEN','SCHEDULED')
+      AND t."departureAt" > now() + interval '2 hours'
+  ) THEN
+    RAISE NOTICE 'e2e-setup: a sellable future trip already exists — no new fixture needed';
+    RETURN;
+  ELSE
+    RAISE NOTICE 'e2e-setup: no sellable trip — provisioning one on a fresh fixture bus';
   END IF;
+  v_trip_id := 'e2e-trip-' || extract(epoch from now())::bigint::text;
+  INSERT INTO trips (id, "organizationId", "routeId", "busId", "departureAt", "status", "updatedAt")
+  VALUES (v_trip_id, org.id, route.id, bus_ready.id, tomorrow, 'OPEN', now());
+  -- materialize seats from the bus template so the POS can sell
+  INSERT INTO trip_seats (id, "tripId", "row", "column", label, "seatType", status, price, "createdAt", "updatedAt")
+  SELECT 'e2e-seat-' || extract(epoch from now())::bigint::text || '-' || s.id,
+         v_trip_id, s.row, s.column, s.label, s."seatType",
+    CASE WHEN s."seatType" IN ('DRIVER','BLOCKED','DISABLED') THEN 'BLOCKED'::\"SeatStatus\" ELSE 'AVAILABLE'::\"SeatStatus\" END,
+    2500, now(), now()
+  FROM seats s WHERE s."seatTemplateId" = (SELECT "seatTemplateId" FROM buses WHERE id=bus_ready.id);
+  RAISE NOTICE 'e2e-setup: fixture trip % provisioned', v_trip_id;
 END $$;
 `;
 

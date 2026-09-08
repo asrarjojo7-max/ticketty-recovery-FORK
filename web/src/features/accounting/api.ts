@@ -6,6 +6,7 @@ import type {
   Journal,
   JournalEntry,
 } from "./types";
+import type { AccountingEvent } from "./types";
 
 export const fetchAccounts = () => apiClient<Account[]>("/accounting/accounts");
 export const createAccount = (input: { code: string; name: string; type: AccountType }) =>
@@ -21,3 +22,7 @@ export const createJournal = (input: { code: string; name: string }) =>
 export const fetchEntries = () => apiClient<JournalEntry[]>("/accounting/entries");
 export const postEntry = (id: string) =>
   apiClient<JournalEntry>(`/accounting/entries/${id}/post`, { method: "POST" });
+
+export const fetchEvents = () => apiClient<AccountingEvent[]>("/accounting/events");
+export const requeueEvent = (id: string) =>
+  apiClient<AccountingEvent>(`/accounting/events/${id}/requeue`, { method: "POST" });

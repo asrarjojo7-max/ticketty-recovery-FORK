@@ -7,9 +7,11 @@ import {
   createPeriod,
   fetchAccounts,
   fetchEntries,
+  fetchEvents,
   fetchJournals,
   fetchPeriods,
   postEntry,
+  requeueEvent,
 } from "./api";
 
 const root = ["accounting"] as const;
@@ -40,4 +42,15 @@ export function useCreateJournal() {
 export function usePostEntry() {
   const client = useQueryClient();
   return useMutation({ mutationFn: postEntry, onSuccess: refresh(client) });
+}
+
+export const useEvents = () =>
+  useQuery({ queryKey: [...root, "events"], queryFn: fetchEvents });
+
+export function useRequeueEvent() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => requeueEvent(id),
+    onSuccess: refresh(client),
+  });
 }

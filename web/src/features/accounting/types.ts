@@ -46,3 +46,22 @@ export interface JournalEntry {
   fiscalPeriod: FiscalPeriod;
   lines: JournalEntryLine[];
 }
+
+export type AccountingEventStatus = "PENDING" | "FAILED" | "POSTED";
+export type AccountingEventType =
+  | "PAYMENT_RECEIVED"
+  | "REFUND_COMPLETED"
+  | "EXPENSE_APPROVED"
+  | "AGENT_SETTLEMENT";
+
+export interface AccountingEvent {
+  id: string;
+  eventType: AccountingEventType;
+  sourceId: string;
+  status: AccountingEventStatus;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  processedAt: string | null;
+  journalEntry: { id: string; entryNumber: string } | null;
+}
