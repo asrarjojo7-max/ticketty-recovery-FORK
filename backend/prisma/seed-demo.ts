@@ -3,13 +3,16 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const PAYMENT_METHODS = [
-  'CASH',
-  'BANKAK',
-  'MTN_MOMO',
-  'ZAIN_CASH',
-  'BANK_TRANSFER',
-] as const;
+/**
+ * Phase 5 (Option A — Owner-approved): بيانات العرض نقدًا فقط.
+ *
+ * الطرق الرقمية محفوظة في الـ enum لكن تسجيلها عبر الـ API ممنوع
+ * حتى وجود سياسة providers + reconciliation (قرار المالك: مؤجلة).
+ * البيانات التجريبية كانت تخلق مدفوعات رقمية وهمية (phantom) تُفسد
+ * الـ invariant الجديد «لا مدفوعات رقمية» وتضلل التقارير المالية
+ * التجريبية — الحجوزات النقدية كافية تمامًا للعرض.
+ */
+const PAYMENT_METHODS = ['CASH'] as const;
 
 function todayUtc(): Date {
   const now = new Date();

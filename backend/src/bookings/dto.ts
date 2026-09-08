@@ -5,6 +5,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -101,7 +102,21 @@ export class CreateBookingDto {
   @IsString()
   agentId?: string;
 
-  @IsEnum(PaymentMethod)
+  /**
+   * Phase 5 (Option A — Owner-approved): قصر الدفع على النقد فقط.
+   *
+   * القيم الرقمية (CARD/BANKAK/MTN_MOMO/ZAIN_CASH/BANK_TRANSFER) تبقى
+   * في الـ enum كـ reserved & documented — تسجيلها مستحيل عبر الـ API
+   * حتى وجود سياسة providers + reconciliation (قرار المالك: providers
+   * مؤجلة). هذا يمنع "phantom payment" من الجذر: تأكيد رقمي بلا تحقق
+   * خارجي كان يخلق تذكرة مؤكدة + إيرادًا مسجلًا من لا شيء.
+   * عند أول حاجة فعلية للبيع الرقمي: راجع PRE-LAUNCH_HARDENING_PLAN
+   * §5.3 Option B (verification workflow) — التصميم موثق كاملًا.
+   */
+  @IsIn([PaymentMethod.CASH], {
+    message:
+      'الطرق الرقمية غير متاحة بعد — الدفع نقدًا فقط (الطرق الرقمية محفوظة حتى سياسة التحقق)',
+  })
   paymentMethod: PaymentMethod;
 
   @IsOptional()

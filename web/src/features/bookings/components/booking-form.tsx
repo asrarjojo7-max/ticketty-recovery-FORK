@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { AlertCircle, CreditCard, Loader2, TicketCheck } from "lucide-react";
+import { AlertCircle, Loader2, TicketCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
@@ -123,25 +123,16 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">طريقة الدفع</legend>
-        <div className="grid grid-cols-2 gap-3">
-          {(["CASH", "CARD"] as PaymentMethod[]).map((method) => (
-            <label key={method} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${form.paymentMethod === method ? "border-primary bg-primary/5" : ""}`}>
-              <input type="radio" name="payment-method" value={method} checked={form.paymentMethod === method} onChange={() => updateField("paymentMethod", method)} />
-              {method === "CASH" ? "نقداً" : "بطاقة"}
-            </label>
-          ))}
+        <div className="grid grid-cols-1 gap-3">
+          {/* Phase 5 (Option A): النقد فقط — الطرق الرقمية محفوظة حتى
+              إقرار سياسة التحقق (providers + reconciliation). قرار المالك. */}
+          <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm ${form.paymentMethod === "CASH" ? "border-primary bg-primary/5" : ""}`}>
+            <input type="radio" name="payment-method" value="CASH" checked={form.paymentMethod === "CASH"} onChange={() => updateField("paymentMethod", "CASH")} />
+            نقداً
+          </label>
+          <p className="text-xs text-muted-foreground">الطرق الرقمية (بطاقة/محافظ إلكترونية) غير متاحة بعد وستُفعَّل عند إقرار سياسة التحقق.</p>
         </div>
       </fieldset>
-
-      {form.paymentMethod === "CARD" ? (
-        <div className="space-y-2">
-          <label htmlFor="payment-reference" className="text-sm font-medium">مرجع عملية البطاقة</label>
-          <div className="relative">
-            <CreditCard className="absolute start-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input id="payment-reference" className="ps-9" maxLength={100} value={form.paymentReference} onChange={(event) => updateField("paymentReference", event.target.value)} placeholder="رقم العملية" required />
-          </div>
-        </div>
-      ) : null}
 
       <div className="rounded-lg bg-muted p-4">
         <div className="flex items-center justify-between text-sm"><span>عدد المقاعد</span><span>{seats.length}</span></div>
