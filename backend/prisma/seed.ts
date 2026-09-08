@@ -28,8 +28,16 @@ interface RoleSeed {
   permissions: string[];
 }
 
+// دور مالك منظمة المشغّل (Suda) يختلف عن مالك Tenant عميل:
+// يملك نجمة نطاق منظمته + صلاحية المنصة الصريحة platform.admin
+// (بوابة تزويد الشركات). مالكو Tenants لا يحصلون عليها أبداً.
 const ROLES: RoleSeed[] = [
-  { key: 'OWNER', nameAr: 'مالك النظام', nameEn: 'Owner', permissions: ['*'] },
+  {
+    key: 'OWNER',
+    nameAr: 'مالك النظام',
+    nameEn: 'Owner',
+    permissions: ['*', 'platform.admin'],
+  },
   {
     key: 'OPS_MANAGER',
     nameAr: 'مدير العمليات',
