@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetricsRegistryService } from '../monitoring/metrics-registry.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -33,6 +34,7 @@ export class SubscriptionSweepWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly metrics: MetricsRegistryService,
   ) {}
 
   onModuleInit(): void {
@@ -63,6 +65,10 @@ export class SubscriptionSweepWorker implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const expired = await this.prisma.runSubscriptionSweep();
+      // Phase 6: آخر تشغيل ناجح + النتيجة (تقدم دوماً — ولو 0
+      // انتقالات: السحابة اشتغلت ونجحت).
+      this.metrics.subscriptionSweepLastRun.set(Date.now() / 1000);
+      this.metrics.subscriptionSweepLastResult.set(1);
       if (expired > 0) {
         this.logger.log(
           `Subscription sweep matured ${expired} subscription state transition(s)`,
@@ -71,6 +77,8 @@ export class SubscriptionSweepWorker implements OnModuleInit, OnModuleDestroy {
       return expired;
     } catch (error) {
       // المعاملة ذرية — لا أثر جزئي؛ المحاولة القادمة كافية.
+      this.metrics.subscriptionSweepLastRun.set(Date.now() / 1000);
+      this.metrics.subscriptionSweepLastResult.set(0);
       this.logger.warn(
         `Subscription sweep failed: ${
           error instanceof Error ? error.message : String(error)

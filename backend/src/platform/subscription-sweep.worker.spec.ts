@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { SubscriptionSweepWorker } from './subscription-sweep.worker';
 import type { PrismaService } from '../prisma/prisma.service';
+import { MetricsRegistryService } from '../monitoring/metrics-registry.service';
 
 function makeConfig(env: Record<string, string>): ConfigService {
   return { get: (key: string) => env[key] } as unknown as ConfigService;
@@ -17,7 +18,15 @@ describe('SubscriptionSweepWorker', () => {
 
   function makeWorker(env: Record<string, string>, sweep = jest.fn()) {
     const prisma = { runSubscriptionSweep: sweep } as unknown as PrismaService;
-    const worker = new SubscriptionSweepWorker(prisma, makeConfig(env));
+    const metrics = {
+      subscriptionSweepLastRun: { set: jest.fn() },
+      subscriptionSweepLastResult: { set: jest.fn() },
+    } as unknown as MetricsRegistryService;
+    const worker = new SubscriptionSweepWorker(
+      prisma,
+      makeConfig(env),
+      metrics,
+    );
     return { worker, sweep };
   }
 

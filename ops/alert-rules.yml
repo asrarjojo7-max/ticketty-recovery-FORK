@@ -1,0 +1,138 @@
+# Alerting rules — Pre-Launch Hardening Phase 6 (Engineering Contract §12)
+# =========================================================================
+# وثيقة جاهزة للربط بأي Prometheus + Alertmanager عند النشر الفعلي.
+# لا ننشر hosted monitoring الآن (قرار الخطة) — الملف هو "الحقيقة
+# المرجعية" لما يجب أن ينبه، ومصدر المقاييس هو GET /metrics
+# (prom-client، أسماء ticketty_*).
+#
+# كل قاعدة أفقها 3 دقائق على الأقل (تقلب worker لا يقلق) ما عدا
+# القواعد الحرجة ماليًا (accounting) — أفق أطول 10 دقائق لأن
+# الفشل المتكرر هو المهم وليس الحادثة المفردة.
+groups:
+  - name: ticketty-backend-critical
+    rules:
+      # العامل المحاسبي توقف — "إذا توقف العامل نعرف تلقائيًا".
+      # staleness: آخر نجاح أقدم من 3× فترة التشغيل (interval 5s →
+      # عمليًا نستخدم 15 دقيقة كأفق أقصى مراعاة لحالات الخمول الطويل
+      # بلا أحداث — العامل يحدّث الطابع الزمني كل دورة بكل الأحوال).
+      - alert: AccountingWorkerStale
+        expr: |
+          (time() - ticketty_accounting_worker_last_success_timestamp_seconds) > 900
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "عامل المحاسبة متوقف (لم يُكمل دورة ناجحة منذ >15 دقيقة)"
+          description: >
+            آخر دورة ناجحة للعامل المحاسبي تجاوزت 15 دقيقة. الأحداث
+            المحاسبية (عمولات/تسويات/قيم) تتوقف عن الترحيل — تحقق من
+            DB connectivity و ACCOUNTING_WORKER_ENABLED.
+
+      # فشل متكرر — "الفشل المتكرر نعرف تلقائيًا".
+      - alert: AccountingWorkerFailing
+        expr: ticketty_accounting_worker_consecutive_failures > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "العامل المحاسبي يفشل باستمرار منذ 10 دقائق"
+          description: >
+            دورات العامل ترمي استثناءات (claim/DB) — ليست أحداث أعمال
+            فاشلة بل عطل تشغيلي. راجع logs.
+
+      # أحداث أعمال فاشلة (failed processing) — حرج مالي.
+      - alert: AccountingEventsFailing
+        expr: increase(ticketty_accounting_events_failed_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "أحداث محاسبية فشلت خلال آخر 10 دقائق"
+          description: >
+            أحداث أعمال (BOOKING_SALE وغيرها) فشلت معالجتها — راجع
+            الحدث في accounting_events.status=FAILED لمعرفة السبب.
+
+      # طابور يتراكم — العامل لا يواكب.
+      - alert: AccountingQueueBacklog
+        expr: ticketty_accounting_queue_depth{status="PENDING"} > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "طابور المحاسبة يتجاوز 100 حدث معلق منذ 15 دقيقة"
+          description: >
+            العامل لا يواكب الإنتاج — راجع interval وقدرة المعالجة
+            أو ابحث عن أحداث عالقة (claim بلا معالجة).
+
+      # أحداث عالقة قديمة (stale) — أقوى مؤشر على عطل صامت.
+      - alert: AccountingStalePending
+        expr: ticketty_accounting_queue_depth{status="PENDING"} > 0
+          and on() (time() - ticketty_accounting_worker_last_success_timestamp_seconds) > 300
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "أحداث معلقة + عامل متوقف — تراكم صامت"
+          description: >
+            PENDING > 0 مع عامل لم ينجح منذ >5 دقائق = الأحداث لا
+            تعالج إطلاقاً. تدخل فوري.
+
+      # سحّال الاشتراكات توقف (Phase 1 worker) — منظمة قد تبقى
+      # EXPIRED بلا تحديث أو تجديدات لا تُفعّل.
+      - alert: SubscriptionSweepStale
+        expr: |
+          (time() - ticketty_subscription_sweep_last_run_timestamp_seconds) > 21600
+        labels:
+          severity: warning
+        annotations:
+          summary: "سحّال الاشتراكات لم يعمل منذ >6 ساعات"
+          description: >
+            الفترة الافتراضية 6 ساعات — تجاوزها يعني توقف السحّال
+            (تراكم منتهيات بلا انتقال حالة).
+
+      - alert: SubscriptionSweepErroring
+        expr: ticketty_subscription_sweep_last_result == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "آخر سحبة اشتراكات فشلت"
+          description: >
+            آخر تشغيل للسحّال انتهى بخطأ — راجع logs.
+
+      # 402s ترتفع — منظمة نشطة تجاريًا انتهى اشتراكها (فرصة
+      # مبيعات + إشارة صحة).
+      - alert: SubscriptionBlocksSurge
+        expr: increase(ticketty_subscription_blocks_total[1h]) > 50
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "موجة 402 (اشتراكات منتهية) — >50 خلال ساعة"
+          description: >
+            منظمة نشطة تُحجب عن البيع — فرصة متابعة تجارية فورية.
+
+      # معدل أخطاء 5xx.
+      - alert: Backend5xxRate
+        expr: |
+          sum(rate(ticketty_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(ticketty_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "معدل 5xx يتجاوز 5% منذ 10 دقائق"
+          description: >
+            نسبة أخطاء الخادم مرتفعة — راجع logs و requestId trail.
+
+      # DB readiness — نفس فحص readiness.
+      - alert: DatabaseDown
+        expr: up{job="ticketty-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "الـ backend غير قابل للوصول"
+          description: >
+            فشل scrape — إما العملية أو الشبكة؛ راجع /api/health/liveness.

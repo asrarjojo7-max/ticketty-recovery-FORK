@@ -15,6 +15,19 @@ describe('HealthService', () => {
     await expect(new HealthService(prisma).readiness()).resolves.toEqual({
       status: 'ready',
       database: 'up',
+      // تعذر قياس الـ staleness في هذا الـ mock — لا يغير الجاهزية.
+      stalePendingAccountingEvents: -1,
+    });
+  });
+
+  it('reports stale accounting events count when query succeeds', async () => {
+    const prisma = {
+      ping: jest.fn().mockResolvedValue(undefined),
+      $queryRaw: jest.fn().mockResolvedValue([{ count: 3 }]),
+    } as unknown as PrismaService;
+    await expect(new HealthService(prisma).readiness()).resolves.toMatchObject({
+      status: 'ready',
+      stalePendingAccountingEvents: 3,
     });
   });
 

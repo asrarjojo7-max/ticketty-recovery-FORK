@@ -22,6 +22,7 @@ import { HealthModule } from './health/health.module';
 import { RequestContextMiddleware } from './common/http/request-context.middleware';
 import { TenantRlsInterceptor } from './common/interceptors/tenant-rls.interceptor';
 import { ManifestsModule } from './manifests/manifests.module';
+import { MonitoringModule } from './monitoring/monitoring.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PlatformModule } from './platform/platform.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -79,6 +80,8 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     SettlementsModule,
     ManifestsModule,
     ReportsModule,
+    // Phase 6: observability — سجل مقاييس عالمي + /metrics.
+    MonitoringModule,
   ],
   controllers: [AppController],
   providers: [

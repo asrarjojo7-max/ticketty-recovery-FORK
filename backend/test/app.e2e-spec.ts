@@ -36,10 +36,24 @@ describe('AppController (e2e)', () => {
   });
 
   it('/api/health/readiness (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/api/health/readiness')
-      .expect(200)
-      .expect({ status: 'ready', database: 'up' });
+    return (
+      request(app.getHttpServer())
+        .get('/api/health/readiness')
+        .expect(200)
+        // Phase 6: أضيف مؤشر تذبذب العامل (degraded، لا not-ready) —
+        // قيمة >= 0 عادية (0 = لا أحداث عالقة)، -1 إن تعذر القياس.
+        .expect((res: { body: Record<string, unknown> }) => {
+          if (res.body.status !== 'ready' || res.body.database !== 'up') {
+            throw new Error(
+              `unexpected readiness body: ${JSON.stringify(res.body)}`,
+            );
+          }
+          const stale = res.body.stalePendingAccountingEvents;
+          if (typeof stale !== 'number' || !Number.isInteger(stale)) {
+            throw new Error('stalePendingAccountingEvents must be an integer');
+          }
+        })
+    );
   });
 
   it('returns a stable validation error envelope', async () => {
