@@ -120,6 +120,9 @@ interface ProvisionRow {
   owner_name: string;
   owner_email: string;
   audit_id: string;
+  /** PILOT BLOCKER-1: فترة الافتتاح + جاهزية المحاسبة (ذريّة مع التزويد) */
+  fiscal_period_id: string;
+  accounting_ready: boolean;
 }
 
 interface OperatorOrgRow {
