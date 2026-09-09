@@ -120,7 +120,10 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               </p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="rounded-lg py-2.5">
+            <DropdownMenuItem
+              className="rounded-lg py-2.5"
+              onSelect={() => router.push("/profile")}
+            >
               <User /> الملف الشخصي
             </DropdownMenuItem>
             <DropdownMenuSeparator />
