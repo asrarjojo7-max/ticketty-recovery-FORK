@@ -425,7 +425,7 @@ model Ticket {
   bookingId           String
   tripId              String
   tripSeatId          String
-  number              String       @unique // رقم تذكرة قابل للقراءة
+  number              String       @unique // رقم تذكرة قابل للقراءة TK-2026-000184
   passengerName       String
   passengerPhone      String
   passengerNationalId String?
@@ -435,6 +435,13 @@ model Ticket {
   fare                Decimal      @db.Decimal(12, 2)
   status              TicketStatus @default(BOOKED)
   qrCode              String       @unique
+  // توكِن الصعود/الباركود: معرّف عشوائي معتمَد لا يحمل بيانات راكب —
+  // الماسح يقرأه والخادم يسترجع التذكرة الفعلية منه (لا ثقة بالباركود).
+  boardingToken       String?      @unique
+  printedAt           DateTime?
+  printedById         String?
+  boardedAt           DateTime?
+  boardedById          String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -445,6 +452,7 @@ model Ticket {
   commission   Commission?
 
   @@index([organizationId, tripId])
+  @@unique([organizationId, number])
   @@index([tripSeatId])
   @@map("tickets")
 }

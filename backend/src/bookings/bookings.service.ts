@@ -32,10 +32,57 @@ const BOOKABLE_STATUSES: TripStatus[] = [TripStatus.SCHEDULED, TripStatus.OPEN];
 const BOOKABLE_SEAT_TYPES: SeatType[] = [SeatType.REGULAR, SeatType.VIP];
 const HOLD_MINUTES = 10;
 
-function ticketNumber(): string {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rand = randomBytes(3).toString('hex').toUpperCase();
-  return `TKT-${ts}-${rand}`;
+/**
+ * رقم التذكرة الرسمي: TK-<سنة>-<تسلسل 6 أرقام>.
+ *
+ * التسلسل يبدأ من أعلى رقم قائم داخل نفس السنة +1، ويُحجز داخل
+ * معاملة الحجز نفسها (قفل الرحلة يمنع التسلسل المتزامن من الازدواج
+ * داخل نفس الرحلة، وUNIQUE على tickets.number يمنع الازدواج كليًا).
+ * صيغة قابلة للقراءة والبحث والطباعة: TK-2026-000184.
+ */
+/**
+ * أول رقم متاح في تسلسل المنظمة لهذه السنة — يُقرأ مرة واحدة داخل
+ * المعاملة (قفل advisory الرحلة يحمي التزامن بين الحجوزات)، ثم
+ * تزيد الوحدة المستدعية محليًا لكل مقعد إضافي.
+ */
+async function nextTicketSequence(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+): Promise<number> {
+  const year = new Date().getUTCFullYear();
+  const prefix = `TK-${year}-`;
+  const latest = await tx.ticket.findFirst({
+    where: { organizationId, number: { startsWith: prefix } },
+    orderBy: { number: 'desc' },
+    select: { number: true },
+  });
+  const lastSequence = latest
+    ? Number.parseInt(latest.number.slice(prefix.length), 10)
+    : 0;
+  return Number.isFinite(lastSequence) && lastSequence > 0
+    ? lastSequence + 1
+    : 1;
+}
+
+function formatTicketNumber(sequence: number): string {
+  const year = new Date().getUTCFullYear();
+  return `TK-${year}-${String(sequence).padStart(6, '0')}`;
+}
+
+/** Exposed for unit tests (same implementation). */
+export const nextTicketSequenceForTest = nextTicketSequence;
+export const formatTicketNumberForTest = formatTicketNumber;
+
+/**
+ * توكِن الصعود: معرّف عشوائي عاتِم لا يحمل أي بيانات راكب — الباركود
+ * المطبوع يرمّزه والخادم يسترجع التذكرة الفعلية منه. لا ثقة بالمحتوى.
+ */
+export function boardingTokenForTest(): string {
+  return `TB-${randomBytes(8).toString('hex').toUpperCase()}`;
+}
+
+function boardingToken(): string {
+  return boardingTokenForTest();
 }
 
 @Injectable()
@@ -234,6 +281,19 @@ export class BookingsService {
         claimed.push(seat);
       }
 
+      // أرقام تذاكر متسلسلة (TK-YYYY-NNNNNN) — تُحجز داخل المعاملة،
+      // وكل مقعد يأخذ الرقم التالي بالترتيب.
+      // القراءة مرة واحدة ثم زيادة محلية: القراءة المتكررة كانت تعيد
+      // نفس «الأحدث» (لا شيء مكتوب بعد) فتتطابق أرقام المقاعد المتعددة
+      // ويُرفض الحجز بخرق UNIQUE على tickets.number (P2002).
+      // التزامن بين الحجوزات محمي بقفل advisory الرحلة أعلاه.
+      const ticketNumbers: string[] = [];
+      let nextSeq = await nextTicketSequence(tx, orgId);
+      for (let i = 0; i < claimed.length; i += 1) {
+        ticketNumbers.push(formatTicketNumber(nextSeq));
+        nextSeq += 1;
+      }
+
       const booking = await tx.booking.create({
         data: {
           organizationId: orgId,
@@ -247,13 +307,13 @@ export class BookingsService {
           status: 'CONFIRMED',
           notes: dto.notes,
           tickets: {
-            create: claimed.map((seat) => {
+            create: claimed.map((seat, index) => {
               const passenger = passengerBySeat.get(seat.id);
               return {
                 organizationId: orgId,
                 tripId: dto.tripId,
                 tripSeatId: seat.id,
-                number: ticketNumber(),
+                number: ticketNumbers[index],
                 passengerName: passenger?.passengerName ?? dto.passengerName!,
                 passengerPhone:
                   passenger?.passengerPhone ?? dto.passengerPhone!,
@@ -264,6 +324,7 @@ export class BookingsService {
                 dropOffStop: dto.dropOffStop,
                 fare: seat.price,
                 qrCode: randomUUID(),
+                boardingToken: boardingToken(),
               };
             }),
           },
