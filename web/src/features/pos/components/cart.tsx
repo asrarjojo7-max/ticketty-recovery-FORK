@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Trash2, BadgeCheck, Receipt, StickyNote } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatMoney } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CartSeat, CartPassenger } from "../types";
@@ -87,7 +87,7 @@ export function Cart({
                   </span>
                   <div className="flex items-center gap-1">
                     <span className="tabular text-sm font-extrabold text-primary">
-                      {formatCurrency(seat.price)}
+                      {formatMoney(seat.price)}
                     </span>
                     <button
                       onClick={() => onRemove(seat.seatId)}
@@ -202,7 +202,7 @@ export function Cart({
             الإجمالي (للعرض)
           </span>
           <span className="tabular font-display text-xl font-extrabold text-primary">
-            {formatCurrency(total)}
+            {formatMoney(total)}
           </span>
         </div>
         <Button

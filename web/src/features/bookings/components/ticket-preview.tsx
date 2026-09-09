@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Bus, CalendarDays, MapPin, Printer, Ticket as TicketIcon, User, X } from "lucide-react";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoney } from "@/lib/utils";
 import type { Booking, Ticket, TripSeatsResponse } from "../types";
 
 interface TicketPreviewProps {
@@ -73,7 +73,7 @@ function TicketCard({ ticket, booking, trip }: { ticket: Ticket; booking: Bookin
           </div>
           <div className="flex items-center justify-between rounded-lg bg-muted p-3">
             <span className="text-sm text-muted-foreground">قيمة التذكرة</span>
-            <span className="font-bold text-primary">{formatCurrency(Number(ticket.fare))} ج.س</span>
+            <span className="font-bold text-primary">{formatMoney(ticket.fare)}</span>
           </div>
         </div>
         <div className="flex min-w-40 flex-col items-center justify-center border-t border-dashed pt-4 sm:border-r sm:border-t-0 sm:ps-5 sm:pt-0">

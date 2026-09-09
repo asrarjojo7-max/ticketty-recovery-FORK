@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { AlertCircle, Loader2, TicketCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoney } from "@/lib/utils";
 import { useCreateBooking } from "../hooks/use-create-booking";
 import type { Booking, PaymentMethod, TripSeat, TripSeatsResponse } from "../types";
 
@@ -136,7 +136,7 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
 
       <div className="rounded-lg bg-muted p-4">
         <div className="flex items-center justify-between text-sm"><span>عدد المقاعد</span><span>{seats.length}</span></div>
-        <div className="mt-2 flex items-center justify-between border-t pt-3 font-bold"><span>الإجمالي</span><span className="text-lg text-primary">{formatCurrency(total)} ج.س</span></div>
+        <div className="mt-2 flex items-center justify-between border-t pt-3 font-bold"><span>الإجمالي</span><span className="text-lg text-primary">{formatMoney(total)}</span></div>
       </div>
 
       {error ? (

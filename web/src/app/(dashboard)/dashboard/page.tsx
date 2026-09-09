@@ -9,7 +9,7 @@ import { DashboardSkeleton } from "@/components/ui/skeletons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BusFront as BusIcon, TicketCheck, Activity, ClipboardList } from "lucide-react";
-import { formatCurrency, relativeTime } from "@/lib/utils";
+import { formatMoney, relativeTime } from "@/lib/utils";
 import type { KpiStat, ActivityItem, ActivityStatus } from "@/types/dashboard";
 
 /* ── Local presentational bits ─────────────────────────────── */
@@ -58,7 +58,7 @@ function HeroBand({
           </div>
           <div className="leading-tight">
             <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">
-              متوسط الإشغال القادم
+              نسبة امتلاء الرحلات القادمة
             </p>
             <p className="mt-1 font-display text-2xl font-extrabold tabular">
               {avgOccupancy}%
@@ -132,7 +132,7 @@ const kpiTone: Record<string, Tone> = {
 
 function formatKpiValue(kpi: KpiStat): string {
   return kpi.format === "currency"
-    ? formatCurrency(kpi.value)
+    ? formatMoney(kpi.value)
     : kpi.value.toLocaleString("ar-EG");
 }
 

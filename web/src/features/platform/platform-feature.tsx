@@ -68,7 +68,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function formatSdg(value: number) {
-  return `${value.toLocaleString("ar-SD")} ج.س`;
+  return `${value.toLocaleString("ar-SD")} SDG`;
 }
 
 function formatDate(value: string) {

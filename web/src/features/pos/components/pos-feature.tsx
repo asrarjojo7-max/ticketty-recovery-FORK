@@ -7,7 +7,7 @@ import { useSession } from "@/components/layout/session-context";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoney } from "@/lib/utils";
 import type { Booking, TripSeat } from "@/features/bookings";
 import { usePosTripSeats, usePosTrips, useCheckout } from "../hooks";
 import { TripCards } from "./trip-cards";
@@ -42,9 +42,9 @@ function TicketDialog({
             تم إصدار التذاكر بنجاح
           </p>
           <p className="mt-1 text-xs text-white/75">
-            إجمالي محددد مالياً:{" "}
+            الإجمالي المسجّل:{" "}
             <span className="tabular font-bold">
-              {formatCurrency(Number(booking.totalAmount))}
+              {formatMoney(booking.totalAmount)}
             </span>
           </p>
         </div>
@@ -65,7 +65,7 @@ function TicketDialog({
               </div>
               <div className="text-end">
                 <p className="tabular text-sm font-extrabold text-primary">
-                  {formatCurrency(Number(t.fare))}
+                  {formatMoney(t.fare)}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {t.qrCode ? "QR جاهز" : ""}

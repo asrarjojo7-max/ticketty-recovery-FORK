@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatTripDate } from "@/features/trips/formatters";
-import { formatCurrency } from "@/lib/utils";
+import { formatMoney } from "@/lib/utils";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useBookings, useCancelBooking } from "../hooks/use-bookings";
 import type { Booking, BookingStatus } from "../types";
@@ -79,7 +79,7 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
       header: "القيمة",
       cell: ({ row }) => (
         <span className="tabular font-semibold">
-          {formatCurrency(Number(row.original.totalAmount))}
+          {formatMoney(row.original.totalAmount)}
         </span>
       ),
     },

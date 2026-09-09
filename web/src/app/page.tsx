@@ -314,7 +314,7 @@ export default function Home() {
             <h3 className="plan-name">شهر كامل مجاناً</h3>
             <div className="plan-price">
               <strong>0</strong>
-              <span>ج.س / 30 يوماً</span>
+              <span>SDG / 30 يوماً</span>
             </div>
             <p className="plan-desc">
               كل الميزات كاملة دون أي قيود — جرّب التشغيل الحقيقي
@@ -335,7 +335,7 @@ export default function Home() {
             <h3 className="plan-name">الاشتراك الشهري</h3>
             <div className="plan-price">
               <strong>199,000</strong>
-              <span>ج.س / شهرياً</span>
+              <span>SDG / شهرياً</span>
             </div>
             <p className="plan-desc">
               المنظومة كاملة لكل فريقك: مبيعات، محاسبة مزدوجة، منفستو،
@@ -357,11 +357,10 @@ export default function Home() {
             <h3 className="plan-name">الاشتراك السنوي</h3>
             <div className="plan-price">
               <strong>2,388,000</strong>
-              <span>ج.س / سنوياً</span>
+              <span>SDG / سنوياً</span>
             </div>
             <p className="plan-desc">
-              نفس الخطة الشهرية بسعر 12 شهراً بسعر 10 — وفّر 398,000
-              ج.س سنوياً مع أولوية دعم أعلى.
+              نفس الخطة الشهرية بسعر 12 شهراً بسعر 10 — وفّر 398,000 SDG سنوياً مع أولوية دعم أعلى.
             </p>
             <ul className="plan-features">
               <li>كل ميزات الخطة الشهرية</li>
