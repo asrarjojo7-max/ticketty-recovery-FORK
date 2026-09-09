@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Sparkles, BusFront, Gauge } from "lucide-react";
+import { Sparkles, BusFront, Gauge } from "lucide-react";
 import { useSession } from "@/components/layout/session-context";
 import { useDashboardStats } from "@/hooks/useDashboard";
 import { KpiCard, type Tone } from "@/components/dashboard/kpi-card";
@@ -98,13 +98,6 @@ function HeroBand({
   trips: number;
   permissions: string[];
 }) {
-  const today = new Intl.DateTimeFormat("ar-SD", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
-
   return (
     <section className="relative overflow-hidden rounded-3xl bg-gradient-hero p-6 text-primary-foreground shadow-elevated lg:p-8">
       <div className="bg-dot-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
