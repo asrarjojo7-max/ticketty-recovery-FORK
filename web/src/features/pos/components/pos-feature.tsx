@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { CalendarDays, TicketCheck, X } from "lucide-react";
 import { toast } from "sonner";
-import { useSession } from "@/components/layout/session-context";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +86,6 @@ function TicketDialog({
 /* ── POS feature ──────────────────────────────────────────── */
 
 export function PosFeature() {
-  const user = useSession();
   // Default: no date filter — the rail lists upcoming sellable trips; sellers
   // narrow by date only when needed.
   const [date, setDate] = useState<string>("");
@@ -248,7 +246,7 @@ export function PosFeature() {
               data={seatsQuery.data}
               isLoading={seatsQuery.isLoading}
               isError={seatsQuery.isError}
-              currentUser={user}
+              
               selectedSeatIds={new Set(cart.map((c) => c.seatId))}
               onToggleSeat={toggleSeat}
             />
