@@ -1604,6 +1604,34 @@ button {
     display: none !important;
   }
 
+  /* المستند الرسمي المطبوع: أبيض، إطار واضح، خطوط سوداء فقط */
+  .official-manifest {
+    background: #fff !important;
+    color: #000 !important;
+    border: 2px solid #000 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  .official-manifest * {
+    color: #000 !important;
+    border-color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .official-manifest [class*="rounded"] {
+    border-radius: 0 !important;
+  }
+  .official-manifest table {
+    width: 100%;
+    font-size: 11pt;
+  }
+  .official-manifest th,
+  .official-manifest td {
+    border: 1px solid #000 !important;
+    padding: 4pt 6pt !important;
+  }
+
   * {
     animation: none !important;
     transition: none !important;
