@@ -10,16 +10,93 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BusFront as BusIcon, TicketCheck, Activity, ClipboardList } from "lucide-react";
 import { formatMoney, relativeTime } from "@/lib/utils";
+import { roleLabel } from "@/lib/roles";
 import type { KpiStat, ActivityItem, ActivityStatus } from "@/types/dashboard";
 
 /* ── Local presentational bits ─────────────────────────────── */
 
+/**
+ * ترحيب + إرشاد حسب الدور (نطاق UX-16/17/18): كل دور يرى تحيته
+ * وأدواته — والمساعدة مبنية على الحالة الحقيقية للنظام لا على
+ * نصوص عشوائية.
+ */
+function RoleGreeting({ name, roleKey }: { name: string; roleKey: string }) {
+  const greetings: Record<string, string> = {
+    OWNER: "أنت الآن في لوحة إدارة الشركة. من هنا يمكنك متابعة الرحلات والمبيعات والموظفين وأداء مكاتبك.",
+    OPS_MANAGER: "أنت مسؤول عن تشغيل الرحلات والمركبات والسائقين ومتابعة سير الرحلات.",
+    FINANCE: "أنت مسؤول عن المحاسبة والمصروفات والعمولات والتقارير المالية.",
+    STATION_MANAGER: "أنت مسؤول عن إدارة هذا المكتب ومتابعة الرحلات والحجوزات والمبيعات اليومية.",
+    SELLER: "من هنا يمكنك حجز وبيع التذاكر، اختيار المقاعد، وإصدار التذاكر للمسافرين.",
+    AGENT: "من هنا يمكنك حجز وبيع التذاكر لحسابك ومتابعة عمولاتك.",
+    VIEWER: "من هنا يمكنك مراجعة الرحلات والتقارير دون تعديل أي بيانات.",
+  };
+  const subtitle = greetings[roleKey] ?? greetings.SELLER;
+  return (
+    <div className="max-w-2xl">
+      <p className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-bold">
+        <Sparkles className="h-3.5 w-3.5" /> {roleLabel(roleKey)}
+      </p>
+      <h1 className="mt-3 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
+        مرحبًا بك، {name} 👋
+      </h1>
+      <p className="mt-2 max-w-xl text-sm leading-7 text-white/75">{subtitle}</p>
+    </div>
+  );
+}
+
+/**
+ * المساعدة الذكية: خطوات تالية مبنية على بيانات اللوحة الفعلية
+ * (لا مركبات → اقترح إضافة مركبة، لا رحلات → أنشئ رحلة…)
+ * مع مراعاة صلاحية المستخدم على الوجه المقترح فقط.
+ */
+function SmartHelp({
+  buses,
+  trips,
+  canManageFleet,
+  canManageTrips,
+  canSell,
+}: {
+  buses: number;
+  trips: number;
+  canManageFleet: boolean;
+  canManageTrips: boolean;
+  canSell: boolean;
+}) {
+  const hints: Array<{ title: string; body: string; cta: string; href: string }> = [];
+  if (buses === 0 && canManageFleet) {
+    hints.push({ title: "لم تتم إضافة أي مركبة بعد", body: "أضف أول مركبة حتى تتمكن من إنشاء الرحلات.", cta: "إضافة مركبة", href: "/buses" });
+  } else if (trips === 0 && canManageTrips) {
+    hints.push({ title: "لا توجد رحلات قادمة", body: "أنشئ رحلة جديدة لبدء استقبال الحجوزات.", cta: "إنشاء رحلة", href: "/trips" });
+  } else if (trips > 0 && canSell) {
+    hints.push({ title: "الرحلات جاهزة للبيع", body: "ابدأ ببيع التذاكر من نقطة البيع أو شاشة الحجوزات.", cta: "بيع تذكرة", href: "/pos" });
+  }
+  if (hints.length === 0) return null;
+  const hint = hints[0];
+  return (
+    <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
+      <p className="text-xs font-bold">{hint.title}</p>
+      <p className="mt-1 text-[11px] leading-5 text-white/70">{hint.body}</p>
+      <a href={hint.href} className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3 py-1.5 text-[11px] font-bold hover:bg-white/25">
+        {hint.cta} ←
+      </a>
+    </div>
+  );
+}
+
 function HeroBand({
   name,
+  roleKey,
   avgOccupancy,
+  buses,
+  trips,
+  permissions,
 }: {
   name: string;
+  roleKey: string;
   avgOccupancy: number;
+  buses: number;
+  trips: number;
+  permissions: string[];
 }) {
   const today = new Intl.DateTimeFormat("ar-SD", {
     weekday: "long",
@@ -37,32 +114,27 @@ function HeroBand({
         aria-hidden="true"
       />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-2xl">
-          <p className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-bold">
-            <Sparkles className="h-3.5 w-3.5" /> مركز قيادة العمليات
-          </p>
-          <h1 className="mt-3 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
-            مرحبًا {name}، كل شيء تحت السيطرة.
-          </h1>
-          <p className="mt-2 max-w-xl text-sm leading-7 text-white/75">
-            تابع أداء الحجوزات والرحلات والإيرادات من مكان واحد، واتخذ قرارات أسرع ببيانات محدّثة.
-          </p>
-          <div className="mt-4 flex items-center gap-2 text-xs text-white/60">
-            <CalendarDays className="h-4 w-4" />
-            {today}
-          </div>
-        </div>
-        <div className="flex flex-col items-start gap-2 rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm sm:flex-row sm:items-center sm:gap-4">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
-            <Gauge className="h-5 w-5" />
-          </div>
-          <div className="leading-tight">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">
-              نسبة امتلاء الرحلات القادمة
-            </p>
-            <p className="mt-1 font-display text-2xl font-extrabold tabular">
-              {avgOccupancy}%
-            </p>
+        <RoleGreeting name={name} roleKey={roleKey} />
+        <div className="flex flex-col gap-3">
+          <SmartHelp
+            buses={buses}
+            trips={trips}
+            canManageFleet={permissions.includes("*") || permissions.includes("fleet.write")}
+            canManageTrips={permissions.includes("*") || permissions.includes("trips.write")}
+            canSell={permissions.includes("*") || permissions.includes("bookings.write") || permissions.includes("bookings.write.own")}
+          />
+          <div className="flex flex-col items-start gap-2 rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm sm:flex-row sm:items-center sm:gap-4">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
+              <Gauge className="h-5 w-5" />
+            </div>
+            <div className="leading-tight">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">
+                نسبة امتلاء الرحلات القادمة
+              </p>
+              <p className="mt-1 font-display text-2xl font-extrabold tabular">
+                {avgOccupancy}%
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -164,7 +236,14 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <HeroBand name={user.name} avgOccupancy={data.avgOccupancy} />
+      <HeroBand
+        name={user.name}
+        roleKey={user.roleKey}
+        avgOccupancy={data.avgOccupancy}
+        buses={busTotal}
+        trips={data.upcomingTrips.length}
+        permissions={user.permissions}
+      />
 
       {/* KPI row */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
