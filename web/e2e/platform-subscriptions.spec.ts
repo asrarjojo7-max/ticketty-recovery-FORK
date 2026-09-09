@@ -80,7 +80,8 @@ test("operator manages a tenant subscription lifecycle end-to-end", async ({
   const renewBtn = row.getByRole("button", { name: "تجديد شهر" });
   if (await renewBtn.isVisible().catch(() => false)) {
     await renewBtn.click();
-    await expect(page.getByText("نشط حتى", { exact: false })).toBeVisible({
+    // التأكيد داخل صف هذه الشركة تحديداً — ليس أي صف في الجدول
+    await expect(row.getByText("نشط حتى", { exact: false })).toBeVisible({
       timeout: 10_000,
     });
   }
