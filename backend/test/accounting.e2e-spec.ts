@@ -38,30 +38,45 @@ describe('accounting lifecycle under tenant RLS', () => {
   });
 
   afterAll(async () => {
+    // تنظيف ذرّي واحد: DISABLE + DELETEs + كل شيء داخل معاملة واحدة.
+    // ALTER TABLE قابل للتراجع في PostgreSQL — لو انهارت المعاملة في
+    // أي نقطة (timeout، اتصال مقطوع) تُرجع الحارسات لوضعها المسلّح
+    // تلقائياً. (حدث فعلاً في تشغيل مُثقل سابق: timeout وسط التنظيف
+    // المنفصل ترك posting_guard معطلاً وأفسد كل التشغيلات بعده.)
     try {
-      await owner.$executeRawUnsafe(
-        'ALTER TABLE "journal_entry_lines" DISABLE TRIGGER "journal_entry_lines_immutability_guard"',
+      await owner.$transaction(
+        async (tx) => {
+          await tx.$executeRawUnsafe(
+            'ALTER TABLE "journal_entry_lines" DISABLE TRIGGER "journal_entry_lines_immutability_guard"',
+          );
+          await tx.$executeRawUnsafe(
+            'ALTER TABLE "journal_entries" DISABLE TRIGGER "journal_entries_posting_guard"',
+          );
+          await tx.accountingEvent.deleteMany({ where: { organizationId } });
+          await tx.journalEntryLine.deleteMany({ where: { organizationId } });
+          await tx.journalEntry.deleteMany({ where: { organizationId } });
+          await tx.accountingPolicy.deleteMany({ where: { organizationId } });
+          await tx.expense.deleteMany({ where: { organizationId } });
+          await tx.journal.deleteMany({ where: { organizationId } });
+          await tx.fiscalPeriod.deleteMany({ where: { organizationId } });
+          await tx.account.deleteMany({ where: { organizationId } });
+          await tx.idempotencyRecord.deleteMany({ where: { organizationId } });
+          await tx.organization.delete({ where: { id: organizationId } });
+          // ENABLE داخل المعاملة — نفس الضمانة: الانهيار يُرجع
+          // الـ DISABLE والـ ENABLE معاً (الحارس مسلح دائماً).
+          await tx.$executeRawUnsafe(
+            'ALTER TABLE "journal_entries" ENABLE TRIGGER "journal_entries_posting_guard"',
+          );
+          await tx.$executeRawUnsafe(
+            'ALTER TABLE "journal_entry_lines" ENABLE TRIGGER "journal_entry_lines_immutability_guard"',
+          );
+        },
+        { timeout: 60_000 },
       );
-      await owner.$executeRawUnsafe(
-        'ALTER TABLE "journal_entries" DISABLE TRIGGER "journal_entries_posting_guard"',
-      );
-      await owner.accountingEvent.deleteMany({ where: { organizationId } });
-      await owner.journalEntryLine.deleteMany({ where: { organizationId } });
-      await owner.journalEntry.deleteMany({ where: { organizationId } });
-      await owner.accountingPolicy.deleteMany({ where: { organizationId } });
-      await owner.expense.deleteMany({ where: { organizationId } });
-      await owner.journal.deleteMany({ where: { organizationId } });
-      await owner.fiscalPeriod.deleteMany({ where: { organizationId } });
-      await owner.account.deleteMany({ where: { organizationId } });
-      await owner.idempotencyRecord.deleteMany({ where: { organizationId } });
-      await owner.organization.delete({ where: { id: organizationId } });
+    } catch {
+      // انهارت المعاملة → رُجعت كاملة بضمانة الذرّية (الحارسات
+      // سليمة). المنظمة الاختبارية تبقى — بقايا dev مقبولة.
     } finally {
-      await owner.$executeRawUnsafe(
-        'ALTER TABLE "journal_entries" ENABLE TRIGGER "journal_entries_posting_guard"',
-      );
-      await owner.$executeRawUnsafe(
-        'ALTER TABLE "journal_entry_lines" ENABLE TRIGGER "journal_entry_lines_immutability_guard"',
-      );
       await Promise.all([owner.$disconnect(), runtime.$disconnect()]);
     }
   });

@@ -56,135 +56,140 @@ describe('BLOCKER-1: tenant provisioning creates accounting bootstrap (e2e)', ()
   }, 120_000);
 
   afterAll(async () => {
-    // تنظيف جذري داخل معاملة واحدة (immunity triggers تُعطّل مؤقتاً
-    // ثم يُتحقق أن كل شيء أُعيد تفعيله — نمط معروف في هذا الـ repo)
+    // تنظيف جذري داخل معاملة ذرّية واحدة. ALTER TABLE قابل
+    // للتراجع في PostgreSQL: أي انهيار وسط التنظيف يُرجع الـ
+    // DISABLE نفسه — فلا يمكن أن تبقى الحارسات معطلة أبداً
+    // (نمط BEGIN/COMMIT المنفصل كان يتركها معطلة عند timeout —
+    // حدث فعلاً وأفسد تشغيلات لاحقة كاملة).
     try {
-      await admin.$executeRawUnsafe('BEGIN');
-      await admin.$executeRawUnsafe(
-        `ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_immutable_guard`,
+      await admin.$transaction(
+        async (tx) => {
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_immutable_guard`,
+          );
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE journal_entry_lines DISABLE TRIGGER journal_entry_lines_immutability_guard`,
+          );
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE journal_entries DISABLE TRIGGER journal_entries_posting_guard`,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM audit_logs WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM accounting_events WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM journal_entry_lines WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM journal_entries WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM accounting_policies WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM fiscal_periods WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM journals WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM accounts WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM refunds WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM payments WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM commissions WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM tickets WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM bookings WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM idempotency_records WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM trip_seats WHERE "tripId" IN (SELECT id FROM trips WHERE "organizationId" = $1)`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM trips WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM route_stops WHERE "routeId" IN (SELECT id FROM routes WHERE "organizationId" = $1)`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM routes WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM buses WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM seat_templates WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM subscriptions WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM users WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM roles WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM branches WHERE "organizationId" = $1`,
+            tenantOrgId,
+          );
+          await tx.$executeRawUnsafe(
+            `DELETE FROM organizations WHERE "id" = $1`,
+            tenantOrgId,
+          );
+          // ENABLE داخل نفس المعاملة: عند النجاح يُسلح قبل COMMIT،
+          // وعند أي فشل يُرجع الـ ROLLBACK الـ DISABLE والـ ENABLE
+          // معاً — الحارس لا يبقى معطلاً في أي سيناريو.
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE journal_entries ENABLE TRIGGER journal_entries_posting_guard`,
+          );
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE journal_entry_lines ENABLE TRIGGER journal_entry_lines_immutability_guard`,
+          );
+          await tx.$executeRawUnsafe(
+            `ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_immutable_guard`,
+          );
+        },
+        { timeout: 90_000 },
       );
-      await admin.$executeRawUnsafe(
-        `ALTER TABLE journal_entry_lines DISABLE TRIGGER journal_entry_lines_immutability_guard`,
-      );
-      await admin.$executeRawUnsafe(
-        `ALTER TABLE journal_entries DISABLE TRIGGER journal_entries_posting_guard`,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM audit_logs WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM accounting_events WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM journal_entry_lines WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM journal_entries WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM accounting_policies WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM fiscal_periods WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM journals WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM accounts WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM refunds WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM payments WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM commissions WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM tickets WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM bookings WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM idempotency_records WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM trip_seats WHERE "tripId" IN (SELECT id FROM trips WHERE "organizationId" = $1)`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM trips WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM route_stops WHERE "routeId" IN (SELECT id FROM routes WHERE "organizationId" = $1)`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM routes WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM buses WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM seat_templates WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM subscriptions WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM users WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM roles WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM branches WHERE "organizationId" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `DELETE FROM organizations WHERE "id" = $1`,
-        tenantOrgId,
-      );
-      await admin.$executeRawUnsafe(
-        `ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_immutable_guard`,
-      );
-      await admin.$executeRawUnsafe(
-        `ALTER TABLE journal_entry_lines ENABLE TRIGGER journal_entry_lines_immutability_guard`,
-      );
-      await admin.$executeRawUnsafe(
-        `ALTER TABLE journal_entries ENABLE TRIGGER journal_entries_posting_guard`,
-      );
-      await admin.$executeRawUnsafe('COMMIT');
     } catch {
-      try {
-        await admin.$executeRawUnsafe('ROLLBACK');
-      } catch {
-        /* already rolled back */
-      }
+      // رُجعت المعاملة كاملة — الحارسات سليمة بضمانة الذرّية.
     } finally {
       await admin.$disconnect();
       await app.close();
