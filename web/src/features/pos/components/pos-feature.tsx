@@ -156,6 +156,8 @@ export function PosFeature() {
     paymentMethod: CartPassenger extends never ? never : import("@/features/bookings").PaymentMethod;
     passengers: CartPassenger[];
     notes: string;
+    boardingStop?: string;
+    dropOffStop?: string;
   }) {
     if (!selectedTripId) return;
     const tripId = selectedTripId;
@@ -176,6 +178,8 @@ export function PosFeature() {
           })),
         paymentMethod: payload.paymentMethod,
         ...(payload.notes ? { notes: payload.notes } : {}),
+        ...(payload.boardingStop ? { boardingStop: payload.boardingStop } : {}),
+        ...(payload.dropOffStop ? { dropOffStop: payload.dropOffStop } : {}),
       },
       {
         onSuccess: (booking) => {
@@ -258,14 +262,20 @@ export function PosFeature() {
         </div>
 
         <div className="xl:sticky xl:top-24 xl:self-start">
-          <Cart
-            seats={cart}
-            onRemove={removeFromCart}
-            onCheckout={handleCheckout}
-            isPending={checkout.isPending}
-            passengers={passengers}
-            onPassenger={setPassenger}
-          />
+                <Cart
+        seats={cart}
+        onRemove={removeFromCart}
+        onCheckout={handleCheckout}
+        isPending={checkout.isPending}
+        passengers={passengers}
+        onPassenger={setPassenger}
+        stops={
+          selectedTrip
+            ? selectedTrip.route.stops?.map((st) => st.city) ??
+              [selectedTrip.route.fromCity, selectedTrip.route.toCity]
+            : []
+        }
+      />
         </div>
       </div>
 

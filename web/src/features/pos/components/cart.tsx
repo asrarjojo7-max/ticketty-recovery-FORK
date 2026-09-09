@@ -21,6 +21,7 @@ export function Cart({
   isPending,
   passengers,
   onPassenger,
+  stops,
 }: {
   seats: CartSeat[];
   onRemove: (seatId: string) => void;
@@ -28,21 +29,29 @@ export function Cart({
     paymentMethod: PaymentMethod;
     passengers: CartPassenger[];
     notes: string;
+    boardingStop?: string;
+    dropOffStop?: string;
   }) => void;
   isPending: boolean;
   passengers: Record<string, CartPassenger>;
   onPassenger: (seatId: string, p: Partial<CartPassenger>) => void;
+  stops: string[];
 }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [notes, setNotes] = useState("");
   const [showNotes, setShowNotes] = useState(false);
+  // محطتا الصعود والنزول — نفس بيانات نموذج الحجوزات (لا فقدان بيانات)
+  const [boardingStop, setBoardingStop] = useState(stops[0] ?? "");
+  const [dropOffStop, setDropOffStop] = useState(stops[stops.length - 1] ?? "");
   const total = seats.reduce((sum, s) => sum + s.price, 0);
+  // نفس البيانات الإلزامية في تجربة الحجوزات: اسم + هاتف + هوية
   const allNamed =
     seats.length > 0 &&
     seats.every(
       (s) =>
         passengers[s.seatId]?.passengerName?.trim() &&
-        passengers[s.seatId]?.passengerPhone?.trim(),
+        passengers[s.seatId]?.passengerPhone?.trim() &&
+        passengers[s.seatId]?.passengerNationalId?.trim(),
     );
 
   useEffect(() => {
@@ -132,6 +141,20 @@ export function Cart({
                     dir="ltr"
                   />
                 </div>
+                <div className="mt-2">
+                  <Input
+                    placeholder="رقم الهوية / الجواز (مطلوب)"
+                    value={p?.passengerNationalId ?? ""}
+                    onChange={(e) =>
+                      onPassenger(seat.seatId, {
+                        seatId: seat.seatId,
+                        passengerNationalId: e.target.value,
+                      })
+                    }
+                    className="h-9 text-xs"
+                    dir="ltr"
+                  />
+                </div>
               </div>
             );
           })
@@ -139,6 +162,32 @@ export function Cart({
       </div>
 
       <div className="space-y-3 border-t border-border p-4">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="grid gap-1 text-[11px] font-bold text-muted-foreground">
+            محطة الصعود
+            <select
+              className="h-9 rounded-xl border border-input bg-card px-2 text-xs"
+              value={boardingStop}
+              onChange={(e) => setBoardingStop(e.target.value)}
+            >
+              {stops.map((s2) => (
+                <option key={s2} value={s2}>{s2}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-[11px] font-bold text-muted-foreground">
+            محطة النزول
+            <select
+              className="h-9 rounded-xl border border-input bg-card px-2 text-xs"
+              value={dropOffStop}
+              onChange={(e) => setDropOffStop(e.target.value)}
+            >
+              {stops.map((s2) => (
+                <option key={s2} value={s2}>{s2}</option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div>
           <p className="mb-1.5 text-[11px] font-bold text-muted-foreground">
             طريقة الدفع
@@ -220,6 +269,8 @@ export function Cart({
                   },
               ),
               notes,
+              ...(boardingStop ? { boardingStop } : {}),
+              ...(dropOffStop ? { dropOffStop } : {}),
             })
           }
         >
@@ -228,7 +279,7 @@ export function Cart({
         </Button>
         {!allNamed && seats.length > 0 && (
           <p className="text-center text-[10px] text-muted-foreground">
-            أدخل اسم وهاتف كل راكب قبل الإتمام
+            أدخل اسم وهاتف ورقم هوية كل راكب قبل الإتمام
           </p>
         )}
       </div>
