@@ -6,7 +6,9 @@ test.describe("golden path: login → dashboard", () => {
     await page.goto("/dashboard");
 
     // Hero band greets the user with the ops-center title.
-    await expect(page.getByText("مركز قيادة العمليات")).toBeVisible();
+    // Group H: الترحيب حسب الدور — المالك يرى ترحيب مالك النظام
+    await expect(page.getByText("مرحبًا بك", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("مالك النظام").first()).toBeVisible();
 
     // KPI cards render (revenue KPI from server aggregation).
     await expect(page.getByText("إيرادات اليوم")).toBeVisible();

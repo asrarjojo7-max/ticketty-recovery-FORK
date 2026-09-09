@@ -77,7 +77,9 @@ describe('TicketsService tenant isolation', () => {
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          qrCode: 'qr-token',
+          // Group B: البوابة تقبل رمز QR أو رقم التذكرة المطبوع (TKT-…) —
+          // ودائمًا داخل نطاق المنظمة/الفرع (عزل المستأجرين كما هو).
+          OR: [{ qrCode: 'qr-token' }, { number: 'qr-token' }],
           organizationId: 'org-1',
           trip: { branchId: 'branch-1' },
         },
