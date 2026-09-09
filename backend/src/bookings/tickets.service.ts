@@ -61,9 +61,12 @@ export class TicketsService {
   async findByQr(user: AuthUser, qr: string) {
     const scope = tenantScope(user);
     const agentId = await resolveAgentId(this.prisma, user);
+    // بوابة الصعود (Go-Live UX-1): القيمة قد تكون رمز QR (uuid) أو رقم
+    // التذكرة المطبوع TKT-… — الكاشير يقرأ الرقم من الورقة. نطابق
+    // أياً منهما داخل نفس النطاق المعزول (لا بحث عابر للمستأجرين).
     const ticket = await this.prisma.ticket.findFirst({
       where: {
-        qrCode: qr,
+        OR: [{ qrCode: qr }, { number: qr }],
         organizationId: scope.organizationId,
         ...(scope.branchId ? { trip: { branchId: scope.branchId } } : {}),
         ...(agentId ? { booking: { agentId } } : {}),
