@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { SessionProvider } from "./session-context";
+import { OnboardingTour } from "@/components/onboarding/onboarding-tour";
 import type { SessionUser } from "@/types";
 
 interface AppShellProps {
@@ -31,6 +32,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <SessionProvider user={user}>
+      <OnboardingTour roleKey={user.roleKey} />
       <div className="app-canvas flex min-h-screen bg-background text-foreground">
         <Sidebar collapsed={!open} onClose={() => setOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col lg:ps-64">

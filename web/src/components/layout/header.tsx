@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, CalendarDays, LogOut, Menu, Moon, Plus, Sun, User } from "lucide-react";
+import { Bell, CalendarDays, Compass, LogOut, Menu, Moon, Plus, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { SessionUser } from "@/types";
 import { roleLabel } from "@/lib/roles";
+import { resetTour } from "@/components/onboarding/onboarding-tour";
 
 interface HeaderProps {
   user: SessionUser;
@@ -116,6 +117,16 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               onSelect={() => router.push("/profile")}
             >
               <User /> الملف الشخصي
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="rounded-lg py-2.5"
+              onSelect={() => {
+                resetTour();
+                router.push("/dashboard");
+                router.refresh();
+              }}
+            >
+              <Compass /> إعادة الجولة التعريفية
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
