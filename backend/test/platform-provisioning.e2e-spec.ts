@@ -119,14 +119,20 @@ describe('Platform tenant provisioning (e2e)', () => {
     expect(tenantOwnerToken).toBeTruthy();
 
     // 3) المالك الجديد — رغم نجمة '*' — لا يفتح بوابة المنصة
+    // Go-Live S-1: الحارس نفسه يصدّ أولًا (wildcard لا تمنح
+    // platform.admin) برسالة الحارس؛ طبقة requirePlatformOperator
+    // الداخلية تبقى دفاعًا ثانيًا. كلا الطبقتين 403 صحيح — نثبت
+    // الحالة ونقبل نص أي منهما.
     const forbidden = await request(app.getHttpServer())
       .post('/api/platform/tenants')
       .set('Authorization', `Bearer ${tenantOwnerToken}`)
       .send({ ...PROVISION, slug: 'another-slug', ownerEmail: 'x@y.sd' })
       .expect(403);
-    expect((forbidden.body as { message: string }).message).toContain(
-      'مشغّل المنصة',
-    );
+    const message = (forbidden.body as { message: string }).message;
+    expect(
+      message === 'You do not have permission to do this' ||
+        message.includes('مشغّل المنصة'),
+    ).toBe(true);
   });
 
   it('lists provisioned tenants for the operator only', async () => {
