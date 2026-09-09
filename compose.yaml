@@ -27,7 +27,13 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-ticketty-api}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketty-web}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
-      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
+      # Client → Cloudflare edge → cloudflared (localhost, proxy #1) → backend.
+      # 1 = نثق بعمود XFF الذي يضيفه cloudflared فقط (IP عميل Cloudflare
+      # الحقيقي). ترويسة العميل المزيفة تُتجاهل (موثقة بالتجربة — راجع
+      # docs/operations/deployment.md §TRUST_PROXY_HOPS). 0 = تُتجاهل كل
+      # الترويسات (آمن لكن يجمع كل مستخدمي tunnel في IP واحد — يخنق
+      # الدخول 5/min للشركة كلها).
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       ACCOUNTING_WORKER_ENABLED: ${ACCOUNTING_WORKER_ENABLED:-true}
       ACCOUNTING_WORKER_INTERVAL_MS: ${ACCOUNTING_WORKER_INTERVAL_MS:-5000}
       SUBSCRIPTION_SWEEP_ENABLED: ${SUBSCRIPTION_SWEEP_ENABLED:-true}
