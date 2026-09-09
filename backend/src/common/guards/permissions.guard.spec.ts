@@ -67,4 +67,64 @@ describe('PermissionsGuard', () => {
 
     expect(guard.canActivate(contextFor(baseUser))).toBe(true);
   });
+
+  // ─── Go-Live S-1: النجمة لا تعبر نطاق المنصة أبدًا ─────────────
+
+  it('tenant wildcard (*) does NOT grant platform.admin (S-1)', () => {
+    const reflector = {
+      getAllAndOverride: jest.fn().mockReturnValue(['platform.admin']),
+    } as unknown as Reflector;
+    const guard = new PermissionsGuard(reflector);
+
+    // مالك Tenant بنجمة "كل شيء داخل منظمتي" — يُرفض من بوابة المنصة
+    // على مستوى الحارس نفسه (لا الاعتماد على الفحص الداخلي فقط).
+    expect(() =>
+      guard.canActivate(contextFor({ ...baseUser, permissions: ['*'] })),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('explicit platform.admin DOES pass the guard (operator path intact)', () => {
+    const reflector = {
+      getAllAndOverride: jest.fn().mockReturnValue(['platform.admin']),
+    } as unknown as Reflector;
+    const guard = new PermissionsGuard(reflector);
+
+    expect(
+      guard.canActivate(
+        contextFor({ ...baseUser, permissions: ['platform.admin'] }),
+      ),
+    ).toBe(true);
+  });
+
+  it('no permission string combination escalates into platform.admin', () => {
+    const reflector = {
+      getAllAndOverride: jest.fn().mockReturnValue(['platform.admin']),
+    } as unknown as Reflector;
+    const guard = new PermissionsGuard(reflector);
+
+    // حتى تركيبات النجمة النطاقية لا تُنتجها — لا طريق اشتقاق
+    const attempted: string[][] = [
+      ['platform.*'],
+      ['*.*'],
+      ['platform.admin.*'],
+      ['bookings.*', 'platform.read'],
+      ['*', 'platform.read'],
+    ];
+    for (const perms of attempted) {
+      expect(() =>
+        guard.canActivate(contextFor({ ...baseUser, permissions: perms })),
+      ).toThrow(ForbiddenException);
+    }
+  });
+
+  it('tenant wildcard still grants its own org-domain permissions (no regression)', () => {
+    const reflector = {
+      getAllAndOverride: jest.fn().mockReturnValue(['bookings.write']),
+    } as unknown as Reflector;
+    const guard = new PermissionsGuard(reflector);
+
+    expect(
+      guard.canActivate(contextFor({ ...baseUser, permissions: ['*'] })),
+    ).toBe(true);
+  });
 });
