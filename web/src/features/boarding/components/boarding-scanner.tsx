@@ -147,7 +147,11 @@ export function BoardingScanner() {
                 </div>
 
                 {canBoard && !unboardableTrip ? (
-                  <Button className="w-full" size="lg" disabled={checkIn.isPending} onClick={() => checkIn.mutate(ticket.id)}>
+                  <Button className="w-full" size="lg" disabled={checkIn.isPending} onClick={() =>
+                    checkIn.mutate(ticket.id, {
+                      onSuccess: () => search(ticket.number),
+                    })
+                  }>
                     {checkIn.isPending ? <Loader2 className="animate-spin" /> : <TicketCheck />}تأكيد صعود المسافر
                   </Button>
                 ) : ticket.status === "CHECKED_IN" ? (

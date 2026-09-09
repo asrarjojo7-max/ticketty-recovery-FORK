@@ -261,6 +261,7 @@ export function PosFeature() {
 
         <div className="xl:sticky xl:top-24 xl:self-start">
                 <Cart
+        key={selectedTripId ?? "no-trip"}
         seats={cart}
         onRemove={removeFromCart}
         onCheckout={handleCheckout}

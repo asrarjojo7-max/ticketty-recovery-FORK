@@ -40,9 +40,13 @@ export function Cart({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
   const [notes, setNotes] = useState("");
   const [showNotes, setShowNotes] = useState(false);
-  // محطتا الصعود والنزول — نفس بيانات نموذج الحجوزات (لا فقدان بيانات)
-  const [boardingStop, setBoardingStop] = useState(stops[0] ?? "");
-  const [dropOffStop, setDropOffStop] = useState(stops[stops.length - 1] ?? "");
+  // محطتا الصعود والنزول — نفس بيانات نموذج الحجوزات (لا فقدان بيانات).
+  // المشتق من stops هو الافتراضي؛ الـ override للمستخدم إذا غيّر يدويًا.
+  // (اشتقاق لا state أولية — وإلا تفوت قيمة الرحلة عند تحمّلها المتأخر)
+  const [boardingSel, setBoardingStop] = useState<string | null>(null);
+  const [dropOffSel, setDropOffStop] = useState<string | null>(null);
+  const boardingStop = boardingSel ?? stops[0] ?? "";
+  const dropOffStop = dropOffSel ?? stops[stops.length - 1] ?? "";
   const total = seats.reduce((sum, s) => sum + s.price, 0);
   // نفس البيانات الإلزامية في تجربة الحجوزات: اسم + هاتف + هوية
   const allNamed =
@@ -223,9 +227,12 @@ export function Cart({
               </button>
             ))}
           </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
+          <p className="mt-1.5 text-[10px] leading-5 text-muted-foreground">
             الدفع نقداً فقط حالياً — الطرق الرقمية غير متاحة حتى إقرار
             سياسة التحقق لدى مزودي الدفع.
+            <span className="mt-1 flex items-center gap-1 rounded-lg bg-warning/10 px-2 py-1 font-bold text-warning-foreground">
+              🧪 نمط تجريبي (Pilot): البيع النقدي يُسجَّل مالياً كعمليات حقيقية — لا بوابة دفع إلكتروني مفعّلة بعد.
+            </span>
           </p>
         </div>
         {showNotes ? (

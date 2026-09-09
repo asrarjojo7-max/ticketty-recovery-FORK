@@ -13,7 +13,13 @@ setup("authenticate as owner", async ({ page }) => {
   await page.fill("#password", OWNER.password);
   await page.click('button[type="submit"]');
   await page.waitForURL("**/dashboard", { timeout: 30_000 });
-  await expect(page.getByText("مركز قيادة العمليات")).toBeVisible();
+  // الترحيب حسب الدور (Group H) — OWNER يرى ترحيب مالك النظام
+  await expect(page.getByText("مرحبًا بك", { exact: false })).toBeVisible();
+  // إنهاء الجولة التعريفية قبل حفظ الجلسة — الاختبارات تفحص الشاشات لا الجولة
+  const skipTour = page.getByRole("button", { name: "تخطي الكل" });
+  if (await skipTour.isVisible().catch(() => false)) {
+    await skipTour.click();
+  }
   await page.context().storageState({ path: `${stateDir}/owner.json` });
 });
 
@@ -29,6 +35,10 @@ setup("authenticate as agent", async ({ browser }) => {
   await page.waitForURL(/\/(dashboard|bookings|pos|boarding|trips)/, {
     timeout: 30_000,
   });
+  const agentSkipTour = page.getByRole("button", { name: "تخطي الكل" });
+  if (await agentSkipTour.isVisible().catch(() => false)) {
+    await agentSkipTour.click();
+  }
   await ctx.storageState({ path: `${stateDir}/agent.json` });
   await ctx.close();
 });

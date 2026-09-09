@@ -121,7 +121,8 @@ export class TicketsService {
 
     const updated = await this.prisma.ticket.findUniqueOrThrow({
       where: { id },
-      include: { booking: true, trip: true },
+      // نفس شكل استجابة by-qr/findOne — الواجهة تعرض route الرحلة
+      include: { booking: true, trip: { include: { route: true } } },
     });
     await this.audit.log(user, 'TICKET_CHECKED_IN', 'Ticket', id, {
       tripId: ticket.tripId,
