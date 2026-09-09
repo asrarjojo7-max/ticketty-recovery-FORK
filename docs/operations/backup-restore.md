@@ -62,3 +62,62 @@ Record start/end time, backup timestamp, achieved RPO/RTO, row-count sanity chec
 - Pause writes and follow an incident-specific plan for any in-place disaster restore.
 - Custom dumps do not include cluster roles/globals; provision the application role separately.
 - A valid checksum is not proof of restorability; only a completed scratch restore is.
+
+---
+
+## النسخ الإنتاجي الليلي — `ops/backup-nightly.sh` (Go-Live Gate: P-1)
+
+`backup-postgres.sh` أعلاه يبقى العملية الأساسية (atomic + sha256).
+`backup-nightly.sh` **يلفّه** ويضيف طبقة الإنتاج كاملة:
+
+| المتطلب | التنفيذ |
+|---|---|
+| جدولة تلقائية | cron يومي 02:30 (الأمر أدناه) |
+| نسخة خارج الخادم | `RCLONE_REMOTE` (B2/S3/Google/…) + **تحقق حجم طرف-للطرف بعد الرفع** |
+| retention | `BACKUP_RETENTION_DAYS` (افتراضي 30) — محلي **و**خارجي |
+| فشل مرئي | exit 1 (يفشل cron التوثيقي) + سجل CSV + **إنذار HIGH عبر نفس قناة الـ watchdog** |
+| سلامة النسخة | `pg_restore --list` فوريًا + `sha256sum --check` بعد الكتابة |
+| فشل الـ cron نفسه | فحص قِدم: لا نجاح خلال 25 ساعة → إنذار |
+| الاستعادة | نفس `restore-postgres.sh` + التمرين الربعي `verify-restore.sh` |
+
+### التثبيت (cron على الخادم)
+
+```cron
+30 2 * * * cd /srv/ticketty && set -a; . /etc/ticketty/backup.env; set +a; \
+  ./ops/backup-nightly.sh >> /var/log/ticketty/backup.log 2>&1
+```
+
+`/etc/ticketty/backup.env` (وضع 600):
+```
+DATABASE_URL=postgresql://ticketty:…@postgres:5432/ticketty
+RCLONE_REMOTE=b2:ticketty-backups        # إلزامي للإنتاج
+BACKUP_WEBHOOK_URL=https://ntfy.sh/<topic>
+```
+
+(تكوين rclone مرة واحدة: `rclone config` — B2/S3/GDrive.)
+
+### RPO / RTO — محسوبان من الجدول الفعلي (لا ادعاء)
+
+- **RPO = 24 ساعة** (توقيت cron اليومي 02:30 — أسوأ خسارة بيانات
+  مقبولة عند الكوارث = عمليات اليوم الواحد). لتقليله: أضف سطر cron
+  ثانيًا (كل 6 ساعات → RPO 6 ساعات) — نفس السكربت idempotent.
+- **RTO = 16 ثانية** (مُقاس في تمرين 2026-09-08: نسخة → استعادة →
+  migrations → grants → invariants → bootstrap → RLS probe → counts).
+  التمرين الربعي التالي يجب أن يستعمل نسخة من الوجهة الخارجية.
+
+### الإثبات المُنفّذ (2026-09-09 — حيًا)
+
+| السيناريو | النتيجة |
+|---|---|
+| تشغيل كامل بوجهة rclone | `BACKUP OK … uploaded` + تحقق الحجم طرف-للطرف |
+| استعادة من **نسخة الوجهة الخارجية** إلى scratch | نجحت — 67 منظمة/73 حدثًا (قابلية الاسترداد خارجيًا مثبتة) |
+| قاعدة مقطوعة + webhook | exit 1 + سجل FAILED + **إنذار HIGH وصل فعليًا** (تحقق ntfy poll) |
+| بلا RCLONE_REMOTE | تحذير صريح + إنذار WARNING (لا نشر prod هكذا) |
+
+### ما لم يُثبت بعد (بصدق)
+
+- رفع فعلي إلى سحابة حقيقية (الإثبات أعلاه بوجهة local rclone
+  تحاكي المسار كاملًا؛ التكوين السحابي يحدث عند النشر على
+  الخادم الحقيقي — نفس السكربت بلا تغيير).
+- استعادة على خادم مختلف (مُغطى منطقيًا بالنسخة الخارجية +
+  `--no-owner --no-acl`؛ التمرين الربعي على staging هو مكان إثباتها).
