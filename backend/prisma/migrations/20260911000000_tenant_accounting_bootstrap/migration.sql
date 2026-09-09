@@ -126,6 +126,24 @@ BEGIN
   VALUES (ticketty_security.platform_cuid(), v_org.id, 'OWNER', 'مالك النظام', 'Owner', ARRAY['*']::text[], true)
   RETURNING "id", "key" INTO v_role;
 
+  -- الأدوار التشغيلية الست الباقية — نفس تعريفات prisma/seed.ts
+  -- حرفياً (READ_ALL + الأدوار الموسعة) — لا اختراع. أول عميل
+  -- حقيقي يحتاج إنشاء بائع/مالية/وكيل من أول يوم بلا seed يدوي.
+  INSERT INTO public."roles" ("id", "organizationId", "key", "nameAr", "nameEn", "permissions", "isSystem")
+  VALUES
+    (ticketty_security.platform_cuid(), v_org.id, 'OPS_MANAGER', 'مدير العمليات', 'Operations Manager',
+     ARRAY['customers.read','routes.read','fleet.read','trips.read','bookings.read','tickets.read','payments.read','agents.read','expenses.read','settlements.read','manifests.read','reports.read','accounting.read','routes.write','fleet.write','trips.write','manifests.write']::text[], true),
+    (ticketty_security.platform_cuid(), v_org.id, 'FINANCE', 'المالية والمحاسبة', 'Finance / Accountant',
+     ARRAY['customers.read','routes.read','fleet.read','trips.read','bookings.read','tickets.read','payments.read','agents.read','expenses.read','settlements.read','manifests.read','reports.read','accounting.read','payments.write','agents.write','expenses.write','expenses.approve','settlements.write','accounting.write','accounting.post','accounting.close']::text[], true),
+    (ticketty_security.platform_cuid(), v_org.id, 'STATION_MANAGER', 'مدير المحطة', 'Station Manager',
+     ARRAY['customers.read','routes.read','fleet.read','trips.read','bookings.read','tickets.read','payments.read','agents.read','expenses.read','settlements.read','manifests.read','reports.read','accounting.read','bookings.write','tickets.write','customers.write','payments.write','manifests.write']::text[], true),
+    (ticketty_security.platform_cuid(), v_org.id, 'SELLER', 'البائع', 'Seller',
+     ARRAY['trips.read','bookings.read','bookings.write','tickets.read','tickets.write','customers.read','customers.write','manifests.read','payments.read']::text[], true),
+    (ticketty_security.platform_cuid(), v_org.id, 'AGENT', 'وكيل خارجي', 'External Agent',
+     ARRAY['trips.read','bookings.read.own','bookings.write.own','tickets.read.own','tickets.write.own','customers.read','customers.write','payments.read.own','agents.read.own','settlements.read.own']::text[], true),
+    (ticketty_security.platform_cuid(), v_org.id, 'VIEWER', 'مراجع / مدقق', 'Viewer / Auditor',
+     ARRAY['customers.read','routes.read','fleet.read','trips.read','bookings.read','tickets.read','payments.read','agents.read','expenses.read','settlements.read','manifests.read','reports.read','accounting.read']::text[], true);
+
   INSERT INTO public."users" ("id", "organizationId", "branchId", "roleId", "name", "email", "passwordHash", "createdAt", "updatedAt")
   VALUES (ticketty_security.platform_cuid(), v_org.id, v_branch.id, v_role.id, p_owner_name, p_owner_email, p_owner_password_hash, clock_timestamp(), clock_timestamp())
   RETURNING "id", "name", "email" INTO v_owner;

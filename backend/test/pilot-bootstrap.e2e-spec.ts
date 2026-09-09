@@ -361,7 +361,8 @@ describe('BLOCKER-1: tenant provisioning creates accounting bootstrap (e2e)', ()
     // عالمي قديم لا يجب أن يفسد هذا الاختبار).
     const worker = app.get(AccountingEventWorker);
     let ourEventPosted = false;
-    for (let i = 0; i < 30 && !ourEventPosted; i++) {
+    for (let i = 0; i < 200 && !ourEventPosted; i++) {
+      // full runs: older global backlog drains first
       await worker.runOnce();
       const fresh = await admin.accountingEvent.findUnique({
         where: { id: event.id },
