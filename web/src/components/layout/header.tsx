@@ -14,21 +14,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { SessionUser } from "@/types";
+import { roleLabel } from "@/lib/roles";
 
 interface HeaderProps {
   user: SessionUser;
   onMenuClick: () => void;
 }
-
-const roleLabels: Record<string, string> = {
-  OWNER: "مالك النظام",
-  OPS_MANAGER: "مدير العمليات",
-  FINANCE: "الإدارة المالية",
-  STATION_MANAGER: "مدير المحطة",
-  SELLER: "موظف مبيعات",
-  AGENT: "وكيل",
-  VIEWER: "مراجع",
-};
 
 /**
  * ticket-master DNA topbar: sticky, translucent backdrop-blur, compact
@@ -107,7 +98,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
               <div className="hidden min-w-0 leading-tight lg:block">
                 <p className="max-w-32 truncate text-sm font-semibold">{user.name}</p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  {roleLabels[user.roleKey] ?? user.roleKey}
+                  {roleLabel(user.roleKey)}
                 </p>
               </div>
             </button>

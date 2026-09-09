@@ -10,17 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api-client";
-
-/** أسماء الأدوار الموحدة (عرض فقط — نفس مفاتيح النظام). */
-const ROLE_LABELS: Record<string, string> = {
-  OWNER: "مالك النظام",
-  OPS_MANAGER: "مدير التشغيل",
-  FINANCE: "الإدارة المالية",
-  STATION_MANAGER: "مدير المكتب",
-  SELLER: "كاشير",
-  AGENT: "وكيل",
-  VIEWER: "مراجع",
-};
+import { ROLE_LABELS } from "@/lib/roles";
 
 const inputClass = "h-10 w-full rounded-xl border border-input bg-card px-3 text-sm";
 
