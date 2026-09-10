@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Input } from "@/components/ui/input";
 import type { Booking, TripSeat, TripSeatsResponse } from "@/features/bookings";
 import { TicketPreview } from "@/features/bookings/components/professional-ticket";
+import { MobileCartBar } from "./mobile-cart-bar";
 import { useOrganizationForTicket } from "@/features/bookings/hooks/use-organization";
 import { usePosTripSeats, usePosTrips, useCheckout } from "../hooks";
 import { TripCards } from "./trip-cards";
@@ -182,7 +183,10 @@ export function PosFeature() {
         </p>
       </div>
 
-      <div className="h-0 lg:hidden" aria-hidden="true" style={{ paddingBottom: "10rem" }} />
+      {/* مساحة تنفس أسفل الصفحة على الهاتف حتى لا يغطي الشريط
+          السفلي آخر مقعد في الخريطة — ثابتة وبسيطة (لا state ولا
+          تبديل هيكل → لا hydration mismatch). */}
+      <div className="h-24 lg:hidden" aria-hidden="true" />
       {/* 3-pane layout — شاشة واحدة: كل عمود يمرّر داخليًا داخل ارتفاع
           الشاشة (lg+) فلا تمرير صفحة طويل أثناء البيع.
           lg: أعمدة جانبية مضغوطة · xl: العرض الكامل المعتاد. */}
@@ -215,26 +219,41 @@ export function PosFeature() {
           )}
         </div>
 
-        {/* الهاتف: عمود السلة يصبح شريطًا سفليًا مثبتًا يظهر فقط عند
-            اختيار مقاعد (سلة فارغة = لا شريط، الشاشة كلها للخريطة
-            والقائمة — لا حجب نقر ولا تمرير طويل).
-            lg+: يبقى العمود الجانبي المعتاد داخل ارتفاع الشاشة. */}
-        <div
-          className={
-            cart.length
-              ? "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-elevated backdrop-blur lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 lg:pb-0 lg:shadow-none lg:backdrop-blur-none lg:min-h-0 lg:self-start"
-              : "contents lg:block lg:min-h-0 lg:self-start"
-          }
-        >
-          <div className={cart.length ? "lg:sticky lg:top-0 lg:max-h-[calc(100vh-11rem)]" : "hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-11rem)]"}>
-                <Cart
-        key={selectedTripId ?? "no-trip"}
+        {/* عمود السلة — سطح المكتب: دائمًا ضمن ارتفاع الشاشة (شاشة بيع
+            واحدة). الهاتف: مخفي هنا بـ CSS فقط (نفس الشجرة دائمًا — لا
+            mismatch) وتُعرض نسخة الشريط السفلي المستقلة أسفله. */}
+        <div className="hidden min-h-0 self-start lg:block">
+          <div className="sticky top-0 max-h-[calc(100vh-11rem)]">
+            <Cart
+              key={`desk-${selectedTripId ?? "no-trip"}`}
+              seats={cart}
+              onRemove={removeFromCart}
+              onCheckout={handleCheckout}
+              isPending={checkout.isPending}
+              passengers={passengers}
+              onPassenger={setPassenger}
+              stops={
+                selectedTrip
+                  ? selectedTrip.route.stops?.map((st) => st.city) ??
+                    [selectedTrip.route.fromCity, selectedTrip.route.toCity]
+                  : []
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* شريط الهاتف السفلي — عنصر مستقل دائم البنية، يحتوى على كل
+          تفاصيل السلة (المقاعد + بيانات المسافر + الدفع + إتمام البيع).
+          سلة فارغة = سطر ملخص صغير فقط؛ بمجرد اختيار مقعد تظهر كل
+          التفاصيل هنا — المستخدم لا يعود للتمرير إطلاقًا. */}
+      <MobileCartBar
         seats={cart}
+        passengers={passengers}
+        onPassenger={setPassenger}
         onRemove={removeFromCart}
         onCheckout={handleCheckout}
         isPending={checkout.isPending}
-        passengers={passengers}
-        onPassenger={setPassenger}
         stops={
           selectedTrip
             ? selectedTrip.route.stops?.map((st) => st.city) ??
@@ -242,9 +261,6 @@ export function PosFeature() {
             : []
         }
       />
-          </div>
-        </div>
-      </div>
 
       {lastBooking && seatsQuery.data && (
         <PosSuccessTickets
