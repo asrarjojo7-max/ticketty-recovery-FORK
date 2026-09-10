@@ -295,7 +295,7 @@ function TenantsTable({ rows }: { rows: TenantRow[] }) {
           {actionError}
         </p>
       ) : null}
-      <Table>
+      <div className="overflow-x-auto"><Table>
         <TableHeader>
           <TableRow>
             <TableHead>الشركة</TableHead>
@@ -429,7 +429,7 @@ function TenantsTable({ rows }: { rows: TenantRow[] }) {
             );
           })}
         </TableBody>
-      </Table>
+      </Table></div>
 
       {suspending ? (
         <SuspendDialog

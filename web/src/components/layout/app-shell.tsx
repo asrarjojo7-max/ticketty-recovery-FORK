@@ -37,7 +37,7 @@ export function AppShell({ user, children }: AppShellProps) {
         <Sidebar collapsed={!open} onClose={() => setOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col lg:ps-64">
           <Header user={user} onMenuClick={() => setOpen((o) => !o)} />
-          <main className="flex-1 p-4 lg:p-6 lg:px-8">
+          <main className="flex-1 p-3 sm:p-4 lg:p-6 lg:px-8">
             <div className="mx-auto max-w-7xl">{children}</div>
           </main>
         </div>

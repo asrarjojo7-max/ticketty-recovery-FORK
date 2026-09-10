@@ -39,7 +39,7 @@ export function AccountingFeature() {
       <Card>
         <CardHeader><CardTitle>القيود المحاسبية</CardTitle></CardHeader>
         <CardContent className="p-0">
-          {entries.isLoading ? <Skeleton className="m-5 h-64" /> : entries.isError ? <EmptyState icon={<BookOpen />} title="تعذر تحميل القيود" description="تحقق من الاتصال والصلاحيات ثم أعد المحاولة." /> : !entries.data?.length ? <EmptyState icon={<BookOpen />} title="لا توجد قيود" description="أنشئ أول قيد محاسبي من واجهة API الحالية." /> : <Table><TableHeader><TableRow><TableHead>الرقم</TableHead><TableHead>التاريخ</TableHead><TableHead>المصدر</TableHead><TableHead>الحالة</TableHead><TableHead>الإجراء</TableHead></TableRow></TableHeader><TableBody>{entries.data.map((entry) => <TableRow key={entry.id}><TableCell dir="ltr">{entry.entryNumber}</TableCell><TableCell>{new Date(entry.entryDate).toLocaleDateString("ar")}</TableCell><TableCell>{entry.sourceType}</TableCell><TableCell><Badge variant={entry.status === "POSTED" ? "success" : "secondary"}>{entry.status}</Badge></TableCell><TableCell>{entry.status === "DRAFT" && canPost ? <Button size="sm" disabled={post.isPending} onClick={() => post.mutate(entry.id)}>{post.isPending ? <Loader2 className="animate-spin" /> : null}ترحيل</Button> : "—"}</TableCell></TableRow>)}</TableBody></Table>}
+          {entries.isLoading ? <Skeleton className="m-5 h-64" /> : entries.isError ? <EmptyState icon={<BookOpen />} title="تعذر تحميل القيود" description="تحقق من الاتصال والصلاحيات ثم أعد المحاولة." /> : !entries.data?.length ? <EmptyState icon={<BookOpen />} title="لا توجد قيود" description="أنشئ أول قيد محاسبي من واجهة API الحالية." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>الرقم</TableHead><TableHead>التاريخ</TableHead><TableHead>المصدر</TableHead><TableHead>الحالة</TableHead><TableHead>الإجراء</TableHead></TableRow></TableHeader><TableBody>{entries.data.map((entry) => <TableRow key={entry.id}><TableCell dir="ltr">{entry.entryNumber}</TableCell><TableCell>{new Date(entry.entryDate).toLocaleDateString("ar")}</TableCell><TableCell>{entry.sourceType}</TableCell><TableCell><Badge variant={entry.status === "POSTED" ? "success" : "secondary"}>{entry.status}</Badge></TableCell><TableCell>{entry.status === "DRAFT" && canPost ? <Button size="sm" disabled={post.isPending} onClick={() => post.mutate(entry.id)}>{post.isPending ? <Loader2 className="animate-spin" /> : null}ترحيل</Button> : "—"}</TableCell></TableRow>)}</TableBody></Table></div>}
         </CardContent>
       </Card>
       <EventsCard events={events} requeue={requeue} canRequeue={canPost} />
@@ -119,7 +119,7 @@ function EventsCard({
             description="تُنشأ الأحداث تلقائياً مع كل عملية مالية (بيع، استرداد، مصروف، تسوية)."
           />
         ) : (
-          <Table>
+          <div className="overflow-x-auto"><Table>
             <TableHeader>
               <TableRow>
                 <TableHead>النوع</TableHead>
@@ -197,7 +197,7 @@ function EventsCard({
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </Table></div>
         )}
       </CardContent>
     </Card>

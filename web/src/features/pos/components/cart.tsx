@@ -70,7 +70,7 @@ export function Cart({
   }, [seats, passengers, onPassenger]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-card">
+    <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-card lg:h-full lg:max-h-none">
       <div className="border-b border-border bg-muted/40 px-5 py-4">
         <p className="font-display text-base font-bold">سلة البيع</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -93,7 +93,10 @@ export function Cart({
                     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary-soft text-primary">
                       {seat.seatType === "VIP" ? <BadgeCheck className="h-3.5 w-3.5" /> : <Receipt className="h-3.5 w-3.5" />}
                     </span>
-                    مقعد <span dir="ltr">{seat.label}</span>
+                    مقعد{" "}
+                    <span dir="ltr" className="tabular-nums text-lg font-black text-primary">
+                      {seat.label}
+                    </span>
                     {seat.seatType === "VIP" && (
                       <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[9px] font-extrabold text-accent">VIP</span>
                     )}

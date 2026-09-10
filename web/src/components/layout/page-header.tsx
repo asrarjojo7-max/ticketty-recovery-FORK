@@ -23,7 +23,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-soft p-5 shadow-card lg:p-6">
+    <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-soft p-4 shadow-card sm:p-5 lg:p-6">
       <div
         className="pointer-events-none absolute -end-16 -top-16 h-40 w-40 rounded-full opacity-30 blur-3xl"
         style={{ background: "var(--color-primary-glow)" }}
@@ -57,7 +57,11 @@ export function PageHeader({
             )}
           </div>
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && (
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+            {actions}
+          </div>
+        )}
       </div>
     </div>
   );

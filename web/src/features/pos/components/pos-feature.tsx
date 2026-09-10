@@ -1,85 +1,38 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, TicketCheck, X } from "lucide-react";
+import { CalendarDays, TicketCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatMoney } from "@/lib/utils";
-import type { Booking, TripSeat } from "@/features/bookings";
+import type { Booking, TripSeat, TripSeatsResponse } from "@/features/bookings";
+import { TicketPreview } from "@/features/bookings/components/professional-ticket";
+import { useOrganizationForTicket } from "@/features/bookings/hooks/use-organization";
 import { usePosTripSeats, usePosTrips, useCheckout } from "../hooks";
 import { TripCards } from "./trip-cards";
 import { SeatPanel } from "./seat-panel";
 import { Cart } from "./cart";
 import type { CartPassenger, CartSeat } from "../types";
 
-/* ── Success dialog: shows the just-issued tickets ─────────── */
+/* ── Success view: the official printable tickets ───────────── */
 
-function TicketDialog({
+function PosSuccessTickets({
   booking,
+  trip,
   onClose,
 }: {
   booking: Booking;
+  trip: TripSeatsResponse["trip"];
   onClose: () => void;
 }) {
+  const orgQuery = useOrganizationForTicket();
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-card shadow-elevated">
-        <div className="relative bg-gradient-hero px-6 py-5 text-primary-foreground">
-          <button
-            onClick={onClose}
-            className="absolute end-4 top-4 rounded-lg p-1.5 text-white/80 hover:bg-white/15"
-            aria-label="إغلاق"
-          >
-            <X className="h-4 w-4" />
-          </button>
-          <p className="text-[11px] font-bold uppercase tracking-wider opacity-80">
-            عملية بيع مكتملة
-          </p>
-          <p className="mt-1 font-display text-xl font-extrabold">
-            تم إصدار التذاكر بنجاح
-          </p>
-          <p className="mt-1 text-xs text-white/75">
-            الإجمالي المسجّل:{" "}
-            <span className="tabular font-bold">
-              {formatMoney(booking.totalAmount)}
-            </span>
-          </p>
-        </div>
-        <div className="max-h-[55vh] space-y-3 overflow-y-auto p-5">
-          {booking.tickets.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center justify-between rounded-2xl border border-border bg-background p-4"
-            >
-              <div>
-                <p className="text-sm font-bold">
-                  {t.passengerName} · مقعد{" "}
-                  <span dir="ltr">{t.seatLabel}</span>
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground" dir="ltr">
-                  {t.number}
-                </p>
-              </div>
-              <div className="text-end">
-                <p className="tabular text-sm font-extrabold text-primary">
-                  {formatMoney(t.fare)}
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  {t.qrCode ? "QR جاهز" : ""}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2 border-t border-border p-4">
-          <Button onClick={onClose} className="flex-1 bg-gradient-primary font-bold">
-            بيع جديد
-          </Button>
-        </div>
-      </div>
-    </div>
+    <TicketPreview
+      booking={booking}
+      trip={trip}
+      organization={orgQuery.data ?? undefined}
+      onClose={onClose}
+    />
   );
 }
 
@@ -229,9 +182,12 @@ export function PosFeature() {
         </p>
       </div>
 
-      {/* 3-pane layout */}
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-        <div className="xl:max-h-[calc(100vh-13rem)] xl:overflow-y-auto xl:pe-1">
+      <div className="h-0 lg:hidden" aria-hidden="true" style={{ paddingBottom: "10rem" }} />
+      {/* 3-pane layout — شاشة واحدة: كل عمود يمرّر داخليًا داخل ارتفاع
+          الشاشة (lg+) فلا تمرير صفحة طويل أثناء البيع.
+          lg: أعمدة جانبية مضغوطة · xl: العرض الكامل المعتاد. */}
+      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)_320px] xl:grid-cols-[280px_minmax(0,1fr)_340px] lg:h-[calc(100vh-11rem)] lg:grid-rows-[minmax(0,1fr)]">
+        <div className="lg:min-h-0 lg:overflow-y-auto lg:pe-1">
           <TripCards
             trips={tripsQuery.data}
             isLoading={tripsQuery.isLoading}
@@ -240,7 +196,7 @@ export function PosFeature() {
           />
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pe-1">
           {selectedTrip ? (
             <SeatPanel
               data={seatsQuery.data}
@@ -259,7 +215,18 @@ export function PosFeature() {
           )}
         </div>
 
-        <div className="xl:sticky xl:top-24 xl:self-start">
+        {/* الهاتف: عمود السلة يصبح شريطًا سفليًا مثبتًا يظهر فقط عند
+            اختيار مقاعد (سلة فارغة = لا شريط، الشاشة كلها للخريطة
+            والقائمة — لا حجب نقر ولا تمرير طويل).
+            lg+: يبقى العمود الجانبي المعتاد داخل ارتفاع الشاشة. */}
+        <div
+          className={
+            cart.length
+              ? "fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-elevated backdrop-blur lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0 lg:pb-0 lg:shadow-none lg:backdrop-blur-none lg:min-h-0 lg:self-start"
+              : "contents lg:block lg:min-h-0 lg:self-start"
+          }
+        >
+          <div className={cart.length ? "lg:sticky lg:top-0 lg:max-h-[calc(100vh-11rem)]" : "hidden lg:block lg:sticky lg:top-0 lg:max-h-[calc(100vh-11rem)]"}>
                 <Cart
         key={selectedTripId ?? "no-trip"}
         seats={cart}
@@ -275,11 +242,16 @@ export function PosFeature() {
             : []
         }
       />
+          </div>
         </div>
       </div>
 
-      {lastBooking && (
-        <TicketDialog booking={lastBooking} onClose={() => setLastBooking(null)} />
+      {lastBooking && seatsQuery.data && (
+        <PosSuccessTickets
+          booking={lastBooking}
+          trip={seatsQuery.data.trip}
+          onClose={() => setLastBooking(null)}
+        />
       )}
     </div>
   );

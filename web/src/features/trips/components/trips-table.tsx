@@ -82,7 +82,7 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
           <Button type="button" size="sm" variant="ghost" onClick={() => updateMutation.reset()}>إغلاق</Button>
         </div>
       ) : null}
-      <Table>
+      <div className="overflow-x-auto"><Table>
         <TableHeader>
           <TableRow>
             <TableHead>خط السير</TableHead>
@@ -142,7 +142,7 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
             );
           })}
         </TableBody>
-      </Table>
+      </Table></div>
 
       {tripToEdit ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
