@@ -49,7 +49,7 @@ describe("parseServerEnvironment", () => {
     ).toThrow("APP_ORIGIN");
   });
 
-  it("requires HTTPS for a non-local production origin", () => {
+  it("requires HTTPS for a non-loopback production origin", () => {
     expect(() =>
       parseServerEnvironment({
         NODE_ENV: "production",
@@ -57,5 +57,12 @@ describe("parseServerEnvironment", () => {
         APP_ORIGIN: "http://app.example.com",
       }),
     ).toThrow("HTTPS");
+    expect(
+      parseServerEnvironment({
+        NODE_ENV: "production",
+        API_BASE_URL: "http://backend:3001/api",
+        APP_ORIGIN: "http://127.0.0.1:3000",
+      }).cookieSecure,
+    ).toBe(false);
   });
 });

@@ -25,7 +25,7 @@ import { configureApp } from '../src/bootstrap/configure-app';
  */
 describe('Payment integrity — Option A: CASH-only (e2e)', () => {
   let app: INestApplication<App>;
-  let server: ReturnType<INestApplication['getHttpServer']>;
+  let server: App;
   const admin = new PrismaClient();
 
   let token = '';

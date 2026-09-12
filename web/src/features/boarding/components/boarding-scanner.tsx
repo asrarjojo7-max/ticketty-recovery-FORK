@@ -114,9 +114,9 @@ export function BoardingScanner() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5 p-5 sm:p-6">
-            {/* فريم التصوير العريض: 4:3 يملأ عرض الشاشة (أفضل على الموبايل
-                حيث الكاميرا عمودية غالبًا) — كان 16:9 مستطيلًا ضيقًا */}
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-dashed bg-gradient-navy">
+            {/* الهاتف يحتاج نافذة عمودية كبيرة لالتقاط الباركود من مسافة
+                مريحة؛ سطح المكتب يبقى أعرض كي لا يطغى على بطاقة النتيجة. */}
+            <div className="relative min-h-[380px] w-full overflow-hidden rounded-2xl border-2 border-dashed border-primary/40 bg-gradient-navy aspect-[3/4] max-h-[65dvh] sm:min-h-[420px] sm:aspect-[4/3] lg:min-h-[460px] lg:aspect-[16/10]">
               <video ref={videoRef} className="h-full w-full object-cover" muted playsInline />
               {!scanning ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white/60">
@@ -125,7 +125,7 @@ export function BoardingScanner() {
                   <p className="mt-1 text-xs">وجّهها نحو باركود التذكرة أو رمز QR</p>
                 </div>
               ) : (
-                <div className="pointer-events-none absolute inset-y-[22%] inset-x-[12%] rounded-2xl border-2 border-primary-glow shadow-[0_0_0_999px_rgba(0,0,0,0.25)]">
+                <div className="pointer-events-none absolute inset-y-[17%] inset-x-[8%] rounded-2xl border-2 border-primary-glow shadow-[0_0_0_999px_rgba(0,0,0,0.25)] sm:inset-y-[20%] sm:inset-x-[12%]">
                   <span className="absolute -end-0.5 -top-0.5 h-5 w-5 border-s-4 border-t-4 border-white" />
                   <span className="absolute -bottom-0.5 -start-0.5 h-5 w-5 border-b-4 border-e-4 border-white" />
                 </div>
@@ -159,8 +159,8 @@ export function BoardingScanner() {
               <span className="px-3 text-[11px] text-muted-foreground">أو تحقق يدويًا</span>
               <div className="h-px flex-1 bg-border" />
             </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute start-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   className="ps-9"
@@ -267,7 +267,7 @@ export function BoardingScanner() {
                     <div className="space-y-3 rounded-2xl bg-muted/50 p-4 text-sm">
                       <p className="flex justify-between gap-3">
                         <span className="text-muted-foreground">المسافر</span>
-                        <strong>{ticket.passengerName}</strong>
+                        <strong className="min-w-0 break-words text-end">{ticket.passengerName}</strong>
                       </p>
                       {ticket.passengerPhone ? (
                         <p className="flex justify-between gap-3">

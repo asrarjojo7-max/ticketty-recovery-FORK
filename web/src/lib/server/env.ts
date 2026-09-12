@@ -46,7 +46,7 @@ export function parseServerEnvironment(
   if (
     production &&
     originUrl.protocol !== "https:" &&
-    !['localhost', '127.0.0.1'].includes(originUrl.hostname)
+    !["localhost", "127.0.0.1"].includes(originUrl.hostname)
   ) {
     throw new Error("APP_ORIGIN must use HTTPS in production");
   }

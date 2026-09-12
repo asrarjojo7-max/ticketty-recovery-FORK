@@ -9,3 +9,4 @@ dist/
 .pgdata/
 coverage/
 backups/
+release-archives/

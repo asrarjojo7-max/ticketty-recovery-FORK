@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Ticketty off-site backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=ticketty-backup.service
+
+[Install]
+WantedBy=timers.target

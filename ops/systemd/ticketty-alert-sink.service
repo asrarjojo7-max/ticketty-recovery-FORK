@@ -1,0 +1,21 @@
+[Unit]
+Description=Ticketty local alert evidence sink
+After=network.target
+
+[Service]
+Type=simple
+User=ticketty
+Group=ticketty
+WorkingDirectory=/srv/ticketty
+Environment=ALERT_SINK_HOST=127.0.0.1
+Environment=ALERT_SINK_PORT=19094
+ExecStart=/usr/bin/node ops/monitoring/local-alert-sink.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

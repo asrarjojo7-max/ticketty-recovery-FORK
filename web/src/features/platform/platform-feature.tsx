@@ -110,22 +110,22 @@ export function PlatformFeature() {
 
         <TabsContent value="tenants" className="mt-5">
           <Card className="overflow-hidden">
-            <CardHeader className="flex-row items-center justify-between gap-3">
+            <CardHeader className="flex-col items-stretch justify-between gap-3 sm:flex-row sm:items-center">
               <CardTitle className="font-display text-lg">
                 شركات النقل المفعّلة
               </CardTitle>
-              <div className="flex items-center gap-2">
-                <div className="relative">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative min-w-0 flex-1">
                   <Search className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                     style={{ insetInlineStart: "0.75rem" }} />
                   <Input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="بحث بالاسم أو المعرف..."
-                    className={`${inputClass} w-56 ps-9`}
+                    className={`${inputClass} w-full ps-9 sm:w-56`}
                   />
                 </div>
-                <Button onClick={() => setProvisionModal(true)}>
+                <Button className="w-full sm:w-auto" onClick={() => setProvisionModal(true)}>
                   <Plus />
                   شركة جديدة
                 </Button>
@@ -295,7 +295,59 @@ function TenantsTable({ rows }: { rows: TenantRow[] }) {
           {actionError}
         </p>
       ) : null}
-      <div className="overflow-x-auto"><Table>
+      <div className="space-y-3 p-4 md:hidden">
+        {rows.map((tenant) => {
+          const sub = tenant.subscription;
+          return (
+            <article key={tenant.id} className="rounded-2xl border border-border bg-card p-4 shadow-card">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-bold">{tenant.name}</h3>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground" dir="ltr">{tenant.slug}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">منذ {formatDate(tenant.createdAt)}</p>
+                </div>
+                <Badge variant={tenant.active ? "success" : "secondary"}>{tenant.active ? "نشطة" : "معلّقة"}</Badge>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">الاشتراك</dt>
+                  <dd className="mt-0.5 font-semibold">
+                    {sub ? (PLAN_LABELS[sub.planKey] ?? sub.planKey) : "بلا اشتراك"}
+                  </dd>
+                  {sub ? <dd className="text-xs text-muted-foreground">{STATUS_LABELS[sub.status] ?? sub.status} حتى {formatDate(sub.currentPeriodEnd)}</dd> : null}
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">الاستخدام</dt>
+                  <dd className="mt-0.5">{tenant._count.users} مستخدم · {tenant._count.branches} فرع</dd>
+                  <dd className="text-xs text-muted-foreground">{tenant._count.trips} رحلة · {tenant._count.tickets} تذكرة</dd>
+                </div>
+              </dl>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button size="sm" variant="outline" onClick={() => setReportFor(reportFor === tenant.id ? null : tenant.id)}>
+                  <FileText className="h-3.5 w-3.5" /> تقرير
+                </Button>
+                {sub?.planKey === "TRIAL" ? (
+                  <Button size="sm" onClick={() => handleMutation(setSub.mutateAsync({ orgId: tenant.id, planKey: "MONTHLY" }))}>تحويل لشهري</Button>
+                ) : null}
+                {sub && sub.planKey !== "TRIAL" ? (
+                  <Button size="sm" variant="outline" onClick={() => handleMutation(renew.mutateAsync({ orgId: tenant.id, months: 1 }))}>
+                    <RefreshCcw className="h-3.5 w-3.5" /> تجديد شهر
+                  </Button>
+                ) : null}
+                {!sub ? (
+                  <Button size="sm" onClick={() => handleMutation(setSub.mutateAsync({ orgId: tenant.id, planKey: "TRIAL" }))}>بدء تجربة</Button>
+                ) : null}
+                {tenant.active ? (
+                  <Button size="sm" variant="destructive" className="border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20" onClick={() => setSuspending(tenant.id)}>تعليق</Button>
+                ) : (
+                  <Button size="sm" onClick={() => handleMutation(reactivate.mutateAsync(tenant.id))}>تفعيل</Button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto md:block"><Table>
         <TableHeader>
           <TableRow>
             <TableHead>الشركة</TableHead>
@@ -497,12 +549,13 @@ function SuspendDialog({
             className={inputClass}
           />
         </label>
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="outline" onClick={onCancel}>
             إلغاء
           </Button>
           <Button
             variant="destructive"
+            className="sm:w-auto"
             disabled={!reason.trim() || pending}
             onClick={() => onConfirm(reason.trim())}
           >
@@ -902,11 +955,11 @@ function ProvisionTenantModal({
             </p>
           ) : null}
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={onClose}>
               إلغاء
             </Button>
-            <Button type="submit" disabled={provision.isPending}>
+            <Button type="submit" className="sm:w-auto" disabled={provision.isPending}>
               {provision.isPending ? <Loader2 className="animate-spin" /> : <Plus />}
               تفعيل الشركة
             </Button>

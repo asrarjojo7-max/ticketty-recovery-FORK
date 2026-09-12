@@ -14,7 +14,7 @@ const OPERATOR = {
 test("platform operator provisions a new transport company end-to-end", async ({
   browser,
 }) => {
-  test.setTimeout(120_000); // باب دخول المالك ينتظر نافذة الثروتل عند الحاجة
+  test.setTimeout(240_000); // بابا الدخول قد ينتظران نافذة الثروتل المشتركة عند الحاجة
   const slug = `e2e-company-${Date.now().toString(36)}`;
   const ownerEmail = `${slug}-owner@ticketty.local`;
   const ownerName = "مالك شركة الاختبار";
@@ -53,12 +53,14 @@ test("platform operator provisions a new transport company end-to-end", async ({
 
   // 4) Provision — the response must never leak the password into a URL
   const requests: { method: string; url: string }[] = [];
-  operator.on("request", (r) => requests.push({ method: r.method(), url: r.url() }));
+  operator.on("request", (r) =>
+    requests.push({ method: r.method(), url: r.url() }),
+  );
   await dialog.getByRole("button", { name: "تفعيل الشركة" }).click();
 
-  await expect(
-    operator.getByText("تم تفعيل الشركة بنجاح"),
-  ).toBeVisible({ timeout: 20_000 });
+  await expect(operator.getByText("تم تفعيل الشركة بنجاح")).toBeVisible({
+    timeout: 20_000,
+  });
 
   for (const r of requests) {
     expect(
@@ -69,12 +71,19 @@ test("platform operator provisions a new transport company end-to-end", async ({
 
   // 5) The new tenant appears in the live roster
   await operator.getByRole("button", { name: "تم" }).click();
-  await expect(operator.getByText(slug)).toBeVisible({ timeout: 15_000 });
+  // بطاقة الهاتف (md:hidden) تسبق الجدول في الـ DOM وتخفي الـ slug —
+  // نستهدف أول ظهور «مرئي» فعليًا على سطح المكتب
+  await expect(
+    operator.getByText(slug).filter({ visible: true }).first(),
+  ).toBeVisible({ timeout: 15_000 });
 
-  // 6) THE SALE: the new owner logs in through the employee gate.
-  //    Login throttle is 5/min per IP — e2e suites share the backend,
-  //    so retry patiently on 429 instead of failing the sale journey.
-  const ownerCtx = await browser.newContext({ locale: "ar-EG" });
+  // 6) The new owner must rotate the generated password before any workspace
+  //    route is available. Login throttle is shared, so retry patiently.
+  const permanentPassword = "Permanent-Passw0rd-2026!";
+  const ownerCtx = await browser.newContext({
+    locale: "ar-EG",
+    storageState: { cookies: [], origins: [] },
+  });
   const owner = await ownerCtx.newPage();
   await owner.goto("/login");
 
@@ -83,20 +92,45 @@ test("platform operator provisions a new transport company end-to-end", async ({
     await owner.fill("#password", generatedPassword!);
     await owner.click('button[type="submit"]');
     const landed = await owner
+      .waitForURL("**/change-password", { timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (landed) break;
+    await owner.waitForTimeout(15_000);
+    await owner.goto("/login");
+  }
+
+  await owner.goto("/dashboard");
+  await expect(owner).toHaveURL(/\/change-password$/);
+  await owner.getByLabel("كلمة المرور المؤقتة").fill(generatedPassword!);
+  await owner
+    .getByLabel("كلمة المرور الجديدة", { exact: true })
+    .fill(permanentPassword);
+  await owner.getByLabel("تأكيد كلمة المرور الجديدة").fill(permanentPassword);
+  await owner
+    .getByRole("button", { name: "حفظ كلمة المرور والمتابعة" })
+    .click();
+  await expect(owner).toHaveURL(/\/login\?passwordChanged=1$/);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await owner.fill("#email", ownerEmail);
+    await owner.fill("#password", permanentPassword);
+    await owner.click('button[type="submit"]');
+    const landed = await owner
       .waitForURL("**/dashboard", { timeout: 15_000 })
       .then(() => true)
       .catch(() => false);
     if (landed) break;
-    // throttled (429) — wait out the window and retry
+    if (attempt === 4) throw new Error("permanent-password login remained throttled");
     await owner.waitForTimeout(15_000);
     await owner.goto("/login");
   }
-  await expect(owner.getByRole("heading", { level: 1 })).toContainText(ownerName);
+  await expect(owner.getByRole("heading", { level: 1 })).toContainText(
+    ownerName,
+  );
 
   // 7) The new owner must NOT see the platform console in the sidebar
-  const sidebarLinks = await owner
-    .locator("aside a")
-    .allTextContents();
+  const sidebarLinks = await owner.locator("aside a").allTextContents();
   expect(
     sidebarLinks.some((t) => t.includes("إدارة المنصة")),
     "tenant owner must not see the platform console",

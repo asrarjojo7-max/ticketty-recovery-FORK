@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, CalendarDays, Compass, LogOut, Menu, Moon, Plus, Sun, User } from "lucide-react";
+import { CalendarDays, Compass, LogOut, Menu, Moon, Plus, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -41,7 +42,8 @@ export function Header({ user, onMenuClick }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:px-8">
+    <header className="sticky top-0 z-30 h-16 border-b border-border/70 bg-background/90 px-4 backdrop-blur-xl sm:px-5 lg:px-6">
+      <div className="mx-auto flex h-full w-full max-w-[90rem] items-center gap-2 sm:gap-3">
       <Button
         variant="outline"
         size="icon"
@@ -58,10 +60,15 @@ export function Header({ user, onMenuClick }: HeaderProps) {
       </div>
 
       <div className="ms-auto flex items-center gap-2">
-        <Button asChild className="hidden md:inline-flex">
-          <a href="/bookings">
-            <Plus /> حجز جديد
-          </a>
+        <Button
+          asChild
+          size="icon"
+          className="h-11 w-11 md:h-10 md:w-auto md:px-4"
+        >
+          <Link href="/bookings" aria-label="حجز جديد">
+            <Plus />
+            <span className="hidden md:inline">حجز جديد</span>
+          </Link>
         </Button>
 
         <Button
@@ -73,16 +80,6 @@ export function Header({ user, onMenuClick }: HeaderProps) {
         >
           <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative rounded-xl"
-          aria-label="الإشعارات"
-        >
-          <Bell className="h-5 w-5" />
-          <span className="absolute -end-1 -top-1 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />
         </Button>
 
         <DropdownMenu>
@@ -137,6 +134,7 @@ export function Header({ user, onMenuClick }: HeaderProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
       </div>
     </header>
   );

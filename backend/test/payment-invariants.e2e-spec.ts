@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * PAYMENT INVARIANTS (Phase 4 — ①-④ من جدول الخطة)
@@ -77,13 +78,12 @@ describe('payment invariants (Phase 4)', () => {
     tenantOrgId = (provisioned.body as { organization: { id: string } })
       .organization.id;
 
-    const tenantLogin = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `owner-${slug}@ticketty.local`,
-        password: 'Pay-Inv-Passw0rd-2026',
-      });
-    tenantToken = (tenantLogin.body as { access_token: string }).access_token;
+    tenantToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      'Pay-Inv-Passw0rd-2026',
+      'Pay-Inv-Permanent-2026!',
+    );
 
     const templateRes = await request(server)
       .post('/api/seat-templates')

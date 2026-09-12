@@ -6,3 +6,6 @@ coverage
 !.env.example
 *.log
 .git
+test-results
+playwright-report
+playwright/.auth

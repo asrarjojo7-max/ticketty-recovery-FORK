@@ -28,6 +28,7 @@ const RLS_TABLES = [
   'journals',
   'manifests',
   'organizations',
+  'organization_ticket_branding',
   'payments',
   'refunds',
   'route_stops',
@@ -62,6 +63,12 @@ describe('runtime PostgreSQL RLS', () => {
       data: [
         { id: organizationA, name: 'RLS A', slug: organizationA },
         { id: organizationB, name: 'RLS B', slug: organizationB },
+      ],
+    });
+    await owner.organizationTicketBranding.createMany({
+      data: [
+        { organizationId: organizationA, tagline: 'Brand A' },
+        { organizationId: organizationB, tagline: 'Brand B' },
       ],
     });
     await owner.branch.createMany({
@@ -187,6 +194,26 @@ describe('runtime PostgreSQL RLS', () => {
     )) as Array<{ id: string }>;
 
     expect(branches.map((branch) => branch.id)).toEqual([branchA]);
+  });
+
+  it('isolates organization ticket branding and its binary assets', async () => {
+    const branding = await prisma.withTenantContext(organizationA, () =>
+      prisma.organizationTicketBranding.findMany({
+        where: { organizationId: { in: [organizationA, organizationB] } },
+      }),
+    );
+
+    expect(branding.map((item) => item.organizationId)).toEqual([
+      organizationA,
+    ]);
+    await expect(
+      prisma.withTenantContext(organizationA, () =>
+        prisma.organizationTicketBranding.update({
+          where: { organizationId: organizationB },
+          data: { tagline: 'Rejected cross-tenant branding' },
+        }),
+      ),
+    ).rejects.toBeDefined();
   });
 
   it('isolates child tables that inherit tenant scope from a parent', async () => {

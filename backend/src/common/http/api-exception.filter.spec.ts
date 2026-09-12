@@ -1,4 +1,4 @@
-import { ArgumentsHost, HttpStatus } from '@nestjs/common';
+import { ArgumentsHost, ForbiddenException, HttpStatus } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ApiExceptionFilter, errorCodeForStatus } from './api-exception.filter';
 
@@ -18,6 +18,37 @@ describe('errorCodeForStatus', () => {
 });
 
 describe('ApiExceptionFilter', () => {
+  it('preserves the mandatory password-change machine code', () => {
+    const json = jest.fn();
+    const status = jest.fn().mockReturnValue({ json });
+    const host = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          requestId: 'request-2',
+          headers: {},
+          method: 'GET',
+          path: '/api/trips',
+        }),
+        getResponse: () => ({ status }),
+      }),
+    } as unknown as ArgumentsHost;
+
+    new ApiExceptionFilter().catch(
+      new ForbiddenException({
+        message: 'يجب تغيير كلمة المرور المؤقتة قبل المتابعة',
+        errorCode: 'PASSWORD_CHANGE_REQUIRED',
+      }),
+      host,
+    );
+
+    expect(json).toHaveBeenCalledWith({
+      statusCode: 403,
+      code: 'PASSWORD_CHANGE_REQUIRED',
+      message: 'يجب تغيير كلمة المرور المؤقتة قبل المتابعة',
+      requestId: 'request-2',
+    });
+  });
+
   it('maps a Prisma unique conflict without exposing database details', () => {
     const json = jest.fn();
     const status = jest.fn().mockReturnValue({ json });

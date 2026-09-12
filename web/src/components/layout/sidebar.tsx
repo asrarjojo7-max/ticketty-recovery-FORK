@@ -40,9 +40,13 @@ export function Sidebar({ collapsed, onClose }: SidebarProps) {
       ) : null}
 
       <aside
+        id="app-sidebar"
+        aria-label="القائمة الجانبية"
         className={cn(
-          "fixed inset-y-0 z-50 flex w-64 flex-col overflow-hidden border-s border-sidebar-border bg-sidebar text-sidebar-foreground shadow-card transition-transform duration-300 ease-out",
-          collapsed ? "translate-x-full lg:translate-x-0" : "translate-x-0",
+          "fixed inset-y-0 z-50 flex w-60 flex-col overflow-hidden border-s border-sidebar-border/80 bg-sidebar text-sidebar-foreground shadow-card transition-[transform,visibility] duration-300 ease-out",
+          collapsed
+            ? "invisible translate-x-full lg:visible lg:translate-x-0"
+            : "visible translate-x-0",
         )}
         style={{ insetInlineStart: 0 }}
       >
@@ -81,7 +85,7 @@ export function Sidebar({ collapsed, onClose }: SidebarProps) {
         </div>
 
         <nav
-          className="flex flex-1 flex-col gap-6 overflow-y-auto p-3"
+          className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4"
           style={{ height: "calc(100dvh - 4rem)" }}
           aria-label="التنقل الرئيسي"
         >
@@ -103,7 +107,7 @@ export function Sidebar({ collapsed, onClose }: SidebarProps) {
                         onClick={onClose}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition",
+                          "relative flex min-h-11 items-center lg:min-h-10 gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold transition-colors",
                           active
                             ? "bg-gradient-primary text-primary-foreground shadow-glow"
                             : "text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-primary",

@@ -10,6 +10,9 @@ async function bootstrap() {
   configureApp(app);
   app.enableShutdownHooks();
 
-  await app.listen(config.getOrThrow<number>('PORT'), '0.0.0.0');
+  await app.listen(
+    config.getOrThrow<number>('PORT'),
+    config.getOrThrow<string>('API_BIND_HOST'),
+  );
 }
 void bootstrap();

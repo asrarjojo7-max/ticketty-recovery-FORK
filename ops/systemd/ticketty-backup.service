@@ -1,0 +1,18 @@
+[Unit]
+Description=Ticketty verified off-site database backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ticketty
+Group=ticketty
+WorkingDirectory=/srv/ticketty
+EnvironmentFile=/etc/ticketty/backup.env
+ExecStart=/srv/ticketty/ops/backup-nightly.sh
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ticketty /var/log/ticketty
+UMask=0077

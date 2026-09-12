@@ -12,9 +12,17 @@ describe('idempotency primitives', () => {
     expect(requireIdempotencyKey('request-key-123')).toBe('request-key-123');
   });
 
-  it('produces a stable request hash', () => {
-    expect(idempotencyRequestHash({ id: '1', reason: 'test' })).toBe(
-      idempotencyRequestHash({ id: '1', reason: 'test' }),
+  it('produces a stable request hash independent of object key order', () => {
+    expect(
+      idempotencyRequestHash({
+        id: '1',
+        nested: { amount: 10, reason: 'test' },
+      }),
+    ).toBe(
+      idempotencyRequestHash({
+        nested: { reason: 'test', amount: 10 },
+        id: '1',
+      }),
     );
   });
 
@@ -45,6 +53,35 @@ describe('idempotency primitives', () => {
     expect(remove).toHaveBeenCalledWith({ where: { id: 'expired-record' } });
     expect(create).toHaveBeenCalled();
     expect(result.replay).toBe(false);
+  });
+
+  it('replays a completed operation even after its processing lease expires', async () => {
+    const remove = jest.fn();
+    const record = {
+      id: 'completed-record',
+      requestHash: 'same-hash',
+      status: IdempotencyStatus.COMPLETED,
+      expiresAt: new Date(Date.now() - 60_000),
+    };
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue([]),
+      idempotencyRecord: {
+        findUnique: jest.fn().mockResolvedValue(record),
+        create: jest.fn(),
+        delete: remove,
+      },
+    } as unknown as Prisma.TransactionClient;
+
+    await expect(
+      beginIdempotentOperation(
+        tx,
+        'org-1',
+        'bookings.create',
+        'request-key-123',
+        'same-hash',
+      ),
+    ).resolves.toEqual({ record, replay: true });
+    expect(remove).not.toHaveBeenCalled();
   });
 
   it('rejects reuse of a key with a different request hash', async () => {

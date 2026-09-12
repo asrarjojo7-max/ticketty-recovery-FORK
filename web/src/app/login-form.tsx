@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { destinationAfterLogin } from "@/lib/auth-routing";
 
 export function LoginForm() {
   const router = useRouter();
@@ -23,14 +24,21 @@ export function LoginForm() {
           password: form.get("password"),
         }),
       });
-      const data = (await response.json()) as { message?: string };
+      const data = (await response.json()) as {
+        message?: string;
+        user?: { mustChangePassword: boolean };
+      };
 
       if (!response.ok) {
         setError(data.message ?? "تعذر تسجيل الدخول");
         return;
       }
 
-      router.replace("/dashboard");
+      router.replace(
+        destinationAfterLogin({
+          mustChangePassword: data.user?.mustChangePassword === true,
+        }),
+      );
       router.refresh();
     } catch {
       setError("تعذر الاتصال بالخدمة. تحقق من الشبكة وحاول مجدداً.");

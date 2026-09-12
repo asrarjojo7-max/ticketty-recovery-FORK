@@ -1,7 +1,7 @@
 "use client";
 
 import { useDeferredValue, useState } from "react";
-import { Ban, Loader2, TicketX, X } from "lucide-react";
+import { Ban, Loader2, Printer, TicketX, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { formatTripDate } from "@/features/trips/formatters";
 import { formatMoney } from "@/lib/utils";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useBookings, useCancelBooking } from "../hooks/use-bookings";
+import { useOrganizationForTicket } from "../hooks/use-organization";
+import { TicketPreview } from "./ticket-preview";
 import type { Booking, BookingStatus } from "../types";
 
 const statusLabels: Record<BookingStatus, string> = { PENDING: "قيد الانتظار", CONFIRMED: "مؤكد", CANCELLED: "ملغى", REFUNDED: "مسترد" };
@@ -33,6 +35,7 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
   const [status, setStatus] = useState<BookingStatus | "">("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Booking | null>(null);
+  const [ticketPreview, setTicketPreview] = useState<Booking | null>(null);
   const [reason, setReason] = useState("");
   const deferredSearch = useDeferredValue(search);
 
@@ -44,8 +47,11 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
     limit: LIMIT,
   });
   const cancelMutation = useCancelBooking();
+  const organizationQuery = useOrganizationForTicket();
   const selectClass =
-    "h-10 rounded-xl border border-input bg-card px-3 text-sm shadow-sm focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10";
+    "h-11 w-full rounded-xl border border-input bg-card px-3 text-base shadow-sm md:h-10 md:text-sm focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10 sm:w-auto";
+  const canPreviewTicket = (booking: Booking) =>
+    booking.status === "CONFIRMED" && booking.tickets.length > 0 && Boolean(booking.trip.bus);
 
   const columns: ColumnDef<Booking, unknown>[] = [
     {
@@ -99,18 +105,37 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
     {
       header: "",
       id: "actions",
-      cell: ({ row }) =>
-        canManage && row.original.status === "CONFIRMED" ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={() => setSelected(row.original)}
-          >
-            <Ban /> إلغاء واسترداد
-          </Button>
-        ) : null,
+      cell: ({ row }) => {
+        const booking = row.original;
+        const previewable = canPreviewTicket(booking);
+        const cancellable = canManage && booking.status === "CONFIRMED";
+        if (!previewable && !cancellable) return null;
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            {previewable ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTicketPreview(booking)}
+              >
+                <Printer /> عرض / طباعة
+              </Button>
+            ) : null}
+            {cancellable ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setSelected(booking)}
+              >
+                <Ban /> إلغاء واسترداد
+              </Button>
+            ) : null}
+          </div>
+        );
+      },
     },
   ];
 
@@ -195,6 +220,72 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
           emptyTitle="لا توجد حجوزات مطابقة"
           emptyDesc="ستظهر الحجوزات المؤكدة والجارية هنا."
           onRetry={() => query.refetch()}
+          renderMobileCard={(booking) => {
+            const ticket = booking.tickets[0];
+            const method = booking.payments[0]?.method;
+            return (
+              <article className="space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-bold">
+                      {ticket?.passengerName ?? "—"}
+                    </p>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground" dir="ltr">
+                      {ticket?.number ?? booking.id.slice(-8)}
+                    </p>
+                  </div>
+                  <StatusBadge status={booking.status} domain="booking" />
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl bg-muted/40 p-3 text-sm">
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">الرحلة</dt>
+                    <dd className="mt-0.5 font-semibold">{booking.trip.route.name}</dd>
+                    <dd className="text-xs text-muted-foreground">
+                      {formatTripDate(booking.trip.departureAt)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">المقاعد</dt>
+                    <dd className="mt-0.5 font-semibold">
+                      {booking.tickets.map((item) => item.seatLabel).join("، ") || "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">القيمة</dt>
+                    <dd className="mt-0.5 font-bold text-primary">
+                      {formatMoney(booking.totalAmount)}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-xs text-muted-foreground">الدفع</dt>
+                    <dd className="mt-0.5">{method ? paymentLabels[method] ?? method : "—"}</dd>
+                  </div>
+                </dl>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {canPreviewTicket(booking) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setTicketPreview(booking)}
+                    >
+                      <Printer /> عرض وطباعة التذكرة
+                    </Button>
+                  ) : null}
+                  {canManage && booking.status === "CONFIRMED" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setSelected(booking)}
+                    >
+                      <Ban /> إلغاء واسترداد
+                    </Button>
+                  ) : null}
+                </div>
+              </article>
+            );
+          }}
         />
       </CardContent>
 
@@ -237,7 +328,7 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
                 autoFocus
               />
             </div>
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setSelected(null)}>
                 تراجع
               </Button>
@@ -256,6 +347,21 @@ export function BookingHistory({ canManage }: { canManage: boolean }) {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {ticketPreview?.trip.bus ? (
+        <TicketPreview
+          booking={ticketPreview}
+          trip={{
+            id: ticketPreview.trip.id,
+            departureAt: ticketPreview.trip.departureAt,
+            route: ticketPreview.trip.route,
+            bus: { plateNumber: ticketPreview.trip.bus.plateNumber },
+          }}
+          organization={organizationQuery.data ?? undefined}
+          mode="reprint"
+          onClose={() => setTicketPreview(null)}
+        />
       ) : null}
     </Card>
   );

@@ -1,0 +1,16 @@
+Ticketty Database Backup Manifest
+
+Backup timestamp (UTC): 2026-09-12T21:48:08Z
+Archive: ticketty-20260912T214808Z.dump
+Format: PostgreSQL custom compressed archive
+Size bytes: 1554368
+SHA-256: 2189e2c0396c7b45af6899a7f4b5662d2d7db1532dc1a3febfe6f7d7753a6cd6
+Archive TOC entries: 461
+PostgreSQL version: 16.15
+Database logical name: ticketty
+Applied migrations: 45
+Latest migration: 20260914140000_mandatory_temporary_password
+Remote directory: Ticketty Production/01_Database_Backups/Daily/
+Verification: local checksum PASS; local pg_restore list PASS; remote size match PASS; fresh download checksum PASS; downloaded pg_restore list PASS
+Independent second-server restore: DEFERRED — no independent server currently available
+Secrets included: NO

@@ -80,7 +80,7 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
   }
 
   const error = mutation.error instanceof Error ? mutation.error.message : null;
-  const selectClass = "flex h-10 w-full rounded-xl border border-input bg-card px-3.5 text-sm shadow-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10";
+  const selectClass = "flex h-11 w-full rounded-xl border border-input bg-card px-3.5 text-base shadow-sm md:h-10 md:text-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10";
 
   return (
     <form onSubmit={submit} className="space-y-5">
@@ -143,9 +143,9 @@ export function BookingForm({ trip, seats, onSuccess, onCancel, onConflict }: Bo
         <p className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />{error.includes("غير متاح") ? "تعذر إتمام الحجز لأن أحد المقاعد حُجز للتو. تم تحديث المخطط، اختر مقعدًا متاحًا." : error}</p>
       ) : null}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" onClick={onCancel} disabled={mutation.isPending}>إلغاء</Button>
-        <Button type="submit" disabled={mutation.isPending || seats.length === 0}>
+        <Button type="submit" className="sm:w-auto" disabled={mutation.isPending || seats.length === 0}>
           {mutation.isPending ? <Loader2 className="animate-spin" /> : <TicketCheck />}
           تأكيد الحجز وإصدار التذكرة
         </Button>

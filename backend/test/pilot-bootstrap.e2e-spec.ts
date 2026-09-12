@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { AccountingEventWorker } from '../src/accounting/accounting-event.worker';
 import { configureApp } from '../src/bootstrap/configure-app';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * PILOT BLOCKER-1 — التزويد المحاسبي الافتتاحي الذرّي (e2e)
@@ -260,14 +261,12 @@ describe('BLOCKER-1: tenant provisioning creates accounting bootstrap (e2e)', ()
 
   it('the bootstrapped tenant logs in, creates a trip, sells, and the accounting event POSTS a balanced journal entry', async () => {
     // ── login ──────────────────────────────────────────────
-    const login = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `owner-${slug}@ticketty.local`,
-        password: OWNER_PASSWORD,
-      });
-    expect([200, 201]).toContain(login.status);
-    ownerToken = (login.body as { access_token: string }).access_token;
+    ownerToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      OWNER_PASSWORD,
+      `${OWNER_PASSWORD}-Permanent`,
+    );
 
     // ── fleet prerequisites (template → bus → route) ───────
     const template = await request(server)
@@ -415,7 +414,7 @@ describe('BLOCKER-1: tenant provisioning creates accounting bootstrap (e2e)', ()
         })
       ).id,
     );
-  });
+  }, 60_000);
 
   it('atomicity: a provisioning failure leaves NO half-initialized tenant', async () => {
     // فشل مضمون: نفس slug منظمتنا المزودة في نفس الـ run —

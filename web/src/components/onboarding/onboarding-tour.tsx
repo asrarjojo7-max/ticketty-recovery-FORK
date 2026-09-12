@@ -41,7 +41,7 @@ const TOURS: Record<string, TourStep[]> = {
   SELLER: [
     { icon: CreditCard, title: "نقطة البيع", body: "من هنا تبيع: اختر الرحلة، ثم المقعد من الخريطة (الممر والترقيم كما في الباص).", href: "/pos" },
     { icon: Ticket, title: "بيانات المسافر", body: "لكل مقعد: الاسم، الهاتف، ورقم الهوية — مطلوبة قبل إتمام البيع.", href: "/pos" },
-    { icon: CircleCheckBig, title: "بوابة الصعود", body: "امسح رمز التذكرة أو أدخل رقمها (يبدأ بـ TKT-) وسجّل صعود المسافر.", href: "/boarding" },
+    { icon: CircleCheckBig, title: "بوابة الصعود", body: "امسح باركود التذكرة أو أدخل رقمها المطبوع (يبدأ بـ TK-) وسجّل صعود المسافر.", href: "/boarding" },
   ],
   OPS_MANAGER: [
     { icon: Bus, title: "الأسطول", body: "قوالب المقاعد والمركبات والسائقون — حالة كل مركبة أمامك.", href: "/buses" },

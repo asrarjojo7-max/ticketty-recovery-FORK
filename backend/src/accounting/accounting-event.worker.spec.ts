@@ -13,9 +13,13 @@ describe('AccountingEventWorker', () => {
       (_organizationId: string, callback: () => Promise<unknown>) => callback(),
     );
     const processEvent = jest.fn().mockResolvedValue({ id: 'entry-1' });
+    const queueDepth = jest
+      .fn()
+      .mockResolvedValue([{ status: 'PENDING', count: 2 }]);
     const prisma = {
       claimAccountingEvent: claim,
       withTenantContext: withTenant,
+      accountingQueueDepth: queueDepth,
     } as unknown as PrismaService;
     const accounting = { processEvent } as unknown as AccountingService;
     const config = { get: jest.fn() } as unknown as ConfigService;
@@ -45,6 +49,10 @@ describe('AccountingEventWorker', () => {
     expect(
       (metrics.accountingWorkerLastSuccess as { set: unknown }).set,
     ).toHaveBeenCalled();
+    expect(queueDepth).toHaveBeenCalledTimes(1);
+    expect(
+      (metrics.accountingQueueDepth as unknown as { set: jest.Mock }).set,
+    ).toHaveBeenCalledWith({ status: 'PENDING' }, 2);
   });
 
   it('marks a claimed event failed without leaking the worker lock', async () => {
@@ -56,9 +64,13 @@ describe('AccountingEventWorker', () => {
       async (_organizationId: string, callback: () => Promise<unknown>) =>
         callback(),
     );
+    const queueDepth = jest
+      .fn()
+      .mockResolvedValue([{ status: 'PENDING', count: 2 }]);
     const prisma = {
       claimAccountingEvent: claim,
       withTenantContext: withTenant,
+      accountingQueueDepth: queueDepth,
     } as unknown as PrismaService;
     const accounting = {
       processEvent: jest.fn().mockRejectedValue(new Error('failed')),

@@ -278,9 +278,8 @@ export class PlatformService {
 
     let rows: ProvisionRow[] = [];
     try {
-      rows = await this.prisma.withPlatformRole(
-        (tx) =>
-          tx.$queryRaw<ProvisionRow[]>`
+      rows = await this.prisma.withPlatformRole(async (tx) => {
+        const provisioned = await tx.$queryRaw<ProvisionRow[]>`
           SELECT * FROM ticketty_security.platform_provision_tenant(
             ${dto.name.trim()},
             ${slug},
@@ -293,8 +292,15 @@ export class PlatformService {
             ${actor.sub},
             ${actor.orgId}
           )
-        `,
-      );
+        `;
+        const ownerId = provisioned[0]?.owner_id;
+        if (ownerId) {
+          await tx.$executeRaw`
+            SELECT ticketty_security.platform_mark_temporary_password(${ownerId})
+          `;
+        }
+        return provisioned;
+      });
     } catch (error) {
       this.translateSqlError(
         error,

@@ -17,9 +17,17 @@ cp .env.production.example .env
 openssl rand -base64 48
 ```
 
-Put the generated value in `JWT_SECRET`, replace the database password, and set the canonical HTTPS `WEB_ORIGIN`. Never commit `.env`.
+Put the generated value in `JWT_SECRET`, replace both database passwords, and set the canonical HTTPS `WEB_ORIGIN` and `APP_ORIGIN`. Never commit `.env`.
 
-Changing JWT issuer, audience, or secret invalidates existing sessions and requires a coordinated forced login.
+Database credentials are deliberately split:
+
+- `MIGRATION_DATABASE_URL` uses the PostgreSQL bootstrap/admin identity and is injected only into the one-shot `migrate` service.
+- `RUNTIME_DATABASE_URL` uses the fixed `ticketty_runtime` login, which is `NOSUPERUSER`, `NOBYPASSRLS`, `NOINHERIT`, owns no application objects, and has no direct table grants.
+- `RUNTIME_DATABASE_PASSWORD` is consumed by `pnpm db:provision-runtime` in the migration job to create/rotate that login and grant only the audited `ticketty_app`, `ticketty_auth`, `ticketty_platform`, and `ticketty_accounting_worker` memberships.
+
+Use separately generated passwords. If either contains URL-reserved characters, percent-encode it in its URL. Never provide `MIGRATION_DATABASE_URL` to the backend service. Backend startup in `NODE_ENV=production` fails closed unless the session identity is the least-privilege `ticketty_runtime` role.
+
+Changing JWT issuer, audience, or secret invalidates existing sessions and requires a coordinated forced login. Production rejects JWT lifetimes above one hour and rejects a non-HTTPS browser origin; the supplied baseline is 15 minutes.
 
 ## Build and deploy
 
@@ -68,50 +76,40 @@ Readiness must succeed before routing traffic. Monitor application logs during t
 
 ```
 Client (متصفح التذكرة)
-  → Cloudflare edge (TLS, IP العميل الحقيقي معروف هنا)
-  → cloudflared daemon (على الخادم — الوكيل الموثوق الوحيد،
-     يضيف عمود X-Forwarded-For واحدًا بقيمة IP عميل Cloudflare)
+  → Cloudflare edge (TLS، يكتب CF-Connecting-IP الموثوق)
+  → cloudflared daemon
+  → web/BFF :3000 (يُسقط X-Forwarded-For القادم من العميل ويكتب
+     X-Forwarded-For من CF-Connecting-IP بعد التحقق أنه IP)
   → backend :3001 (compose، منضبط 127.0.0.1)
 ```
 
-لا يوجد وكيل آخر بينهما (compose يربط 127.0.0.1 والنفق يوجّه
-إليه مباشرة). **القيمة الصحيحة: `TRUST_PROXY_HOPS=1`** (هي الآن
-الافتراضية في `compose.yaml` و`.env.production.example`).
+الـ backend لا يتصل به العميل مباشرة؛ الوكيل المباشر الوحيد أمامه هو
+web/BFF. **القيمة الصحيحة: `TRUST_PROXY_HOPS=1`** (هي الآن الافتراضية
+في `compose.yaml` و`.env.production.example`). يجب أن يبقى منفذ web
+مربوطًا بالـ loopback وألا توجد قناة عامة تتجاوز Cloudflare، لأن سلامة
+`CF-Connecting-IP` تعتمد على أن Cloudflare هو من يستبدلها.
 
 ### لماذا 1 بالضبط (سلوك Express 5 «trust proxy N»)
 
-يُعتمد **آخر N أعمدة** في سلسلة X-Forwarded-For كموثوقين، والعمود
-الواقف عند النقطة N-1 من النهاية هو IP العميل المُدرَك:
+الـ BFF لا يمرر `X-Forwarded-For` القادم من المتصفح. يأخذ فقط
+`CF-Connecting-IP` الذي تستبدله Cloudflare، يتحقق أنه عنوان IP، ثم يكتب
+سلسلة من عنصر واحد إلى الـ backend. لذلك يثق Express في وكيل واحد فقط:
 
-- `0` — تُتجاهل الترويسة كليًا: لا تزوير ممكن، **لكن** كل مستخدمي
-  النفق يظهرون بـ IP واحد (socket الداخلي) → خنق الدخول 5/min
-  **للشركة كلها مجتمعة**.
-- `1` — يُصدَّق العمود الذي أضافه cloudflared فقط = **IP عميل
-  Cloudflare الحقيقي**. ما يرسله العميل بنفسه من أعمدة مزيفة
-  يبقى قبل العمود الموثوق ويُتجاهل.
-- `2+` — يُعامل العميل نفسه كوكيل موثوق في السلسلة → **تزوير
-  كامل للـ throttle** (العميل يوزع نفسه على IPs وهمية).
+- `0` — يتجاهل عنوان العميل ويجمع الجميع على عنوان حاوية web.
+- `1` — يقرأ عنوان العميل الوحيد الذي أعاد الـ BFF بناءه.
+- `2+` — غير مطلوب لهذه الطوبولوجيا ويوسع سطح الثقة بلا داعٍ.
 
-### الإثبات المُنفّذ (2026-09-09 — تجارب فعلية لا استنتاج)
+### الإثبات المُنفّذ (2026-09-12)
 
-1. **مصفوفة تجريبية على Express 5.2.1** (نفس express@5.2.1 الذي
-   يعمل به الـ backend): طلب مباشر بترويسة مزيفة
-   `X-Forwarded-For: 1.2.3.4, 5.6.7.8`:
-   | hops | IP المُدرَك من التطبيق | الدلالة |
-   |---|---|---|
-   | 0 | 127.0.0.1 (الترويسة مُتجاهلة) | لا تزوير لكن تجميع |
-   | 1 | **5.6.7.8** (آخر عمود — من الوكيل الموثوق) | الصواب |
-   | 2 | 1.2.3.4 (**ترويسة العميل المزيفة صُدّقت!**) | تزوير |
-   | 3 | 1.2.3.4 (تزوير) | تزوير |
-2. **محاكاة throttle كاملة بـ hops=1**: عميل أرسل 6 IPs مزيفة
-   مختلفة عبر وكيل واحد موثوق → التطبيق رأى دائمًا IP الوكيل
-   الموثوق؛ **429 عند السادسة** — التزوير فاشل والعد سليم.
-3. **عبر النفق الحقيقي** (`api.suda-technologies.com` على hops=0
-   الحالي): 6 محاولات دخول خاطئة متتالية بـ XFF مزيفة مختلفة
-   كل مرة → **401×5 ثم 429** — الترويسة المزيفة لم تُصدَّق
-   (لكن لاحظ التجميع: كل الطلبات عدّت كعميل واحد).
-4. **سلوك النفق نفسه**: نفس الطلبات عبر النفق بلا ترويسات →
-   401×5 ثم 429 — throttle يعمل عبر النفق فعليًا.
+عبر نسخة production محلية من web/BFF والـ backend مع `TRUST_PROXY_HOPS=1`:
+
+1. العميل A بعنوان `CF-Connecting-IP: 203.0.113.10` تلقى
+   `401×5` ثم `429`.
+2. العميل B بعنوان مختلف تلقى `401` ولم يرث حصة A.
+3. ست محاولات غيّرت `X-Forwarded-For` فقط بلا CF header بقيت في حصة
+   واحدة وأعادت `429` في السادسة؛ أي أن ترويسة المتصفح المزيفة لا تُمرر.
+
+أعد هذه التجربة من خارج النفق عند كل تغيير لطوبولوجيا الحافة.
 
 ### عند تغيّر الطوبولوجيا
 

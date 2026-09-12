@@ -27,10 +27,11 @@ describe('Platform tenant provisioning (e2e)', () => {
   let platformToken: string;
   let tenantOwnerToken: string;
 
+  const runId = `${process.pid}-${Date.now()}`;
   const PROVISION = {
     name: 'شركة النيل الأزرق للنقل',
-    slug: 'blue-nile-e2e',
-    ownerEmail: 'owner@bluenile.sd',
+    slug: `blue-nile-e2e-${runId}`,
+    ownerEmail: `owner-${runId}@bluenile.sd`,
     ownerName: 'مالك النيل الأزرق',
     initialPassword: 'Initial-Passw0rd-2026',
     primaryBranchName: 'فرع الخرطوم',
@@ -94,19 +95,31 @@ describe('Platform tenant provisioning (e2e)', () => {
 
     const body = provisioned.body as {
       organization: { id: string; slug: string };
-      owner: { id: string; email: string; roleKey: string };
+      owner: {
+        id: string;
+        email: string;
+        roleKey: string;
+        mustChangePassword: boolean;
+      };
       primaryBranch: { id: string; name: string };
     };
     expect(body.organization.slug).toBe(PROVISION.slug);
     expect(body.owner.email).toBe(PROVISION.ownerEmail);
     expect(body.owner.roleKey).toBe('OWNER');
+    expect(body.owner.mustChangePassword).toBe(true);
     expect(body.primaryBranch.name).toBe(PROVISION.primaryBranchName);
+    const ownerRecord = await owner.user.findUniqueOrThrow({
+      where: { id: body.owner.id },
+      select: { mustChangePassword: true },
+    });
+    expect(ownerRecord.mustChangePassword).toBe(true);
     // لا تسريب
     expect(JSON.stringify(provisioned.body)).not.toContain(
       PROVISION.initialPassword,
     );
 
-    // 2) المالك الجديد يدخل فعلاً عبر بوابة الموظفين — النظام جاهز للبيع
+    // 2) The initial credential authenticates, but every business endpoint is
+    // blocked until the owner rotates it.
     const loginRes = await request(app.getHttpServer())
       .post('/api/auth/login')
       .send({
@@ -117,12 +130,56 @@ describe('Platform tenant provisioning (e2e)', () => {
     tenantOwnerToken = (loginRes.body as { access_token?: string })
       .access_token as string;
     expect(tenantOwnerToken).toBeTruthy();
+    expect(
+      (loginRes.body as { user: { mustChangePassword: boolean } }).user
+        .mustChangePassword,
+    ).toBe(true);
 
-    // 3) المالك الجديد — رغم نجمة '*' — لا يفتح بوابة المنصة
-    // Go-Live S-1: الحارس نفسه يصدّ أولًا (wildcard لا تمنح
-    // platform.admin) برسالة الحارس؛ طبقة requirePlatformOperator
-    // الداخلية تبقى دفاعًا ثانيًا. كلا الطبقتين 403 صحيح — نثبت
-    // الحالة ونقبل نص أي منهما.
+    const me = await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${tenantOwnerToken}`)
+      .expect(200);
+    expect(
+      (me.body as { user: { mustChangePassword: boolean } }).user
+        .mustChangePassword,
+    ).toBe(true);
+
+    const blocked = await request(app.getHttpServer())
+      .get('/api/administration/roles')
+      .set('Authorization', `Bearer ${tenantOwnerToken}`)
+      .expect(403);
+    expect((blocked.body as { code: string }).code).toBe(
+      'PASSWORD_CHANGE_REQUIRED',
+    );
+
+    const permanentPassword = 'Permanent-Passw0rd-2026!';
+    await request(app.getHttpServer())
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${tenantOwnerToken}`)
+      .send({
+        currentPassword: PROVISION.initialPassword,
+        newPassword: permanentPassword,
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${tenantOwnerToken}`)
+      .expect(401);
+
+    const permanentLogin = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: PROVISION.ownerEmail, password: permanentPassword })
+      .expect(200);
+    tenantOwnerToken = (permanentLogin.body as { access_token: string })
+      .access_token;
+    expect(
+      (permanentLogin.body as { user: { mustChangePassword: boolean } }).user
+        .mustChangePassword,
+    ).toBe(false);
+
+    // 3) After remediation, ordinary authorization applies: a tenant owner
+    // still cannot cross the platform boundary.
     const forbidden = await request(app.getHttpServer())
       .post('/api/platform/tenants')
       .set('Authorization', `Bearer ${tenantOwnerToken}`)
@@ -231,11 +288,12 @@ describe('Platform subscriptions & monitoring (e2e)', () => {
   const adminEmail =
     process.env.INITIAL_ADMIN_EMAIL ?? 'e2e-owner@ticketty.local';
   const password = 'E2eTest-Passw0rd-2026';
+  const subscriptionRunId = `${process.pid}-${Date.now()}`;
   const SUB_TENANT = {
     name: 'شركة شرق النيل للنقل',
-    slug: 'sub-tenant-e2e',
+    slug: `sub-tenant-e2e-${subscriptionRunId}`,
     ownerName: 'مالك شرق النيل',
-    ownerEmail: 'owner@eastnile.sd',
+    ownerEmail: `owner-${subscriptionRunId}@eastnile.sd`,
     initialPassword: 'Initial-Passw0rd-2026',
   };
 
@@ -247,7 +305,6 @@ describe('Platform subscriptions & monitoring (e2e)', () => {
     app.useLogger(['error', 'warn']);
     configureApp(app);
     await app.init();
-    // تنظيف أي بقايا من دورة سابقة — بعد الإغلاق في afterAll
   });
 
   afterAll(async () => {

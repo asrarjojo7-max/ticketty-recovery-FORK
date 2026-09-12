@@ -18,7 +18,7 @@ import { MetricsRegistryService } from '../src/monitoring/metrics-registry.servi
  */
 describe('Observability /metrics (e2e)', () => {
   let app: INestApplication<App>;
-  let server: ReturnType<INestApplication['getHttpServer']>;
+  let server: App;
   let metrics: MetricsRegistryService;
 
   beforeAll(async () => {

@@ -20,9 +20,9 @@
 #                          والتحقق الكامل يبقى في verify-restore.sh
 #                          (التمرين الربعي) — راجع docs/operations/
 #                          backup-restore.md.
-#   5. staleness watchdog — cron الواقي: إن لم توجد نسخة ناجحة خلال
-#                          آخر 25 ساعة (daily+سماحية) يُخطر فورًا —
-#                          فشل الـ cron نفسه يُكشف.
+#   5. heartbeat           — يكتب آخر نجاح. يراقبه سكربت مستقل بجدول
+#                          منفصل: backup-watchdog.sh. لا يمكن لعملية
+#                          النسخ أن تكون مراقب نفسها إذا توقف cron.
 #
 # الجدولة (cron على الخادم — 02:30 بعد منتصف الليل وقت الخادم):
 #   30 2 * * * cd /srv/ticketty && set -a; . /etc/ticketty/backup.env; \
@@ -30,10 +30,10 @@
 #
 # متغيرات البيئة:
 #   DATABASE_URL        (إلزامي)
-#   RCLONE_REMOTE       وجهة خارجية: "b2:ticketty-backups" إلخ (إلزامي
-#                       للـ off-site؛ فارغ = تحذير وتسجيل — لا نشر prod
-#                       بدونها، راجع القسم أدناه)
-#   BACKUP_RETENTION_DAYS    (افتراضي 30)
+#   RCLONE_REMOTE       وجهة Daily خارجية (إلزامية)
+#   RCLONE_WEEKLY_REMOTE    وجهة أسبوعية اختيارية (نسخة كل أحد)
+#   RCLONE_MONTHLY_REMOTE   وجهة شهرية اختيارية (نسخة يوم 01)
+#   BACKUP_RETENTION_DAYS   (افتراضي 0 = بلا حذف حتى اعتماد السياسة)
 #   WEBHOOK_URL              قناة الإنذار (نفس الـ watchdog) — اختياري
 #   BACKUP_DIR               (افتراضي /var/lib/ticketty/backups)
 #   BACKUP_STATE_DIR         (افتراضي /var/lib/ticketty/backup-state)
@@ -47,22 +47,45 @@ umask 077
 # ── الإعدادات ────────────────────────────────────────────────────────────────
 DATABASE_URL="${DATABASE_URL:?DATABASE_URL is required}"
 RCLONE_REMOTE="${RCLONE_REMOTE:-}"
+RCLONE_WEEKLY_REMOTE="${RCLONE_WEEKLY_REMOTE:-}"
+RCLONE_MONTHLY_REMOTE="${RCLONE_MONTHLY_REMOTE:-}"
 BACKUP_DIR="${BACKUP_DIR:-/var/lib/ticketty/backups}"
 BACKUP_STATE_DIR="${BACKUP_STATE_DIR:-/var/lib/ticketty/backup-state}"
 BACKUP_LOG_DIR="${BACKUP_LOG_DIR:-/var/log/ticketty}"
-RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-30}"
-STALE_HOURS="${BACKUP_STALE_HOURS:-25}"   # daily + سماحية ساعة
+BACKUP_METRICS_DIR="${BACKUP_METRICS_DIR:-/var/lib/ticketty/metrics}"
+# Zero disables deletion. Production retention must be explicitly approved
+# before any valid local or off-site backup is removed.
+RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-0}"
 WEBHOOK_URL="${BACKUP_WEBHOOK_URL:-${WATCHDOG_WEBHOOK_URL:-}}"
 NOW_EPOCH="$(date -u +%s)"
 NOW_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-mkdir -p "$BACKUP_DIR" "$BACKUP_STATE_DIR" "$BACKUP_LOG_DIR"
+mkdir -p "$BACKUP_DIR" "$BACKUP_STATE_DIR" "$BACKUP_LOG_DIR" "$BACKUP_METRICS_DIR"
 STATE_OK="$BACKUP_STATE_DIR/last-success"      # يحوي timestamp آخر نجاح
 RESULT_LOG="$BACKUP_LOG_DIR/backup-results.csv"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log_result() { # outcome, file, size_mb, detail
   printf '%s,%s,%s,%s,%s\n' "$NOW_ISO" "$1" "$2" "$3" "$4" >>"$RESULT_LOG"
+}
+write_metrics() { # result (0/1), optional successful timestamp
+  local result="$1" success_timestamp="${2:-}"
+  local target="$BACKUP_METRICS_DIR/ticketty_backup.prom" tmp
+  tmp="$(mktemp "$BACKUP_METRICS_DIR/.ticketty_backup.prom.XXXXXX")"
+  if [[ -z "$success_timestamp" && -f "$target" ]]; then
+    success_timestamp="$(awk '$1=="ticketty_backup_last_success_timestamp_seconds" {print $2}' "$target" | tail -1)"
+  fi
+  success_timestamp="${success_timestamp:-0}"
+  {
+    echo '# HELP ticketty_backup_last_success_timestamp_seconds Unix timestamp of the last verified off-site backup.'
+    echo '# TYPE ticketty_backup_last_success_timestamp_seconds gauge'
+    printf 'ticketty_backup_last_success_timestamp_seconds %s\n' "$success_timestamp"
+    echo '# HELP ticketty_backup_last_result Result of the most recent backup attempt: 1 success, 0 failure.'
+    echo '# TYPE ticketty_backup_last_result gauge'
+    printf 'ticketty_backup_last_result %s\n' "$result"
+  } >"$tmp"
+  chmod 0644 "$tmp"
+  mv "$tmp" "$target"
 }
 notify() { # severity title body
   if [ -n "$WEBHOOK_URL" ]; then
@@ -75,6 +98,7 @@ notify() { # severity title body
 }
 fail() { # detail → سجل + إنذار + exit 1 (يفشل cron التوثيقي)
   log_result "FAILED" "-" 0 "$1"
+  write_metrics 0
   notify "HIGH" "فشل النسخ الاحتياطي الليلي" "$1"
   echo "[$NOW_ISO] BACKUP FAILED: $1" >&2
   exit 1
@@ -125,22 +149,30 @@ if [ -n "$RCLONE_REMOTE" ]; then
     fail "RCLONE_REMOTE مضبوط لكن rclone غير مثبت على الخادم"
   fi
 else
-  # لا ننشر بيئة prod بلا وجهة خارجية — لكننا لا نكسر بيئة dev:
-  echo "[$NOW_ISO] WARNING: RCLONE_REMOTE فارغ — النسخة محلية فقط (غير مقبول للإنتاج!)" >&2
-  OFFSITE="local-only-warning"
-  notify "WARNING" "نسخة احتياطية بلا وجهة خارجية" \
-"أُنشئت نسخة محلية بلا RCLONE_REMOTE. للـ production هذا مخالف
-لسياسة الاسترداد — النسخة الوحيدة على نفس الخادم ليست DR."
+  fail "RCLONE_REMOTE غير مضبوط — النسخة المحلية وحدها ليست نسخة استرداد كوارث"
+fi
+
+# نسخ طبقية: يوم الأحد إلى Weekly، واليوم الأول من الشهر إلى Monthly.
+# copyto لا يحذف أي نسخة قائمة؛ retention يبقى معطلاً حتى اعتماد السياسة.
+if [[ "$(date -u +%u)" == "7" && -n "$RCLONE_WEEKLY_REMOTE" ]]; then
+  rclone copyto "$DUMP_FILE" "$RCLONE_WEEKLY_REMOTE/$(basename "$DUMP_FILE")" \
+    || fail "رفع النسخة الأسبوعية فشل"
+  rclone copyto "$DUMP_FILE.sha256" "$RCLONE_WEEKLY_REMOTE/$(basename "$DUMP_FILE").sha256" \
+    || fail "رفع checksum النسخة الأسبوعية فشل"
+fi
+if [[ "$(date -u +%d)" == "01" && -n "$RCLONE_MONTHLY_REMOTE" ]]; then
+  rclone copyto "$DUMP_FILE" "$RCLONE_MONTHLY_REMOTE/$(basename "$DUMP_FILE")" \
+    || fail "رفع النسخة الشهرية فشل"
+  rclone copyto "$DUMP_FILE.sha256" "$RCLONE_MONTHLY_REMOTE/$(basename "$DUMP_FILE").sha256" \
+    || fail "رفع checksum النسخة الشهرية فشل"
 fi
 
 # ── 4) retention (محلي + خارجي) ─────────────────────────────────────────────
-# محلي: احذف الأقدم من RETENTION_DAYS (الملف + المجموع + أي .tmp)
-find "$BACKUP_DIR" -name 'ticketty-*.dump' -mtime "+$RETENTION_DAYS" -delete 2>/dev/null || true
-find "$BACKUP_DIR" -name 'ticketty-*.dump.sha256' -mtime "+$RETENTION_DAYS" -delete 2>/dev/null || true
+# محلي/خارجي: الحذف يعمل فقط بعد ضبط قيمة موجبة معتمدة صراحةً.
 find "$BACKUP_DIR" -name '*.tmp' -mtime +1 -delete 2>/dev/null || true
-# خارجي (أشد بثلاث مرات الافتراضي؟ لا — نفس السياسة للتبسيط والتطابق)
-if [ -n "$RCLONE_REMOTE" ]; then
-  # احذف على الوجهة ما تجاوز الاحتفاظ (rclone lsf + delete واحدًا واحدًا)
+if (( RETENTION_DAYS > 0 )); then
+  find "$BACKUP_DIR" -name 'ticketty-*.dump' -mtime "+$RETENTION_DAYS" -delete 2>/dev/null || true
+  find "$BACKUP_DIR" -name 'ticketty-*.dump.sha256' -mtime "+$RETENTION_DAYS" -delete 2>/dev/null || true
   CUTOFF_EPOCH=$(( NOW_EPOCH - RETENTION_DAYS * 86400 ))
   rclone lsl "$RCLONE_REMOTE" 2>/dev/null | while read -r _size _date _time fname; do
     [ -n "$fname" ] || continue
@@ -152,14 +184,9 @@ fi
 
 # ── 5) النجاح + سجل الحالة (للـ staleness watchdog) ─────────────────────────
 printf '%s\n%s\n' "$NOW_EPOCH" "$DUMP_FILE" >"$STATE_OK"
+write_metrics 1 "$NOW_EPOCH"
 log_result "OK" "$(basename "$DUMP_FILE")" "$SIZE_MB" "$OFFSITE"
 echo "[$NOW_ISO] BACKUP OK: $(basename "$DUMP_FILE") (${SIZE_MB}MB, $OFFSITE)"
 
-# ── 6) فحص قِدم النسخ (يحمي من فشل cron نفسه صامتًا) ────────────────────────
-LAST_OK="$(cat "$STATE_OK" 2>/dev/null | head -1 || echo 0)"
-if [ $(( NOW_EPOCH - ${LAST_OK:-0} )) -gt $(( STALE_HOURS * 3600 )) ]; then
-  notify "HIGH" "لا نسخة احتياطية ناجحة منذ ${STALE_HOURS} ساعة" \
-"آخر نسخة ناجحة أقدم من العتبة — فشل الـ cron نفسه محتمل.
-افحص: systemctl status cron + tail /var/log/ticketty/backup.log"
-fi
+# Freshness is checked by ops/backup-watchdog.sh from an independent schedule.
 exit 0

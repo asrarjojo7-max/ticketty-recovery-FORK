@@ -13,6 +13,7 @@ import { AuditModule } from './common/audit/audit.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { PasswordChangeRequiredGuard } from './common/guards/password-change-required.guard';
 import { SubscriptionGuard } from './common/guards/subscription.guard';
 import { CustomersModule } from './customers/customers.module';
 import { ExpensesModule } from './expenses/expenses.module';
@@ -88,6 +89,7 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     AppService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PasswordChangeRequiredGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
     // بوابة الاشتراك — بعد الصلاحيات (403 قبل 402: الرفض الأكثر
     // تحديداً أولاً)، وقبل سياق RLS. إضافة فوق السلسلة القائمة.
@@ -97,6 +99,6 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestContextMiddleware).forRoutes('*');
+    consumer.apply(RequestContextMiddleware).forRoutes('{*path}');
   }
 }

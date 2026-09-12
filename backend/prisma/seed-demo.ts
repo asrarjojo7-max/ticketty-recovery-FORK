@@ -21,8 +21,14 @@ function todayUtc(): Date {
   );
 }
 
+/**
+ * رقم المقعد الرسمي: أرقام فقط، مشتق من الموضع داخل الحافلة
+ * (نفس اشتقاق seat-templates.service في الواجهة الخلفية) —
+ * التذاكر وقوائم المسافرين تعرض رقمًا واحدًا يقرؤه الجميع.
+ */
 function seatLabel(row: number, col: number): string {
-  return `${String.fromCharCode(64 + col)}${row}`;
+  const columnsPerRow = 4; // تخطيط 2+2 القياسي في seed-demo
+  return String((row - 1) * columnsPerRow + col);
 }
 
 async function main() {

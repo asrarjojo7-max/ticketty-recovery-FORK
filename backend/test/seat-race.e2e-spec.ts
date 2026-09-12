@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
 import { AccountingEventWorker } from '../src/accounting/accounting-event.worker';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * SEAT RACE (Go-Live Gate: T-1) — السباق الحقيقي المتزامن لنفس المقعد
@@ -52,6 +53,8 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
   let ownerToken = '';
   let sellerToken = '';
   let orgId = '';
+  let routeId = '';
+  let templateId = '';
   let tripId = '';
   let seatId = '';
   let seatPrice = 0;
@@ -90,14 +93,12 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
       .id;
 
     // 2) المالك + بائع (السباق من البائعين — مثل نقاط البيع الحقيقية)
-    const ownerLogin = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `owner-${slug}@ticketty.local`,
-        password: TENANT_PASSWORD,
-      });
-    expect([200, 201]).toContain(ownerLogin.status);
-    ownerToken = (ownerLogin.body as { access_token: string }).access_token;
+    ownerToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      TENANT_PASSWORD,
+      `${TENANT_PASSWORD}-Permanent`,
+    );
 
     const roles = await request(server)
       .get('/api/administration/roles')
@@ -118,14 +119,12 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
       });
     expect(sellerRes.status).toBe(201);
 
-    const sellerLogin = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `seller-${slug}@ticketty.local`,
-        password: SELLER_PASSWORD,
-      });
-    expect([200, 201]).toContain(sellerLogin.status);
-    sellerToken = (sellerLogin.body as { access_token: string }).access_token;
+    sellerToken = await loginAndRotateTemporaryPassword(
+      server,
+      `seller-${slug}@ticketty.local`,
+      SELLER_PASSWORD,
+      `${SELLER_PASSWORD}-Permanent`,
+    );
 
     // 3) أسطول + خط + رحلة غدًا بمقعد واحد على الأقل
     const templateRes = await request(server)
@@ -144,7 +143,7 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
         ],
       });
     expect(templateRes.status).toBe(201);
-    const templateId = (templateRes.body as { id: string }).id;
+    templateId = (templateRes.body as { id: string }).id;
 
     const busRes = await request(server)
       .post('/api/buses')
@@ -169,7 +168,7 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
         ],
       });
     expect(routeRes.status).toBe(201);
-    const routeId = (routeRes.body as { id: string }).id;
+    routeId = (routeRes.body as { id: string }).id;
 
     const departure = new Date(Date.now() + 48 * 3_600_000);
     const tripRes = await request(server)
@@ -198,6 +197,44 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
     seatId = available[0].id;
     seatPrice = Number(available[0].price);
   }, 120_000);
+
+  async function createAdditionalTrip(
+    label: string,
+    departureOffsetHours: number,
+  ): Promise<{ tripId: string; seatId: string }> {
+    const busRes = await request(server)
+      .post('/api/buses')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        plateNumber: `TN-${label}-${Date.now() % 100000}`,
+        seatTemplateId: templateId,
+      });
+    expect(busRes.status).toBe(201);
+
+    const departure = new Date(Date.now() + departureOffsetHours * 3_600_000);
+    const tripRes = await request(server)
+      .post('/api/trips')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        routeId,
+        busId: (busRes.body as { id: string }).id,
+        departureAt: departure.toISOString(),
+        arrivalAt: new Date(departure.getTime() + 5 * 3_600_000).toISOString(),
+        price: 12_500,
+      });
+    expect(tripRes.status).toBe(201);
+    const createdTripId = (tripRes.body as { id: string }).id;
+
+    const seatsRes = await request(server)
+      .get(`/api/trips/${createdTripId}/seats`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(seatsRes.status).toBe(200);
+    const firstSeat = (
+      seatsRes.body as { seats: Array<{ id: string; status: string }> }
+    ).seats.find((seat) => seat.status === 'AVAILABLE');
+    expect(firstSeat).toBeTruthy();
+    return { tripId: createdTripId, seatId: firstSeat!.id };
+  }
 
   afterAll(async () => {
     // نفس النمط الذرّي المعتمد (bd78b0c): معاملة واحدة — ENABLE داخلها.
@@ -421,5 +458,46 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
     const sumCredit = lines.reduce((a, l) => a + Number(l.credit), 0);
     expect(sumDebit).toBeCloseTo(seatPrice, 2);
     expect(sumCredit).toBeCloseTo(seatPrice, 2);
+  }, 120_000);
+
+  it('allocates distinct organization ticket numbers for simultaneous sales on different trips', async () => {
+    const [first, second] = await Promise.all([
+      createAdditionalTrip('a', 72),
+      createAdditionalTrip('b', 96),
+    ]);
+
+    const responses = await Promise.all(
+      [first, second].map((target, index) =>
+        request(server)
+          .post('/api/bookings')
+          .set('Authorization', `Bearer ${sellerToken}`)
+          .set('Idempotency-Key', `ticket-number-race-${slug}-${index}`)
+          .send({
+            tripId: target.tripId,
+            seatIds: [target.seatId],
+            passengerName: `مسافر ترقيم ${index}`,
+            passengerPhone: `09200000${index}`,
+            paymentMethod: 'CASH',
+          }),
+      ),
+    );
+
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    const numbers = responses.map(
+      (response) =>
+        (response.body as { tickets: Array<{ number: string }> }).tickets[0]
+          .number,
+    );
+    expect(new Set(numbers).size).toBe(2);
+
+    const persisted = await admin.ticket.findMany({
+      where: {
+        organizationId: orgId,
+        tripId: { in: [first.tripId, second.tripId] },
+      },
+      select: { number: true },
+    });
+    expect(persisted).toHaveLength(2);
+    expect(new Set(persisted.map((ticket) => ticket.number)).size).toBe(2);
   }, 120_000);
 });

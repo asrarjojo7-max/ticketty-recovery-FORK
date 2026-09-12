@@ -1,13 +1,8 @@
-# Alerting rules — Pre-Launch Hardening Phase 6 (Engineering Contract §12)
-# =========================================================================
-# وثيقة جاهزة للربط بأي Prometheus + Alertmanager عند النشر الفعلي.
-# لا ننشر hosted monitoring الآن (قرار الخطة) — الملف هو "الحقيقة
-# المرجعية" لما يجب أن ينبه، ومصدر المقاييس هو GET /metrics
-# (prom-client، أسماء ticketty_*).
-#
-# كل قاعدة أفقها 3 دقائق على الأقل (تقلب worker لا يقلق) ما عدا
-# القواعد الحرجة ماليًا (accounting) — أفق أطول 10 دقائق لأن
-# الفشل المتكرر هو المهم وليس الحادثة المفردة.
+# Ticketty controlled-pilot production alert rules.
+# Application thresholds are anchored to the measured 2026-09-12 baseline
+# (dashboard p95 333ms, API RSS ~155MiB). Host thresholds are sustained
+# saturation signals, not one-off spikes. Prometheus and Alertmanager are
+# private services configured under ops/monitoring/.
 groups:
   - name: ticketty-backend-critical
     rules:
@@ -126,8 +121,37 @@ groups:
           description: >
             نسبة أخطاء الخادم مرتفعة — راجع logs و requestId trail.
 
-      # DB readiness — نفس فحص readiness.
-      - alert: DatabaseDown
+      - alert: AuthenticationFailureSurge
+        expr: |
+          sum(increase(ticketty_http_requests_total{route="/api/auth/login",status=~"401|429"}[5m])) > 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ارتفاع محاولات الدخول الفاشلة"
+          description: "أكثر من 20 استجابة 401/429 على تسجيل الدخول خلال خمس دقائق."
+
+      - alert: BackendEventLoopLag
+        expr: ticketty_process_nodejs_eventloop_lag_p99_seconds > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "تأخر event loop في الـ backend"
+          description: "p99 event-loop lag تجاوز 250ms لعشر دقائق؛ افحص CPU والعمليات المكلفة."
+
+      - alert: BackendMemoryPressure
+        expr: ticketty_process_process_resident_memory_bytes > 1610612736
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ذاكرة backend تتجاوز 1.5 GiB"
+          description: "اضبط العتبة وفق حد الحاوية الفعلي قبل النشر."
+
+      # Process/scrape availability. Database-specific failure is also detected
+      # independently by worker-watchdog.sh and the readiness endpoint.
+      - alert: ApplicationDown
         expr: up{job="ticketty-backend"} == 0
         for: 1m
         labels:
@@ -136,3 +160,127 @@ groups:
           summary: "الـ backend غير قابل للوصول"
           description: >
             فشل scrape — إما العملية أو الشبكة؛ راجع /api/health/liveness.
+
+      - alert: WebApplicationDown
+        expr: probe_success{job="ticketty-web"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "واجهة Ticketty غير متاحة"
+          description: "فشل فحص HTTP الداخلي لنقطة liveness الخاصة بالويب."
+
+      - alert: ApplicationFlapping
+        expr: changes(up{job=~"ticketty-backend|ticketty-web"}[15m]) > 4
+        labels:
+          severity: warning
+        annotations:
+          summary: "خدمة Ticketty تتذبذب بين العمل والتوقف"
+          description: "تغيرت حالة availability أكثر من أربع مرات خلال 15 دقيقة."
+
+      - alert: BackendHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(ticketty_http_request_duration_seconds_bucket[5m]))) > 0.75
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "زمن استجابة backend مرتفع"
+          description: "p95 تجاوز 750ms لعشر دقائق؛ baseline المحلي المقاس كان 333ms للمسار الأبطأ."
+
+      - alert: BackendRepeatedRestarts
+        expr: changes(ticketty_process_process_start_time_seconds[15m]) > 2
+        labels:
+          severity: critical
+        annotations:
+          summary: "الـ backend يعيد التشغيل بصورة متكررة"
+          description: "تغير وقت بدء العملية أكثر من مرتين خلال 15 دقيقة."
+
+  - name: ticketty-database
+    rules:
+      - alert: DatabaseExporterDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "مراقبة PostgreSQL غير متاحة"
+          description: "تعذر الوصول إلى postgres-exporter؛ تحقق من قاعدة البيانات واعتماد المراقبة الخاص."
+
+      - alert: DatabaseConnectionsNearLimit
+        expr: sum(pg_stat_database_numbackends) / scalar(pg_settings_max_connections) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "اتصالات PostgreSQL تقترب من الحد"
+          description: "أكثر من 80% من max_connections مستخدم لعشر دقائق."
+
+      - alert: DatabaseDeadlocks
+        expr: sum(increase(pg_stat_database_deadlocks[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL سجل deadlock"
+          description: "ظهر deadlock واحد على الأقل خلال 15 دقيقة؛ راجع المعاملات والسجلات المرتبطة."
+
+  - name: ticketty-backup
+    rules:
+      - alert: BackupLastRunFailed
+        expr: ticketty_backup_last_result == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "آخر نسخة Ticketty الاحتياطية فشلت"
+          description: "تحقق من سجل backup-nightly ومن توفر وجهة Google Drive الخارجية."
+
+      - alert: BackupStale
+        expr: time() - ticketty_backup_last_success_timestamp_seconds > 90000
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "آخر نسخة احتياطية أقدم من 25 ساعة"
+          description: "RPO اليومي مهدد؛ افحص الجدولة والوجهة الخارجية فورًا."
+
+  - name: ticketty-infrastructure
+    rules:
+      - alert: HostHighCpu
+        expr: 1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "استخدام CPU مرتفع"
+          description: "استخدام CPU تجاوز 85% لمدة 15 دقيقة."
+
+      - alert: HostHighMemory
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "استخدام الذاكرة مرتفع"
+          description: "استخدام الذاكرة تجاوز 85% لمدة 15 دقيقة."
+
+      - alert: HostDiskLow
+        expr: |
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+           / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) < 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "المساحة الحرة أقل من 15%"
+          description: "أحد أنظمة الملفات الدائمة يقترب من الامتلاء."
+
+      - alert: HostFilesystemReadOnly
+        expr: node_filesystem_readonly{fstype!~"tmpfs|overlay|squashfs"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "نظام ملفات دائم أصبح للقراءة فقط"
+          description: "توقف الكتابة يهدد PostgreSQL والنسخ الاحتياطي والسجلات."

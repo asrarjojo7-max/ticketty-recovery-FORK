@@ -40,9 +40,8 @@ describe('AppController (e2e)', () => {
       request(app.getHttpServer())
         .get('/api/health/readiness')
         .expect(200)
-        // Phase 6: مؤشر العامل (degraded، لا not-ready) — ثواني منذ
-        // آخر نجاح وعدد الفشل المتتابع. -1 = العامل لم يكمل دورة
-        // منذ الإقلاع (خمول dev شائع) — لا يؤثر على الجاهزية.
+        // Disabled workers are explicit and distinct from enabled workers that
+        // have never completed a successful cycle.
         .expect((res: { body: Record<string, unknown> }) => {
           if (res.body.status !== 'ready' || res.body.database !== 'up') {
             throw new Error(
@@ -50,16 +49,23 @@ describe('AppController (e2e)', () => {
             );
           }
           const worker = res.body.accountingWorker as
-            | { secondsSinceLastSuccess: unknown; consecutiveFailures: unknown }
+            | {
+                enabled: unknown;
+                state: unknown;
+                secondsSinceLastSuccess: unknown;
+                consecutiveFailures: unknown;
+              }
             | undefined;
           if (!worker) {
             throw new Error('accountingWorker object missing');
           }
           if (
-            typeof worker.secondsSinceLastSuccess !== 'number' ||
+            worker.enabled !== false ||
+            worker.state !== 'disabled' ||
+            worker.secondsSinceLastSuccess !== null ||
             typeof worker.consecutiveFailures !== 'number'
           ) {
-            throw new Error('accountingWorker fields must be numbers');
+            throw new Error('accountingWorker disabled state is invalid');
           }
         })
     );

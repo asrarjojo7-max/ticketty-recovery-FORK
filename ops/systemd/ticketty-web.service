@@ -1,0 +1,24 @@
+[Unit]
+Description=Ticketty production web/BFF
+Wants=network-online.target
+After=network-online.target ticketty-backend.service
+Requires=ticketty-backend.service
+
+[Service]
+Type=simple
+User=ticketty
+Group=ticketty
+WorkingDirectory=/srv/ticketty/web
+EnvironmentFile=/etc/ticketty/web.env
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

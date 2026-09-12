@@ -45,6 +45,7 @@ export class AuthService {
       email: user.email,
       roleKey: user.roleKey,
       permissions: user.permissions,
+      credentialChangedAt: user.passwordChangedAt.getTime(),
     };
 
     const access_token = await this.jwt.signAsync(payload);
@@ -71,6 +72,7 @@ export class AuthService {
         orgId: user.organizationId,
         branchId: user.branchId,
         permissions: user.permissions,
+        mustChangePassword: user.mustChangePassword,
       },
     };
   }
@@ -80,7 +82,7 @@ export class AuthService {
    * ثم تحديث طابع passwordChangedAt داخل سياق المنظمة (صف المستخدم
    * نفسه مرئي لمنظمته عبر RLS، بنفس نمط كل تحديثات المستخدمين في
    * النظام). الطابع الزمني يُبطل كل الجلسات الأقدم عبر JwtAuthGuard
-   * (passwordChangedAt مقابل iat). سجل التدقيق عبر AuditService.
+   * (مطابقة millisecond credentialChangedAt داخل JWT). سجل التدقيق عبر AuditService.
    */
   async changePassword(
     user: Pick<AuthUser, 'sub' | 'orgId'>,
@@ -114,11 +116,13 @@ export class AuthService {
 
     // تحديث شرطي ذرّي: الهاش القديم في WHERE يرفض السباقات المتزامنة
     // وضمان عدم تفويت فحص كلمة المرور الحالية.
+    const changedAt = new Date();
     const claimed = await this.prisma.user.updateMany({
       where: { id: user.sub, passwordHash: record.passwordHash },
       data: {
         passwordHash: newHash,
-        passwordChangedAt: new Date(),
+        passwordChangedAt: changedAt,
+        mustChangePassword: false,
         failedLoginAttempts: 0,
         lockedUntil: null,
       },
@@ -129,6 +133,6 @@ export class AuthService {
       );
     }
 
-    return { changedAt: new Date().toISOString() };
+    return { changedAt: changedAt.toISOString() };
   }
 }

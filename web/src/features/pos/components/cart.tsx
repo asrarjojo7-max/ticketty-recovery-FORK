@@ -107,7 +107,7 @@ export function Cart({
                     </span>
                     <button
                       onClick={() => onRemove(seat.seatId)}
-                      className="rounded-lg p-1.5 text-destructive/70 transition hover:bg-destructive/10 hover:text-destructive"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-destructive/70 transition hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`إزالة المقعد ${seat.label}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -133,7 +133,7 @@ export function Cart({
                         passengerName: e.target.value,
                       })
                     }
-                    className="h-9 text-xs"
+                    className="h-11 text-base md:h-10 md:text-sm"
                   />
                   <Input
                     placeholder="هاتف الراكب"
@@ -144,7 +144,7 @@ export function Cart({
                         passengerPhone: e.target.value,
                       })
                     }
-                    className="h-9 text-xs"
+                    className="h-11 text-base md:h-10 md:text-sm"
                     dir="ltr"
                   />
                 </div>
@@ -158,7 +158,7 @@ export function Cart({
                         passengerNationalId: e.target.value,
                       })
                     }
-                    className="h-9 text-xs"
+                    className="h-11 text-base md:h-10 md:text-sm"
                     dir="ltr"
                   />
                 </div>
@@ -173,7 +173,7 @@ export function Cart({
           <label className="grid gap-1 text-[11px] font-bold text-muted-foreground">
             محطة الصعود
             <select
-              className="h-9 rounded-xl border border-input bg-card px-2 text-xs"
+              className="h-11 min-w-0 rounded-xl border border-input bg-card px-2 text-base md:h-10 md:text-sm"
               value={boardingStop}
               onChange={(e) => setBoardingStop(e.target.value)}
             >
@@ -185,7 +185,7 @@ export function Cart({
           <label className="grid gap-1 text-[11px] font-bold text-muted-foreground">
             محطة النزول
             <select
-              className="h-9 rounded-xl border border-input bg-card px-2 text-xs"
+              className="h-11 min-w-0 rounded-xl border border-input bg-card px-2 text-base md:h-10 md:text-sm"
               value={dropOffStop}
               onChange={(e) => setDropOffStop(e.target.value)}
             >
@@ -208,7 +208,7 @@ export function Cart({
                 key={m.value}
                 onClick={() => setPaymentMethod(m.value)}
                 className={cn(
-                  "rounded-xl border px-2 py-2 text-[11px] font-bold transition",
+                  "min-h-11 rounded-xl border px-2 py-2 text-[11px] font-bold transition",
                   paymentMethod === m.value
                     ? "border-primary bg-primary-soft text-primary ring-2 ring-primary/25"
                     : "border-border text-muted-foreground hover:bg-muted/50",
@@ -224,7 +224,7 @@ export function Cart({
                 type="button"
                 disabled
                 title="غير متاحة بعد — الطرق الرقمية تحتاج سياسة تحقق لدى مزودي الدفع"
-                className="cursor-not-allowed rounded-xl border border-dashed border-border px-2 py-2 text-[11px] font-bold text-muted-foreground/40"
+                className="min-h-11 cursor-not-allowed rounded-xl border border-dashed border-border px-2 py-2 text-[11px] font-bold text-muted-foreground/40"
               >
                 {m.label}
               </button>
@@ -245,13 +245,13 @@ export function Cart({
               placeholder="ملاحظات على الحجز (اختياري)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="h-9 text-xs"
+              className="h-11 text-base md:h-10 md:text-sm"
             />
           </div>
         ) : (
           <button
             onClick={() => setShowNotes(true)}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground hover:text-primary"
+            className="inline-flex min-h-11 items-center gap-1.5 text-[11px] font-semibold text-muted-foreground hover:text-primary"
           >
             <StickyNote className="h-3.5 w-3.5" /> إضافة ملاحظة
           </button>

@@ -9,8 +9,6 @@ import {
   LayoutDashboard,
   ArrowLeft,
   MapPin,
-  UsersRound,
-  CircleDollarSign,
   QrCode,
   Gauge,
   CalendarClock,
@@ -58,24 +56,14 @@ const featureRows = [
 ];
 
 const mockTickets = [
-  { id: "TKT-4821", route: "خرطوم → مدني", seats: "3", amount: "21,000" },
-  { id: "TKT-4818", route: "بورتسودان → أتبرب", seats: "2", amount: "18,500" },
-  { id: "TKT-4815", route: "الأبيض → الدلنج", seats: "4", amount: "26,000" },
+  { id: "TK-2026-004821", route: "خرطوم → مدني", seats: "3", amount: "21,000" },
+  { id: "TK-2026-004818", route: "بورتسودان → عطبرة", seats: "2", amount: "18,500" },
+  { id: "TK-2026-004815", route: "الأبيض → الدلنج", seats: "4", amount: "26,000" },
 ];
 
 export default function Home() {
   return (
     <main className="landing-page">
-      {/* ambient brand orbs (solid, layered — no gradients per owner rule) */}
-      <div aria-hidden="true" className="orb orb-a" />
-      <div aria-hidden="true" className="orb orb-b" />
-      {/* giant watermark logo behind the hero — brand immersion */}
-      {/* eslint-disable-next-line @next/next/no-img-element -- decorative watermark */}
-      <img
-        src="/brand/mark-white.png"
-        alt=""
-        className="hero-watermark"
-      />
 
       <header className="landing-header">
         <div className="brand">
@@ -219,20 +207,6 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-          <div className="floating-chip chip-1">
-            <CircleDollarSign className="chip-icon" aria-hidden="true" />
-            <div>
-              <strong>تسوية نقدية</strong>
-              <span>مطابقة 100% اليوم</span>
-            </div>
-          </div>
-          <div className="floating-chip chip-2">
-            <UsersRound className="chip-icon" aria-hidden="true" />
-            <div>
-              <strong>إشغال الرحلة</strong>
-              <span>34 / 40 مقعداً</span>
             </div>
           </div>
         </div>

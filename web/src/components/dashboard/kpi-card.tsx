@@ -72,11 +72,11 @@ export function KpiCard({
   progress?: number;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-3xl border border-border bg-card p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-elevated">
+    <article className="group relative flex min-h-40 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-primary/20 hover:shadow-elevated sm:p-5">
       <div className="flex items-start justify-between">
         <div
           className={cn(
-            "inline-flex h-11 w-11 items-center justify-center rounded-2xl",
+            "inline-flex h-10 w-10 items-center justify-center rounded-xl",
             toneIconBg[tone],
           )}
         >
@@ -84,9 +84,9 @@ export function KpiCard({
         </div>
         {typeof delta === "number" && <DeltaPill value={delta} />}
       </div>
-      <p className="mt-4 text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className="mt-3 text-xs font-semibold text-muted-foreground">{label}</p>
       <div className="mt-1 flex items-baseline gap-1.5">
-        <span className="font-display text-3xl font-extrabold tabular text-foreground">
+        <span className="font-display text-2xl font-extrabold tabular text-foreground sm:text-3xl">
           {value}
         </span>
         {suffix && (
@@ -104,7 +104,7 @@ export function KpiCard({
           />
         </div>
       )}
-      {hint && <p className="mt-2 text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
+      {hint && <p className="mt-2 text-xs leading-5 text-muted-foreground">{hint}</p>}
+    </article>
   );
 }

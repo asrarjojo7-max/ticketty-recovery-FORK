@@ -5,6 +5,7 @@ import {
 import {
   hasTrustedOrigin,
   requestIdFrom,
+  trustedClientIp,
 } from "@/lib/server/request-security";
 import { cookies } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
@@ -12,6 +13,7 @@ import { type NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "ticketty_session";
 const BODYLESS_METHODS = new Set(["GET", "HEAD"]);
 const SAFE_PATH_SEGMENT = /^[A-Za-z0-9._~-]+$/;
+const INTERNAL_ONLY_ROOTS = new Set(["health", "metrics"]);
 
 async function proxy(
   request: NextRequest,
@@ -35,6 +37,13 @@ async function proxy(
     );
   }
 
+  if (INTERNAL_ONLY_ROOTS.has(path[0])) {
+    return NextResponse.json(
+      { message: "المسار غير متاح" },
+      { status: 404, headers: { "X-Request-Id": requestId } },
+    );
+  }
+
   if (
     !["GET", "HEAD", "OPTIONS"].includes(method) &&
     !hasTrustedOrigin(request, environment.appOrigin, trustedOrigins(environment))
@@ -50,12 +59,18 @@ async function proxy(
   const isBodyless = BODYLESS_METHODS.has(method);
   const rawBody = isBodyless ? undefined : await request.arrayBuffer();
   const headers = new Headers({ "X-Request-Id": requestId });
+  const clientIp = trustedClientIp(request.headers);
+  if (clientIp) headers.set("X-Forwarded-For", clientIp);
 
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const contentType = request.headers.get("content-type");
   if (contentType && rawBody?.byteLength) headers.set("Content-Type", contentType);
   const idempotencyKey = request.headers.get("idempotency-key");
   if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
+  for (const name of ["accept", "if-none-match", "range", "if-range"]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
 
   try {
     const backendResponse = await fetch(target, {
@@ -66,13 +81,23 @@ async function proxy(
       signal: AbortSignal.timeout(15_000),
     });
     const responseHeaders = new Headers({ "X-Request-Id": requestId });
-    const backendContentType = backendResponse.headers.get("content-type");
-    if (backendContentType) {
-      responseHeaders.set("Content-Type", backendContentType);
+    for (const name of [
+      "content-type",
+      "content-length",
+      "content-disposition",
+      "cache-control",
+      "etag",
+      "last-modified",
+      "accept-ranges",
+      "content-range",
+      "x-content-type-options",
+    ]) {
+      const value = backendResponse.headers.get(name);
+      if (value) responseHeaders.set(name, value);
     }
 
     const body =
-      method === "HEAD" || backendResponse.status === 204
+      method === "HEAD" || backendResponse.status === 204 || backendResponse.status === 304
         ? null
         : await backendResponse.arrayBuffer();
     return new NextResponse(body, {

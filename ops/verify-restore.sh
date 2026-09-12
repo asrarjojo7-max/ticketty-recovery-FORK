@@ -65,16 +65,41 @@ export PGPASSWORD="$DB_PASS"
 # للـ psql: قاعدة الأصل (كل الأوامر الإدارية على المضيف نفسه).
 psql_admin() { psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" "$@"; }
 
+BACKUP_CREATED_BY_DRILL=no
+SCRATCH_CREATED=no
+GRANTS_FILE=""
+cleanup() {
+  if [[ "$SCRATCH_CREATED" == yes ]]; then
+    psql_admin -d postgres -c "DROP DATABASE IF EXISTS \"$SCRATCH_DB_NAME\" WITH (FORCE)" >/dev/null 2>&1 || true
+  fi
+  [[ -z "$GRANTS_FILE" ]] || rm -f "$GRANTS_FILE"
+  if [[ "$BACKUP_CREATED_BY_DRILL" == yes && -n "${BACKUP_FILE:-}" ]]; then
+    rm -f "$BACKUP_FILE" "$BACKUP_FILE.sha256"
+  fi
+}
+trap cleanup EXIT
+
 # URL scratch (نفس المضيف/المنفذ/المستخدم — قاعدة مختلفة).
 SCRATCH_DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$SCRATCH_DB_NAME?schema=public"
 
 log "0) inputs: host=$DB_HOST:$DB_PORT db=$DB_NAME scratch=$SCRATCH_DB_NAME"
 
-# ── 1) Backup فعلي ───────────────────────────────────────────────────────────
-log "1) backup (pg_dump custom + sha256)"
-BACKUP_FILE=$(bash "$ops_dir/backup-postgres.sh" 2>/dev/null | grep -o '[^ ]*\.dump' | tail -1)
-[[ -n "$BACKUP_FILE" && -f "$BACKUP_FILE" ]] || fail "backup did not produce a file (checked $BACKUP_DIR)"
-log "   backup: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
+# ── 1) Backup فعلي أو نسخة خارجية مُنزّلة ────────────────────────────────────
+if [[ -n "${VERIFY_BACKUP_FILE:-}" ]]; then
+  BACKUP_FILE="$(realpath "$VERIFY_BACKUP_FILE")"
+  [[ -f "$BACKUP_FILE" ]] || fail "VERIFY_BACKUP_FILE does not exist: $BACKUP_FILE"
+  [[ -f "$BACKUP_FILE.sha256" ]] || fail "external backup checksum is missing"
+  (cd "$(dirname "$BACKUP_FILE")" && sha256sum --check "$(basename "$BACKUP_FILE").sha256" >/dev/null) \
+    || fail "external backup checksum failed"
+  pg_restore --list "$BACKUP_FILE" >/dev/null || fail "external backup archive is unreadable"
+  log "1) verified supplied backup: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
+else
+  log "1) backup (pg_dump custom + sha256)"
+  BACKUP_FILE=$(bash "$ops_dir/backup-postgres.sh" 2>/dev/null | grep -o '[^ ]*\.dump' | tail -1)
+  [[ -n "$BACKUP_FILE" && -f "$BACKUP_FILE" ]] || fail "backup did not produce a file (checked $BACKUP_DIR)"
+  BACKUP_CREATED_BY_DRILL=yes
+  log "   backup: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
+fi
 
 # ── 2) Scratch نظيفة + استعادة ───────────────────────────────────────────────
 log "2) create scratch DB + restore"
@@ -82,6 +107,7 @@ if psql_admin -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$SCRATC
   fail "scratch DB '$SCRATCH_DB_NAME' already exists — refusing to overwrite (drop it manually first)"
 fi
 psql_admin -d postgres -c "CREATE DATABASE \"$SCRATCH_DB_NAME\"" >/dev/null
+SCRATCH_CREATED=yes
 RESTORE_DATABASE_URL="$SCRATCH_DATABASE_URL" \
   ALLOW_IN_PLACE_RESTORE=no \
   bash "$ops_dir/restore-postgres.sh" "$BACKUP_FILE" >/dev/null || fail "restore failed"
@@ -104,7 +130,6 @@ echo "$MIG_OUT" | grep -q "up to date" || { echo "$MIG_OUT" | tail -5; fail "res
 # المستخرِج أدناه يستخلص العبارات كاملة مهما بلغ طولها.
 log "3.5) re-apply ALL GRANT/REVOKE from migration files (restored ACLs are empty by --no-acl)"
 GRANTS_FILE="$(mktemp /tmp/verify-restore-grants.XXXXXX.sql)"
-trap 'rm -f "$GRANTS_FILE"' EXIT
 # تقسيم عبارات حقيقي: تتبع dollar-quoting (DO $$..$$) وسلاسل
 # single-quoted حتى لا تُلتقط جمل GRANT وهمية داخل EXECUTE format()
 # (منح عضوية الأدوار داخل DO blocks) ولا تُبتور بادئة
@@ -221,8 +246,8 @@ done
 # ── 9) RTO + تنظيف ────────────────────────────────────────────────────────────
 END_TS=$(date +%s)
 RTO=$(( END_TS - START_TS ))
-psql_admin -d postgres -c "DROP DATABASE IF EXISTS \"$SCRATCH_DB_NAME\"" >/dev/null
-rm -f "$BACKUP_FILE" "$BACKUP_FILE.sha256"
-log "9) cleanup: scratch dropped, temp backup removed"
+cleanup
+trap - EXIT
+log "9) cleanup: scratch dropped; drill-created backup removed when applicable"
 echo ""
 echo "VERIFY-RESTORE PASS — RTO: ${RTO}s (backup→restore→migrate→invariants→bootstrap→RLS→counts)"

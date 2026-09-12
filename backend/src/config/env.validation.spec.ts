@@ -12,11 +12,13 @@ describe('validateEnvironment', () => {
     expect(validateEnvironment(validEnvironment)).toMatchObject({
       NODE_ENV: 'test',
       PORT: 3001,
+      API_BIND_HOST: '0.0.0.0',
       TRUST_PROXY_HOPS: 0,
       JWT_EXPIRES_IN: '15m',
       JWT_ISSUER: 'ticketty-api',
       JWT_AUDIENCE: 'ticketty-web',
       WEB_ORIGIN: 'http://localhost:3000',
+      PILOT_PAYMENT_MODE: 'CASH',
     });
   });
 
@@ -38,6 +40,38 @@ describe('validateEnvironment', () => {
     ).toThrow('JWT_SECRET');
   });
 
+  it('rejects insecure production origins and overlong production sessions', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        WEB_ORIGIN: 'http://ticketty.example.com',
+      }),
+    ).toThrow('HTTPS');
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        WEB_ORIGIN: 'https://ticketty.example.com',
+        JWT_EXPIRES_IN: '7d',
+      }),
+    ).toThrow('JWT_EXPIRES_IN');
+    expect(
+      validateEnvironment({
+        ...validEnvironment,
+        NODE_ENV: 'production',
+        WEB_ORIGIN: 'https://ticketty.example.com',
+        JWT_EXPIRES_IN: '15m',
+      }),
+    ).toMatchObject({ JWT_EXPIRES_IN: '15m' });
+  });
+
+  it('rejects any non-cash pilot payment mode', () => {
+    expect(() =>
+      validateEnvironment({ ...validEnvironment, PILOT_PAYMENT_MODE: 'CARD' }),
+    ).toThrow('PILOT_PAYMENT_MODE must be CASH');
+  });
+
   it('rejects invalid origins and ports', () => {
     expect(() =>
       validateEnvironment({ ...validEnvironment, WEB_ORIGIN: 'file:///tmp' }),
@@ -48,5 +82,11 @@ describe('validateEnvironment', () => {
     expect(() =>
       validateEnvironment({ ...validEnvironment, TRUST_PROXY_HOPS: '-1' }),
     ).toThrow('TRUST_PROXY_HOPS');
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        API_BIND_HOST: 'public-host',
+      }),
+    ).toThrow('API_BIND_HOST');
   });
 });

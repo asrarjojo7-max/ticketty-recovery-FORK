@@ -82,7 +82,72 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
           <Button type="button" size="sm" variant="ghost" onClick={() => updateMutation.reset()}>إغلاق</Button>
         </div>
       ) : null}
-      <div className="overflow-x-auto"><Table>
+      <div className="space-y-3 p-3 md:hidden">
+        {trips.map((trip) => {
+          const action = nextAction(trip.status);
+          const ActionIcon = action?.icon;
+          const isUpdating = updateMutation.isPending && updateMutation.variables?.id === trip.id;
+          return (
+            <article key={trip.id} className="rounded-2xl border border-border bg-card p-4 shadow-card">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-base font-bold">{trip.route.name}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {trip.route.fromCity} ← {trip.route.toCity}
+                  </p>
+                </div>
+                <Badge variant={badgeVariants[trip.status]}>{tripStatusLabels[trip.status]}</Badge>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-muted/40 p-3 text-sm">
+                <div className="col-span-2">
+                  <dt className="text-xs text-muted-foreground">الانطلاق</dt>
+                  <dd className="mt-0.5 font-semibold">{formatTripDate(trip.departureAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">الحافلة</dt>
+                  <dd className="mt-0.5 font-semibold">{trip.bus.plateNumber}</dd>
+                  <dd className="text-xs text-muted-foreground">{trip.bus.model ?? trip.bus.seatTemplate.name}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">السائق</dt>
+                  <dd className="mt-0.5 font-semibold">{trip.driverName ?? "غير معيّن"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">الإشغال</dt>
+                  <dd className="mt-0.5 font-semibold">{trip._count.tickets} / {trip._count.tripSeats}</dd>
+                </div>
+              </dl>
+              {canManage && !["COMPLETED", "CANCELLED"].includes(trip.status) ? (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {action && ActionIcon ? (
+                    <Button
+                      type="button"
+                      className="col-span-2"
+                      disabled={isUpdating}
+                      onClick={() => updateMutation.mutate({ id: trip.id, input: { status: action.status } })}
+                    >
+                      {isUpdating ? <Loader2 className="animate-spin" /> : <ActionIcon />}
+                      {action.label}
+                    </Button>
+                  ) : null}
+                  <Button type="button" variant="outline" onClick={() => setTripToEdit(trip)}>
+                    <Pencil /> تعديل
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setTripToCancel(trip)}
+                  >
+                    <Ban /> إلغاء
+                  </Button>
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto md:block"><Table>
         <TableHeader>
           <TableRow>
             <TableHead>خط السير</TableHead>
@@ -164,11 +229,12 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
               <Input id="trip-cancellation-reason" value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} maxLength={500} placeholder="اكتب سببًا واضحًا لإلغاء الرحلة" autoFocus />
             </div>
             {cancelMutation.isError ? <p className="mt-3 text-sm text-destructive">{cancelMutation.error instanceof Error ? cancelMutation.error.message : "تعذر إلغاء الرحلة"}</p> : null}
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setTripToCancel(null)}>تراجع</Button>
               <Button
                 type="button"
                 variant="destructive"
+                className="sm:w-auto"
                 disabled={cancelMutation.isPending || cancellationReason.trim().length < 3}
                 onClick={() => cancelMutation.mutate(
                   { id: tripToCancel.id, reason: cancellationReason.trim() },

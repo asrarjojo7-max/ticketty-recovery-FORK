@@ -99,13 +99,7 @@ function HeroBand({
   permissions: string[];
 }) {
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-hero p-6 text-primary-foreground shadow-elevated lg:p-8">
-      <div className="bg-dot-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />
-      <div
-        className="pointer-events-none absolute -start-20 -top-24 h-72 w-72 rounded-full opacity-20 blur-3xl"
-        style={{ background: "var(--color-primary-glow)" }}
-        aria-hidden="true"
-      />
+    <section className="relative overflow-hidden rounded-2xl bg-brand-navy p-4 text-brand-navy-foreground shadow-card sm:p-5 lg:p-6">
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <RoleGreeting name={name} roleKey={roleKey} />
         <div className="flex flex-col gap-3">
@@ -143,7 +137,7 @@ const activityBadge: Record<ActivityStatus, { cls: string; label: string }> = {
 
 function RecentActivity({ data }: { data: ActivityItem[] }) {
   return (
-    <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-card">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
       {data.map((a, i) => (
         <div
           key={a.id}
@@ -278,7 +272,7 @@ export default function DashboardPage() {
       </section>
 
       {/* Upcoming trips + recent activity */}
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-3">
           <div className="flex items-end justify-between">
             <div>

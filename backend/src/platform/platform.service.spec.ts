@@ -157,14 +157,18 @@ describe('PlatformService.provisionTenant — SQL boundary translation', () => {
       if (error) throw error;
       return result;
     });
+    const executeRaw = jest.fn().mockResolvedValue(1);
     const prisma = {
       withPlatformRole: jest.fn((cb: never) =>
         Promise.resolve(
-          (cb as (tx: unknown) => unknown)({ $queryRaw: queryRaw }),
+          (cb as (tx: unknown) => unknown)({
+            $queryRaw: queryRaw,
+            $executeRaw: executeRaw,
+          }),
         ),
       ),
     };
-    return { prisma, queryRaw };
+    return { prisma, queryRaw, executeRaw };
   }
 
   it('maps PLATFORM_SLUG_TAKEN to a 409 ConflictException', async () => {
@@ -197,14 +201,15 @@ describe('PlatformService.provisionTenant — SQL boundary translation', () => {
     );
   });
 
-  it('provisions successfully and never leaks the password or hash', async () => {
-    const { prisma } = provisionMock([PROVISION_ROW]);
+  it('provisions successfully, marks the owner temporary, and never leaks credentials', async () => {
+    const { prisma, executeRaw } = provisionMock([PROVISION_ROW]);
     const service = new PlatformService(prisma as never);
     const result = await service.provisionTenant(platformAdmin(), DTO);
 
     expect(result.owner.email).toBe('owner@nile.sd');
     expect(result.owner.roleKey).toBe('OWNER');
     expect(result.owner.mustChangePassword).toBe(true);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(result.organization.slug).toBe('nile-transport');
 
     // الأمان: لا هَش ولا كلمة مرور في أي مكان من النتيجة

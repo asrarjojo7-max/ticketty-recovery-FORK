@@ -84,7 +84,8 @@ DECLARE
     'idempotency_records_organizationId_endpoint_key_key',
     'journal_entries_organizationId_entryNumber_key',
     'journal_entries_organizationId_sourceType_sourceId_key',
-    'accounting_events_organizationId_eventType_sourceId_key'
+    'accounting_events_organizationId_eventType_sourceId_key',
+    'tickets_organizationId_number_key'
   ];
   idx text;
 BEGIN
@@ -96,6 +97,17 @@ BEGIN
     END IF;
   END LOOP;
 END;
+
+-- 1.5 اشتراكات تاريخية متعددة مسموحة، لكن كل صف يجب أن يعود لمنظمة.
+IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE contype = 'f'
+    AND conname = 'subscriptions_organizationId_fkey'
+    AND conrelid = 'public.subscriptions'::regclass
+    AND convalidated
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [subscription-fk]: validated organization FK missing';
+END IF;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- القسم 2 — RLS: مفعّل + policy حقيقية على كل جدول tenant
@@ -110,7 +122,8 @@ DECLARE
     'commissions','expenses','expense_adjustments','settlements',
     'settlement_lines','manifests','accounts','journals','fiscal_periods',
     'journal_entries','journal_entry_lines','accounting_policies',
-    'accounting_events','idempotency_records','audit_logs'
+    'accounting_events','idempotency_records','audit_logs',
+    'organization_ticket_branding'
   ];
   tbl text; tbl_oid oid;
 BEGIN
@@ -192,11 +205,15 @@ IF EXISTS (
 END IF;
 
 -- 4.2 subscriptions: لا امتيازات جدول لأي دور تطبيق إطلاقاً (الوصول
---     حصراً عبر دوال SECURITY DEFINER بمنح محددة)
+--     حصراً عبر دوال SECURITY DEFINER بمنح محددة). لا نعتمد على اسم
+--     مستخدم migration المحلي؛ نفحص الأدوار التشغيلية صراحةً.
 IF EXISTS (
   SELECT 1 FROM information_schema.table_privileges
   WHERE table_name = 'subscriptions'
-    AND grantee != 'mojahed'
+    AND grantee IN (
+      'ticketty_runtime', 'ticketty_app', 'ticketty_auth',
+      'ticketty_platform', 'ticketty_accounting_worker'
+    )
 ) THEN
   RAISE EXCEPTION 'INVARIANT FAIL [subscriptions-grant]: application role holds table privilege on subscriptions — must be function-access only';
 END IF;
@@ -224,6 +241,82 @@ IF EXISTS (
     AND (rolsuper OR rolcreatedb OR rolcreaterole)
 ) THEN
   RAISE EXCEPTION 'INVARIANT FAIL [role-escalation]: application role has superuser/db-create/role-create';
+END IF;
+
+-- 4.5 هوية الاتصال الفعلية منفصلة عن مالك المخطط. يجب أن تكون LOGIN
+--     بلا امتيازات مباشرة وبـ NOINHERIT؛ التطبيق يبدّل الدور صراحة داخل
+--     كل معاملة إلى أحد الأدوار الأربعة المدققة.
+IF NOT EXISTS (
+  SELECT 1 FROM pg_roles
+  WHERE rolname = 'ticketty_runtime'
+    AND rolcanlogin
+    AND NOT rolinherit
+    AND NOT rolsuper
+    AND NOT rolbypassrls
+    AND NOT rolcreatedb
+    AND NOT rolcreaterole
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [runtime-login]: ticketty_runtime is missing or over-privileged';
+END IF;
+
+IF NOT (
+  pg_has_role('ticketty_runtime', 'ticketty_app', 'MEMBER')
+  AND pg_has_role('ticketty_runtime', 'ticketty_auth', 'MEMBER')
+  AND pg_has_role('ticketty_runtime', 'ticketty_platform', 'MEMBER')
+  AND pg_has_role('ticketty_runtime', 'ticketty_accounting_worker', 'MEMBER')
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [runtime-membership]: ticketty_runtime lacks an audited role membership';
+END IF;
+
+IF EXISTS (
+  SELECT 1 FROM information_schema.table_privileges
+  WHERE grantee = 'ticketty_runtime'
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [runtime-direct-grant]: ticketty_runtime has direct table privileges';
+END IF;
+
+IF EXISTS (
+  SELECT 1 FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname IN ('public', 'ticketty_security')
+    AND pg_get_userbyid(c.relowner) = 'ticketty_runtime'
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [runtime-ownership]: ticketty_runtime owns database objects';
+END IF;
+
+IF NOT has_function_privilege(
+  'ticketty_accounting_worker',
+  'ticketty_security.accounting_queue_depth()',
+  'EXECUTE'
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [worker-metrics-grant]: queue-depth function is unavailable to worker role';
+END IF;
+
+-- 4.6 temporary credentials are persisted and exposed only through the
+--     audited auth/platform SECURITY DEFINER boundaries.
+IF NOT EXISTS (
+  SELECT 1 FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'users'
+    AND column_name = 'mustChangePassword' AND is_nullable = 'NO'
+    AND column_default = 'false'
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [temporary-password-column]: users.mustChangePassword is missing or nullable';
+END IF;
+
+IF position('must_change_password' IN pg_get_function_result(
+  'ticketty_security.auth_user_by_email(text)'::regprocedure
+)) = 0 OR position('must_change_password' IN pg_get_function_result(
+  'ticketty_security.auth_user_by_id(text)'::regprocedure
+)) = 0 THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [temporary-password-auth]: auth functions do not expose the persisted flag';
+END IF;
+
+IF NOT has_function_privilege(
+  'ticketty_platform',
+  'ticketty_security.platform_mark_temporary_password(text)',
+  'EXECUTE'
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [temporary-password-platform]: platform marker is unavailable';
 END IF;
 
 -- ═══════════════════════════════════════════════════════════════════════

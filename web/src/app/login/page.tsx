@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { LoginForm } from "@/app/login-form";
 
 export const metadata: Metadata = {
@@ -17,6 +19,7 @@ export default function LoginPage() {
     <main className="login-page">
       <section className="login-panel">
         <div className="login-card">
+          <Link href="/" className="login-back"><ArrowRight aria-hidden="true" size={16} /> العودة للرئيسية</Link>
           <div className="mobile-brand">
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
             <img

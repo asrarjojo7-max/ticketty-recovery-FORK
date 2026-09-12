@@ -158,7 +158,7 @@ export function CreateRouteForm({ route, onCreated, onCancel }: CreateRouteFormP
         </p>
       ) : null}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {onCancel ? <Button type="button" variant="outline" onClick={onCancel}>إلغاء</Button> : null}
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? <Loader2 className="animate-spin" /> : null}

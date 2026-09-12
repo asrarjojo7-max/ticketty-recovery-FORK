@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MetricsRegistryService } from '../monitoring/metrics-registry.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -20,6 +21,7 @@ export class HealthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsRegistryService,
+    private readonly config: ConfigService,
   ) {}
 
   liveness() {
@@ -40,7 +42,8 @@ export class HealthService {
     // يُكتب إلا بعد أول دورة كاملة؛ 0 = لم يكتمل بعد (خمول dev
     // شائع) → -1 = "غير معروف بعد" — degraded فقط، لا not-ready.
     // prom-client v15: Gauge.get() وعد يعيد {values} — نستخرج
-    // قيمة الليبل الفارغ (العداد scalar بلا ليبلات).
+    // قيمة الليبل الفارغ (العداد scalar بلا ليبلات). غياب النجاح لا
+    // يُحوّل إلى رقم سالب يبدو سليماً: worker المفعّل يصبح degraded.
     const [lastSuccessAgg, failuresAgg] = await Promise.all([
       this.metrics.accountingWorkerLastSuccess.get(),
       this.metrics.accountingWorkerConsecutiveFailures.get(),
@@ -50,11 +53,29 @@ export class HealthService {
     const secondsSinceSuccess =
       lastSuccess > 0
         ? Math.max(0, Math.round(Date.now() / 1000 - lastSuccess))
-        : -1;
+        : null;
+    const enabled =
+      this.config.get<string>('ACCOUNTING_WORKER_ENABLED') === 'true';
+    const staleAfterSeconds = 15 * 60;
+    const workerState = !enabled
+      ? ('disabled' as const)
+      : lastSuccess <= 0
+        ? ('never_succeeded' as const)
+        : failures > 0
+          ? ('failing' as const)
+          : secondsSinceSuccess !== null &&
+              secondsSinceSuccess > staleAfterSeconds
+            ? ('stale' as const)
+            : ('healthy' as const);
     return {
-      status: 'ready' as const,
+      status:
+        workerState === 'healthy' || workerState === 'disabled'
+          ? ('ready' as const)
+          : ('degraded' as const),
       database: 'up' as const,
       accountingWorker: {
+        enabled,
+        state: workerState,
         secondsSinceLastSuccess: secondsSinceSuccess,
         consecutiveFailures: failures,
       },

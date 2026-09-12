@@ -22,6 +22,8 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
   let organizationId: string;
   let agentOneId: string;
   let agentTwoId: string;
+  let ticketOneId: string;
+  let ticketTwoId: string;
   let userOne: AuthUser;
 
   beforeAll(async () => {
@@ -153,8 +155,12 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
           receivedById: index ? userTwoId : userOneId,
         },
       });
+      const ticketId = `test-agent-ticket-${index}-${suffix}`;
+      if (index === 0) ticketOneId = ticketId;
+      else ticketTwoId = ticketId;
       await owner.ticket.create({
         data: {
+          id: ticketId,
           organizationId,
           bookingId,
           tripId,
@@ -186,6 +192,7 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
       permissions: [
         'bookings.read.own',
         'tickets.read.own',
+        'tickets.write.own',
         'payments.read.own',
         'agents.read.own',
         'settlements.read.own',
@@ -242,5 +249,23 @@ describe('external agent ownership isolation (PostgreSQL)', () => {
         agentsService.findOne(userOne, agentTwoId),
       ),
     ).rejects.toThrow();
+  });
+
+  it('prevents an own-scope agent from marking another agent ticket printed', async () => {
+    await expect(
+      prisma.withTenantContext(organizationId, () =>
+        ticketsService.markPrinted(userOne, ticketTwoId),
+      ),
+    ).rejects.toThrow();
+    const otherTicket = await owner.ticket.findUniqueOrThrow({
+      where: { id: ticketTwoId },
+    });
+    expect(otherTicket.printedAt).toBeNull();
+
+    const ownResult = await prisma.withTenantContext(organizationId, () =>
+      ticketsService.markPrinted(userOne, ticketOneId),
+    );
+    expect(ownResult).toMatchObject({ id: ticketOneId, printed: true });
+    expect(ownResult).not.toHaveProperty('passengerName');
   });
 });

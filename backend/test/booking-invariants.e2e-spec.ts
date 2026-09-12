@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * BOOKING INVARIANTS (Phase 4 — عقد الهندسة: "اختبارات للـ invariants
@@ -77,13 +78,12 @@ describe('booking invariants (Phase 4)', () => {
     tenantOrgId = (provisioned.body as { organization: { id: string } })
       .organization.id;
 
-    const tenantLogin = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `owner-${slug}@ticketty.local`,
-        password: 'Booking-Inv-Passw0rd-2026',
-      });
-    tenantToken = (tenantLogin.body as { access_token: string }).access_token;
+    tenantToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      'Booking-Inv-Passw0rd-2026',
+      'Booking-Inv-Permanent-2026!',
+    );
 
     // أسطول + خط — نوافذ زمنية متباعدة لتفادي قيد التراكب
     const templateRes = await request(server)
@@ -280,6 +280,60 @@ describe('booking invariants (Phase 4)', () => {
       where: { idempotencyKey: key },
     });
     expect(bookingsWithKey).toBe(1);
+  });
+
+  it('concurrent duplicate submissions return one durable booking result', async () => {
+    const tripId = await freshTrip();
+    const seat = await freeSeat(tripId);
+    const key = `inv-concurrent-replay-${suffix}`;
+
+    const [first, second] = await Promise.all([
+      book(tripId, [seat.id], key),
+      book(tripId, [seat.id], key),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect((first.body as { id: string }).id).toBe(
+      (second.body as { id: string }).id,
+    );
+    await expect(
+      admin.booking.count({
+        where: { organizationId: tenantOrgId, idempotencyKey: key },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      admin.payment.count({
+        where: { organizationId: tenantOrgId, idempotencyKey: key },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('rejects reusing a completed sale key with a different payload', async () => {
+    const tripId = await freshTrip();
+    const firstSeat = await freeSeat(tripId);
+    const seatsRes = await request(server)
+      .get(`/api/trips/${tripId}/seats`)
+      .set('Authorization', `Bearer ${tenantToken}`);
+    const secondSeat = (
+      seatsRes.body as { seats: Array<{ id: string; status: string }> }
+    ).seats.find(
+      (seat) => seat.status === 'AVAILABLE' && seat.id !== firstSeat.id,
+    );
+    expect(secondSeat).toBeTruthy();
+    const key = `inv-key-mismatch-${suffix}`;
+
+    expect((await book(tripId, [firstSeat.id], key)).status).toBe(201);
+    const mismatch = await book(tripId, [secondSeat!.id], key);
+
+    expect(mismatch.status).toBe(409);
+    expect((mismatch.body as { message: string }).message).toContain(
+      'محتوى مختلف',
+    );
+    const untouched = await admin.tripSeat.findUniqueOrThrow({
+      where: { id: secondSeat!.id },
+    });
+    expect(untouched.status).toBe('AVAILABLE');
   });
 
   it('idempotent replay after hold expiry returns the same booking (⑤)', async () => {

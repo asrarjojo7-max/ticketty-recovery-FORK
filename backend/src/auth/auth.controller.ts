@@ -7,9 +7,11 @@ import {
   Post,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { AllowPendingPasswordChange } from '../common/decorators/allow-pending-password-change.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { SubscriptionPolicy } from '../common/decorators/subscription-policy.decorator';
 import { AuditService } from '../common/audit/audit.service';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -30,6 +32,11 @@ export class AuthController {
     return this.authService.login(dto.email, dto.password);
   }
 
+  @AllowPendingPasswordChange()
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'Session inspection is required to route temporary-password users',
+  })
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return { user };
@@ -39,6 +46,11 @@ export class AuthController {
    * تدقيق P1-3: تغيير كلمة المرور — يبطل كل الجلسات الأقدم (طابع زمني
    * يقارنه JwtAuthGuard بـ iat كل توكِن).
    */
+  @AllowPendingPasswordChange()
+  @SubscriptionPolicy({
+    mode: 'exempt',
+    reason: 'Password remediation must remain available for every tenant',
+  })
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('change-password')
   @HttpCode(HttpStatus.OK)

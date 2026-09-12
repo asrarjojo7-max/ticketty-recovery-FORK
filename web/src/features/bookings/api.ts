@@ -4,6 +4,7 @@ import type {
   BookingFilters,
   CreateBookingInput,
   SeatHoldResponse,
+  TicketValidationResult,
   TripSeatsResponse,
 } from "./types";
 
@@ -51,4 +52,46 @@ export function cancelBooking(id: string, reason: string): Promise<Booking> {
     headers: { "Idempotency-Key": crypto.randomUUID() },
     body: { reason },
   });
+}
+
+/** تسجيل طباعة التذكرة في سجل التدقيق (من طبع ومتى). */
+export function markTicketPrinted(
+  ticketId: string,
+): Promise<{ id: string; printedAt: string; printed: true }> {
+  return apiClient<{ id: string; printedAt: string; printed: true }>(
+    `/tickets/${encodeURIComponent(ticketId)}/printed`,
+    {
+      method: "POST",
+      body: { printed: true },
+    },
+  );
+}
+
+/** التحقق الرسمي من الباركود/رقم التذكرة — الخادم هو مصدر السلطة. */
+export function validateTicket(
+  code: string,
+  tripId?: string,
+): Promise<TicketValidationResult> {
+  return apiClient<TicketValidationResult>("/tickets/validate", {
+    method: "POST",
+    body: { code, ...(tripId ? { tripId } : {}) },
+  });
+}
+
+/** بيانات الشركة للتذكرة (الاسم/الهاتف/شروط السفر المطبوعة). */
+export function fetchOrganizationForTicket(): Promise<{
+  name: string;
+  phone: string | null;
+  ticketTerms: string | null;
+  ticketBranding: {
+    tagline: string | null;
+    primaryColor: string;
+    secondaryColor: string;
+    checkInMinutes: number;
+    baggagePieces: number;
+    logoUrl: string | null;
+    busImageUrl: string | null;
+  };
+}> {
+  return apiClient("/administration/organization/ticket-profile");
 }

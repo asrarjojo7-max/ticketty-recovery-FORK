@@ -12,8 +12,16 @@ export async function GET() {
     if (!response.ok) {
       throw new Error("Backend is not ready");
     }
+    const result = (await response.json()) as {
+      status?: "ready" | "degraded";
+      accountingWorker?: { state?: string };
+    };
 
-    return NextResponse.json({ status: "ready", backend: "up" });
+    return NextResponse.json({
+      status: result.status === "degraded" ? "degraded" : "ready",
+      backend: "up",
+      accountingWorker: result.accountingWorker?.state ?? "unknown",
+    });
   } catch {
     return NextResponse.json(
       { status: "not_ready", backend: "down" },

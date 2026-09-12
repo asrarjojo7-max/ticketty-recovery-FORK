@@ -17,6 +17,7 @@ import { BusSeatMap } from "./bus-seat-map";
 import { SeatHoldTimer } from "./seat-hold-timer";
 import { TicketPreview } from "./ticket-preview";
 import { useHoldSeat, useReleaseSeat, useTripSeats } from "../hooks/use-trip-seats";
+import { useOrganizationForTicket } from "../hooks/use-organization";
 import type { Booking, TripSeat } from "../types";
 
 function hasPermission(permissions: string[], permission: string): boolean {
@@ -35,6 +36,7 @@ export function BookingsFeature() {
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const seatsQuery = useTripSeats(selectedTripId);
+  const orgQuery = useOrganizationForTicket();
   const holdMutation = useHoldSeat(selectedTripId ?? "");
   const releaseMutation = useReleaseSeat(selectedTripId ?? "");
   const canBook = hasPermission(user.permissions, "bookings.write");
@@ -113,7 +115,7 @@ export function BookingsFeature() {
           ) : (
             <select
               id="booking-trip"
-              className="flex h-11 w-full rounded-xl border border-input bg-card px-3.5 text-sm shadow-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10"
+              className="flex h-11 w-full rounded-xl border border-input bg-card px-3.5 text-base shadow-sm md:h-10 md:text-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10"
               value={selectedTripId ?? ""}
               onChange={(event) => void changeTrip(event.target.value)}
             >
@@ -164,7 +166,11 @@ export function BookingsFeature() {
             <CardContent className="p-5">
               {selectedSeats.length && selectedTrip ? (
                 <>
-                {holdMutation.data?.expiresAt ? <SeatHoldTimer expiresAt={holdMutation.data.expiresAt} onExpired={() => void releaseSelectedSeats()} /> : null}
+                {holdMutation.data?.expiresAt ? (
+                  <div className="hidden lg:block">
+                    <SeatHoldTimer expiresAt={holdMutation.data.expiresAt} onExpired={() => void releaseSelectedSeats()} />
+                  </div>
+                ) : null}
                 <BookingForm
                   key={selectedSeatIds.join("-")}
                   trip={selectedTrip}
@@ -182,9 +188,23 @@ export function BookingsFeature() {
         </div>
       )}
 
+      {selectedSeats.length && holdMutation.data?.expiresAt ? (
+        <div
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] shadow-elevated backdrop-blur lg:hidden"
+          role="status"
+          aria-live="polite"
+        >
+          <SeatHoldTimer
+            expiresAt={holdMutation.data.expiresAt}
+            onExpired={() => void releaseSelectedSeats()}
+            embedded
+          />
+        </div>
+      ) : null}
+
       <BookingHistory canManage={canBook} />
 
-      {completedBooking && selectedTrip ? <TicketPreview booking={completedBooking} trip={selectedTrip} onClose={() => setCompletedBooking(null)} /> : null}
+      {completedBooking && selectedTrip ? <TicketPreview booking={completedBooking} trip={selectedTrip} organization={orgQuery.data ?? undefined} onClose={() => setCompletedBooking(null)} /> : null}
     </div>
   );
 }

@@ -30,7 +30,12 @@ test.describe("accounting events visibility", () => {
     // المنظمة التجريبية عليها أحداث POSTED (استُنزفت في BLOCKER-1)
     // — إما «كلها مرحّلة» أو شارة عدد غير مرحّل. المهم: الجدول
     // يعرض أحداث بأعمدتها (النوع بالعربية + حالة مرحّل + رقم القيد).
-    const postedBadge = page.getByText("مرحّل", { exact: true }).first();
+    // ملاحظة: بطاقات md:hidden للهاتف تُعرض في الـDOM أيضًا — نستهدف
+    // حالة «مرحّل» المرئية تحديدًا حتى لا يلتقط locator أول بطاقة مخفية.
+    const postedBadge = page
+      .getByText("مرحّل", { exact: true })
+      .filter({ visible: true })
+      .first();
     const emptyQueue = page.getByText("لا توجد أحداث محاسبية");
     const postedOrEmpty = await postedBadge
       .or(emptyQueue)
@@ -44,8 +49,9 @@ test.describe("accounting events visibility", () => {
     // تصل من /accounting/events عبر الـ BFF وليس حالة فراغ زائفة)
     const typeLabel = page
       .getByText("استلام دفعة", { exact: true })
-      .or(page.getByText("استرداد مكتمل", { exact: true }))
-      .or(page.getByText("تسوية وكيل", { exact: true }))
+      .filter({ visible: true })
+      .or(page.getByText("استرداد مكتمل", { exact: true }).filter({ visible: true }))
+      .or(page.getByText("تسوية وكيل", { exact: true }).filter({ visible: true }))
       .first();
     if (postedOrEmpty === "visible" && (await emptyQueue.count()) === 0) {
       await expect(typeLabel).toBeVisible({ timeout: 10_000 });

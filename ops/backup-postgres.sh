@@ -26,7 +26,10 @@ pg_dump "$postgres_url" \
   --file "$tmp_file"
 
 mv "$tmp_file" "$final_file"
-sha256sum "$final_file" > "$final_file.sha256"
+(
+  cd "$backup_dir"
+  sha256sum "$(basename "$final_file")" > "$(basename "$final_file").sha256"
+)
 trap - EXIT
 
 printf 'Backup created: %s\nChecksum: %s\n' "$final_file" "$final_file.sha256"

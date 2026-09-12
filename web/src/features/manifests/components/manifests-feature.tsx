@@ -83,7 +83,7 @@ export function ManifestsFeature() {
       <Card className="no-print">
         <CardContent className="flex flex-col gap-3 p-5 sm:flex-row">
           <select
-            className="h-11 flex-1 rounded-xl border border-input bg-card px-3 text-sm"
+            className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-card px-3 text-base md:h-10 md:text-sm"
             value={tripId ?? ""}
             onChange={(e) => setTripId(e.target.value || null)}
             aria-label="اختر الرحلة"
@@ -141,14 +141,14 @@ export function ManifestsFeature() {
                 {manifest.data.totals.passengers} راكب في القائمة
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => window.print()}>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Button variant="outline" className="sm:w-auto" onClick={() => window.print()}>
                 <Printer /> طباعة المستند
               </Button>
               {canManage &&
               manifest.data.manifest &&
               !manifest.data.manifest.lockedAt ? (
-                <Button onClick={() => setConfirmLock(true)}>
+                <Button className="sm:w-auto" onClick={() => setConfirmLock(true)}>
                   <Lock /> قفل ومغادرة
                 </Button>
               ) : null}
@@ -226,7 +226,30 @@ export function ManifestsFeature() {
               </div>
             </div>
 
-            <div className="overflow-x-auto py-4">
+            <div className="space-y-3 py-4 md:hidden print:hidden">
+              {tickets.map((t, i) => (
+                <article key={t.id} className="rounded-xl border border-foreground/20 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold">
+                      <span className="text-muted-foreground">{i + 1}. </span>
+                      {t.passengerName}
+                    </h3>
+                    <span className="font-bold" dir="ltr">{t.seatLabel}</span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-[13px]">
+                    <div><dt className="text-[11px] text-muted-foreground">الهوية</dt><dd dir="ltr">{t.passengerNationalId ?? "—"}</dd></div>
+                    <div><dt className="text-[11px] text-muted-foreground">الهاتف</dt><dd dir="ltr">{t.passengerPhone}</dd></div>
+                    <div><dt className="text-[11px] text-muted-foreground">من</dt><dd>{t.boardingStop ?? "—"}</dd></div>
+                    <div><dt className="text-[11px] text-muted-foreground">إلى</dt><dd>{t.dropOffStop ?? "—"}</dd></div>
+                  </dl>
+                </article>
+              ))}
+              {tickets.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">لا ركاب في هذه الرحلة بعد</p>
+              ) : null}
+            </div>
+
+            <div className="hidden overflow-x-auto py-4 md:block print:block">
               <Table>
                 <TableHeader>
                   <TableRow className="border-foreground/30">
@@ -313,7 +336,7 @@ export function ManifestsFeature() {
                 <X />
               </Button>
             </div>
-            <div className="mt-6 flex justify-end gap-2">
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={() => setConfirmLock(false)}>
                 تراجع
               </Button>

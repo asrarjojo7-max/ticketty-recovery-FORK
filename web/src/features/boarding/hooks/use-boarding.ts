@@ -1,12 +1,17 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { checkInTicket, fetchTicketById, fetchTicketByQr } from "../api";
+import { validateTicketCode, checkInTicket } from "../api";
 
-export function useFindTicket() {
+/**
+ * التحقق الرسمي من التذكرة — مسار واحد لكل المصادر (كاميرا/يدوي):
+ * الخادم يسترجع التذكرة الحقيقية من التوكِن/الرقم ويعيد حالة معيارية.
+ * لا نتحقق محليًا أبدًا — الباركود مجرد مفتاح استرجاع.
+ */
+export function useBoardingValidate() {
   return useMutation({
-    mutationFn: ({ value, mode }: { value: string; mode: "code" | "id" }) =>
-      mode === "code" ? fetchTicketByQr(value) : fetchTicketById(value),
+    mutationFn: (input: { code: string; tripId?: string }) =>
+      validateTicketCode(input.code, input.tripId),
   });
 }
 
@@ -17,6 +22,7 @@ export function useCheckInTicket() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["trip-seats"] });
     },
   });
 }

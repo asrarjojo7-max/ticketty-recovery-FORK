@@ -66,7 +66,7 @@ export function TripCards({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-2 xl:mx-0 xl:block xl:space-y-3 xl:overflow-visible xl:px-0 xl:pb-0">
       {sellable.map((trip) => {
         const active = trip.id === selectedId;
         const capacity = trip.bus?.seatTemplate
@@ -80,7 +80,7 @@ export function TripCards({
             onClick={() => onSelect(trip.id)}
             aria-pressed={active}
             className={cn(
-              "w-full rounded-2xl border p-4 text-start shadow-card transition",
+              "w-[82vw] max-w-sm shrink-0 snap-start rounded-2xl border p-4 text-start shadow-card transition xl:w-full xl:max-w-none",
               active
                 ? "border-primary bg-primary-soft ring-2 ring-primary/30"
                 : "border-border bg-card hover:-translate-y-0.5 hover:shadow-elevated",

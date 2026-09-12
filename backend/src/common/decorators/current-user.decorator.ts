@@ -9,6 +9,7 @@ export interface AuthUser {
   email: string;
   roleKey: string;
   permissions: string[];
+  mustChangePassword?: boolean;
   /**
    * حالة اشتراك المنظمة من قراءة DB لكل طلب (auth_user_by_id v3):
    * TRIALING | ACTIVE | PAST_DUE (مهلة سماح 7 أيام) | EXPIRED |

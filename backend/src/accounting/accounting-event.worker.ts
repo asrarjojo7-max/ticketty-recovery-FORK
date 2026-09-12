@@ -45,10 +45,8 @@ export class AccountingEventWorker implements OnModuleInit, OnModuleDestroy {
    *  جديدة — الاستعلام SELECT صرف على جدول له SELECT بالفعل. */
   private async observeQueueDepth(): Promise<void> {
     try {
-      const rows = await this.prisma.$queryRaw<
-        Array<{ status: string; count: bigint }>
-      >`SELECT status, count(*)::int AS count FROM accounting_events GROUP BY status`;
-      const byStatus = new Map(rows.map((r) => [r.status, Number(r.count)]));
+      const rows = await this.prisma.accountingQueueDepth();
+      const byStatus = new Map(rows.map((row) => [row.status, row.count]));
       for (const status of ['PENDING', 'FAILED', 'POSTED']) {
         this.metrics.accountingQueueDepth.set(
           { status },

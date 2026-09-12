@@ -52,6 +52,7 @@ export function DataTable<TData>({
   emptyDesc,
   toolbar,
   onRetry,
+  renderMobileCard,
   className,
 }: {
   columns: ColumnDef<TData, unknown>[];
@@ -69,6 +70,8 @@ export function DataTable<TData>({
   emptyDesc?: string;
   toolbar?: ReactNode;
   onRetry?: () => void;
+  /** ترتيب مخصص لبطاقة الهاتف؛ الجداول تبقى دلالية على الشاشات الأكبر. */
+  renderMobileCard?: (row: TData, index: number) => ReactNode;
   className?: string;
 }) {
   const [globalFilter, setGlobalFilter] = useState("");
@@ -121,7 +124,16 @@ export function DataTable<TData>({
         <EmptyState icon={emptyIcon} title={emptyTitle} desc={emptyDesc} />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
-          <div className="overflow-x-auto">
+          {renderMobileCard ? (
+            <div className="divide-y divide-border md:hidden">
+              {rows.map((row, index) => (
+                <div key={index} className="p-4">
+                  {renderMobileCard(row, index)}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className={cn("overflow-x-auto", renderMobileCard && "hidden md:block")}>
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((hg) => (
@@ -169,7 +181,7 @@ export function DataTable<TData>({
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-11 w-11 md:h-9 md:w-9"
                 disabled={page <= 1 || isLoading}
                 onClick={() => onPageChange(page - 1)}
                 aria-label="الصفحة السابقة"
@@ -182,7 +194,7 @@ export function DataTable<TData>({
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8"
+                className="h-11 w-11 md:h-9 md:w-9"
                 disabled={isLastPage || isLoading}
                 onClick={() => onPageChange(page + 1)}
                 aria-label="الصفحة التالية"

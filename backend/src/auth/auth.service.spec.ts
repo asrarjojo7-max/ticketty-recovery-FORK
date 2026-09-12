@@ -44,6 +44,8 @@ describe('AuthService', () => {
       roleKey: 'OWNER',
       permissions: ['*'],
       organizationActive: true,
+      passwordChangedAt: new Date('2026-09-12T12:00:00.123Z'),
+      mustChangePassword: true,
     });
     signAsync.mockResolvedValue('signed-token');
     createAuditLog.mockResolvedValue({ id: 'audit-1' });
@@ -56,7 +58,11 @@ describe('AuthService', () => {
     expect(findAuthUserByEmail).toHaveBeenCalledWith('owner@ticketty.sd');
     expect(recordSuccessfulLogin).toHaveBeenCalledWith('user-1');
     expect(signAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ sub: 'user-1', orgId: 'org-1' }),
+      expect.objectContaining({
+        sub: 'user-1',
+        orgId: 'org-1',
+        credentialChangedAt: 1_789_214_400_123,
+      }),
     );
     expect(withTenantContext).toHaveBeenCalledWith(
       'org-1',
@@ -73,6 +79,7 @@ describe('AuthService', () => {
     });
     expect(result.access_token).toBe('signed-token');
     expect(result.user.permissions).toEqual(['*']);
+    expect(result.user.mustChangePassword).toBe(true);
   });
 
   it('records a wrong password without signing a token', async () => {
@@ -139,5 +146,53 @@ describe('AuthService', () => {
       service.login('owner@ticketty.sd', 'strong-password'),
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(signAsync).not.toHaveBeenCalled();
+  });
+
+  it('atomically clears the temporary-password requirement on change', async () => {
+    const currentHash = await bcrypt.hash('Temporary-Passw0rd!', 4);
+    type PasswordUpdate = {
+      where: { id: string; passwordHash: string };
+      data: {
+        passwordHash: string;
+        passwordChangedAt: Date;
+        mustChangePassword: boolean;
+        failedLoginAttempts: number;
+        lockedUntil: null;
+      };
+    };
+    const updateMany = jest.fn(
+      (input: PasswordUpdate): Promise<{ count: number }> => {
+        void input;
+        return Promise.resolve({ count: 1 });
+      },
+    );
+    const changePrisma = {
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          passwordHash: currentHash,
+          active: true,
+          organizationId: 'org-1',
+        },
+      ]),
+      user: { updateMany },
+    } as unknown as PrismaService;
+    const changeService = new AuthService(changePrisma, jwt);
+
+    await changeService.changePassword(
+      { sub: 'user-1', orgId: 'org-1' },
+      'Temporary-Passw0rd!',
+      'Permanent-Passw0rd!',
+    );
+
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    const update = updateMany.mock.calls[0][0];
+    expect(update.where).toEqual({
+      id: 'user-1',
+      passwordHash: currentHash,
+    });
+    expect(update.data.mustChangePassword).toBe(false);
+    expect(update.data.failedLoginAttempts).toBe(0);
+    expect(update.data.lockedUntil).toBeNull();
+    expect(update.data.passwordChangedAt).toBeInstanceOf(Date);
   });
 });

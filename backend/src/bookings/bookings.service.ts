@@ -24,7 +24,10 @@ import {
   requireIdempotencyKey,
 } from '../common/idempotency';
 import { tenantScope } from '../common/org';
-import { lockTripTransaction } from '../common/transaction-locks';
+import {
+  lockTicketNumberSequence,
+  lockTripTransaction,
+} from '../common/transaction-locks';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookingDto, HoldSeatDto, QueryBookingDto } from './dto';
 
@@ -36,20 +39,20 @@ const HOLD_MINUTES = 10;
  * رقم التذكرة الرسمي: TK-<سنة>-<تسلسل 6 أرقام>.
  *
  * التسلسل يبدأ من أعلى رقم قائم داخل نفس السنة +1، ويُحجز داخل
- * معاملة الحجز نفسها (قفل الرحلة يمنع التسلسل المتزامن من الازدواج
- * داخل نفس الرحلة، وUNIQUE على tickets.number يمنع الازدواج كليًا).
+ * معاملة الحجز نفسها تحت قفل PostgreSQL خاص بالمنظمة والسنة. قفل
+ * الرحلة وحده لا يكفي لأن مبيعات رحلتين مختلفتين قد تتزامن.
  * صيغة قابلة للقراءة والبحث والطباعة: TK-2026-000184.
  */
 /**
  * أول رقم متاح في تسلسل المنظمة لهذه السنة — يُقرأ مرة واحدة داخل
- * المعاملة (قفل advisory الرحلة يحمي التزامن بين الحجوزات)، ثم
- * تزيد الوحدة المستدعية محليًا لكل مقعد إضافي.
+ * المعاملة بعد أخذ قفل تخصيص المنظمة/السنة، ثم تزيد الوحدة المستدعية
+ * محليًا لكل مقعد إضافي.
  */
 async function nextTicketSequence(
   tx: Prisma.TransactionClient,
   organizationId: string,
+  year = new Date().getUTCFullYear(),
 ): Promise<number> {
-  const year = new Date().getUTCFullYear();
   const prefix = `TK-${year}-`;
   const latest = await tx.ticket.findFirst({
     where: { organizationId, number: { startsWith: prefix } },
@@ -64,8 +67,10 @@ async function nextTicketSequence(
     : 1;
 }
 
-function formatTicketNumber(sequence: number): string {
-  const year = new Date().getUTCFullYear();
+function formatTicketNumber(
+  sequence: number,
+  year = new Date().getUTCFullYear(),
+): string {
   return `TK-${year}-${String(sequence).padStart(6, '0')}`;
 }
 
@@ -165,49 +170,48 @@ export class BookingsService {
     } else if (!dto.passengerName || !dto.passengerPhone) {
       throw new BadRequestException('بيانات المسافر مطلوبة');
     }
-    if (
-      !idempotencyKey ||
-      idempotencyKey.length < 8 ||
-      idempotencyKey.length > 128
-    ) {
-      throw new BadRequestException(
-        'يلزم إرسال Idempotency-Key صالح لإتمام الحجز',
-      );
-    }
-    const replayAgentId = await resolveAgentId(this.prisma, user);
-    const replay = await this.prisma.booking.findFirst({
-      where: {
-        idempotencyKey,
-        ...tenantScope(user),
-        ...(replayAgentId ? { agentId: replayAgentId } : {}),
-      },
-      include: {
-        tickets: true,
-        payments: true,
-        customer: true,
-        trip: { include: { route: true } },
-      },
-    });
-    if (replay) return replay;
+    const key = requireIdempotencyKey(idempotencyKey);
+    const requestHash = idempotencyRequestHash(dto);
 
     return this.prisma.$transaction(async (tx) => {
-      await lockTripTransaction(tx, orgId, dto.tripId);
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:${idempotencyKey}`}))`;
+      const operation = await beginIdempotentOperation(
+        tx,
+        orgId,
+        'bookings.create',
+        key,
+        requestHash,
+      );
       const principalAgentId = await resolveAgentId(tx, user);
-      const concurrentReplay = await tx.booking.findFirst({
-        where: {
-          idempotencyKey,
-          ...tenantScope(user),
-          ...(principalAgentId ? { agentId: principalAgentId } : {}),
-        },
-        include: {
-          tickets: true,
-          payments: true,
-          customer: true,
-          trip: { include: { route: true } },
-        },
-      });
-      if (concurrentReplay) return concurrentReplay;
+      if (operation.replay) {
+        if (
+          operation.record.status !== 'COMPLETED' ||
+          operation.record.resourceType !== 'Booking' ||
+          !operation.record.resourceId
+        ) {
+          throw new ConflictException(
+            'عملية البيع السابقة ما زالت قيد المعالجة',
+          );
+        }
+        const replay = await tx.booking.findFirst({
+          where: {
+            id: operation.record.resourceId,
+            ...tenantScope(user),
+            ...(principalAgentId ? { agentId: principalAgentId } : {}),
+          },
+          include: {
+            tickets: true,
+            payments: true,
+            customer: true,
+            trip: { include: { route: true } },
+          },
+        });
+        if (!replay) {
+          throw new ConflictException('تعذر استعادة نتيجة عملية البيع السابقة');
+        }
+        return replay;
+      }
+
+      await lockTripTransaction(tx, orgId, dto.tripId);
 
       const trip = await tx.trip.findFirst({
         where: { id: dto.tripId, ...tenantScope(user) },
@@ -282,15 +286,15 @@ export class BookingsService {
       }
 
       // أرقام تذاكر متسلسلة (TK-YYYY-NNNNNN) — تُحجز داخل المعاملة،
-      // وكل مقعد يأخذ الرقم التالي بالترتيب.
-      // القراءة مرة واحدة ثم زيادة محلية: القراءة المتكررة كانت تعيد
-      // نفس «الأحدث» (لا شيء مكتوب بعد) فتتطابق أرقام المقاعد المتعددة
-      // ويُرفض الحجز بخرق UNIQUE على tickets.number (P2002).
-      // التزامن بين الحجوزات محمي بقفل advisory الرحلة أعلاه.
+      // وكل مقعد يأخذ الرقم التالي بالترتيب. القفل هنا على المنظمة
+      // والسنة، لا الرحلة، لذلك تتسلسل أيضاً مبيعات رحلتين مختلفتين
+      // من عمليات/نسخ تطبيق متوازية.
+      const ticketYear = new Date().getUTCFullYear();
+      await lockTicketNumberSequence(tx, orgId, ticketYear);
       const ticketNumbers: string[] = [];
-      let nextSeq = await nextTicketSequence(tx, orgId);
+      let nextSeq = await nextTicketSequence(tx, orgId, ticketYear);
       for (let i = 0; i < claimed.length; i += 1) {
-        ticketNumbers.push(formatTicketNumber(nextSeq));
+        ticketNumbers.push(formatTicketNumber(nextSeq, ticketYear));
         nextSeq += 1;
       }
 
@@ -299,7 +303,7 @@ export class BookingsService {
           organizationId: orgId,
           branchId: user.branchId ?? trip.branchId,
           tripId: dto.tripId,
-          idempotencyKey,
+          idempotencyKey: key,
           customerId: dto.customerId ?? null,
           agentId: effectiveAgentId ?? null,
           createdById: user.sub,
@@ -332,7 +336,7 @@ export class BookingsService {
             create: {
               organizationId: orgId,
               branchId: user.branchId ?? trip.branchId,
-              idempotencyKey,
+              idempotencyKey: key,
               amount: total,
               method: dto.paymentMethod,
               reference: dto.paymentReference,
@@ -400,6 +404,12 @@ export class BookingsService {
         seats: claimed.length,
         amount: total.toFixed(2),
       });
+      await completeIdempotentOperation(
+        tx,
+        operation.record.id,
+        'Booking',
+        booking.id,
+      );
       return booking;
     });
   }

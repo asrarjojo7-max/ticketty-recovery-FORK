@@ -17,7 +17,7 @@ import { useTrips } from "../hooks/use-trips";
 import type { TransportRoute, TripFilters, TripStatus } from "../types";
 
 const selectClass =
-  "flex h-10 rounded-xl border border-input bg-card px-3.5 py-1 text-sm shadow-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10";
+  "flex h-11 w-full rounded-xl border border-input bg-card px-3.5 py-1 text-base shadow-sm md:h-10 md:text-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10 md:w-auto";
 
 function hasPermission(permissions: string[], permission: string): boolean {
   return permissions.includes("*") || permissions.includes(permission);

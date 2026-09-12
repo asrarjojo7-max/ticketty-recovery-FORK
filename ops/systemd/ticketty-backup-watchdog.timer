@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Ticketty backup freshness hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=ticketty-backup-watchdog.service
+
+[Install]
+WantedBy=timers.target

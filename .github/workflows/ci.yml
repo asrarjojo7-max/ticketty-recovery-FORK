@@ -21,6 +21,7 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://ticketty:ticketty@127.0.0.1:5432/ticketty
+      RUNTIME_DATABASE_PASSWORD: ci-runtime-password-with-at-least-32-characters
       JWT_SECRET: ci-only-secret-with-at-least-thirty-two-characters
       JWT_EXPIRES_IN: 15m
       JWT_ISSUER: ticketty-api
@@ -41,7 +42,7 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm lint:check
       - run: pnpm typecheck
-      - run: pnpm test --runInBand
+      - run: pnpm test:cov --runInBand
       - run: pnpm build
       - run: pnpm audit --prod
 
@@ -67,6 +68,7 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://ticketty:ticketty@127.0.0.1:5432/ticketty
+      RUNTIME_DATABASE_PASSWORD: ci-runtime-password-with-at-least-32-characters
       JWT_SECRET: ci-only-secret-with-at-least-thirty-two-characters
       JWT_EXPIRES_IN: 15m
       JWT_ISSUER: ticketty-api
@@ -86,6 +88,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
+      - run: pnpm db:provision-runtime
       - run: pnpm test:e2e --runInBand
       # TD-016: المظلة الشاملة أولاً — أي قيد/RLS/trigger/grant يسقط
       # يفشل البناء هنا قبل الفحوص الفردية (استبدال "تذكر" بآلة).
@@ -117,7 +120,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint:check
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test:cov
       - run: pnpm build
       - run: pnpm audit --prod
 
@@ -140,6 +143,7 @@ jobs:
     env:
       # Backend
       DATABASE_URL: postgresql://ticketty:ticketty@127.0.0.1:5432/ticketty
+      RUNTIME_DATABASE_PASSWORD: ci-runtime-password-with-at-least-32-characters
       JWT_SECRET: ci-only-secret-with-at-least-thirty-two-characters
       JWT_EXPIRES_IN: 15m
       JWT_ISSUER: ticketty-api
@@ -170,6 +174,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec prisma generate
           pnpm exec prisma migrate deploy
+          pnpm db:provision-runtime
         working-directory: backend
       - name: Seed org, roles, admin and demo data
         run: |
@@ -181,12 +186,18 @@ jobs:
       - name: Build backend
         run: pnpm build
         working-directory: backend
-      - name: Start backend
+      - name: Start backend with least-privilege identity
         run: |
           nohup node dist/main > /tmp/backend.log 2>&1 &
           sleep 5
           curl -fsS http://127.0.0.1:4000/api/health/liveness
         working-directory: backend
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://ticketty_runtime:ci-runtime-password-with-at-least-32-characters@127.0.0.1:5432/ticketty
+          WEB_ORIGIN: https://ticketty.example.test
+          ACCOUNTING_WORKER_ENABLED: "false"
+          SUBSCRIPTION_SWEEP_ENABLED: "false"
       - name: Build and start web
         run: |
           pnpm install --frozen-lockfile
@@ -196,7 +207,7 @@ jobs:
           curl -fsS -o /dev/null http://localhost:3000/
         working-directory: web
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
         working-directory: web
       - name: Provision E2E fixtures
         run: pnpm e2e:setup

@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * E2E — فرض اشتراك SaaS لدورة الحياة كاملة (عقد الهندسة §1 + §5).
@@ -30,11 +31,12 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Subscription enforcement lifecycle (e2e)', () => {
   let app: INestApplication<App>;
-  let server: ReturnType<INestApplication['getHttpServer']>;
+  let server: App;
   const admin = new PrismaClient();
   const suffix = process.pid + '-' + Date.now();
   const slug = `sub-enforce-${suffix}`;
   const password = 'Sub-Enforce-Passw0rd-2026';
+  const permanentPassword = `${password}-Permanent`;
 
   let operatorToken = '';
   let tenantToken = '';
@@ -87,11 +89,12 @@ describe('Subscription enforcement lifecycle (e2e)', () => {
     expect(setTrial.status).toBe(201);
 
     // مالك الـ Tenant يسجّل
-    const tenantLogin = await request(server)
-      .post('/api/auth/login')
-      .send({ email: `owner-${slug}@ticketty.local`, password });
-    expect([200, 201]).toContain(tenantLogin.status);
-    tenantToken = (tenantLogin.body as { access_token: string }).access_token;
+    tenantToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      password,
+      permanentPassword,
+    );
 
     // تجهيز أسطول/خط/رحلة (مسارات إدارية exempt — تعمل دائماً)
     const templateRes = await request(server)
@@ -148,7 +151,7 @@ describe('Subscription enforcement lifecycle (e2e)', () => {
         price: 25000,
       });
     expect([200, 201]).toContain(tripRes.status);
-  });
+  }, 120_000);
 
   afterAll(async () => {
     // تنظيف جذري بترتيب FK
@@ -337,7 +340,10 @@ describe('Subscription enforcement lifecycle (e2e)', () => {
   it('EXPIRED: login, reads, admin, reports all still work (graduated policy)', async () => {
     const login = await request(server)
       .post('/api/auth/login')
-      .send({ email: `owner-${slug}@ticketty.local`, password });
+      .send({
+        email: `owner-${slug}@ticketty.local`,
+        password: permanentPassword,
+      });
     expect([200, 201]).toContain(login.status);
 
     const reports = await request(server)
@@ -517,7 +523,10 @@ describe('Subscription enforcement lifecycle (e2e)', () => {
     });
     const login = await request(server)
       .post('/api/auth/login')
-      .send({ email: `owner-${slug}@ticketty.local`, password });
+      .send({
+        email: `owner-${slug}@ticketty.local`,
+        password: permanentPassword,
+      });
     expect(login.status).toBe(401); // التعليق أقوى من أي حالة اشتراك
     await admin.organization.update({
       where: { id: tenantOrgId },

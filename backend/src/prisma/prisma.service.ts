@@ -8,6 +8,7 @@ const PLATFORM_DATABASE_ROLE = 'ticketty_platform';
 const ACCOUNTING_WORKER_ROLE = 'ticketty_accounting_worker';
 const TENANT_DELEGATES = new Set([
   'organization',
+  'organizationTicketBranding',
   'branch',
   'role',
   'user',
@@ -64,13 +65,14 @@ export interface AuthLoginRecord {
   roleKey: string;
   permissions: string[];
   organizationActive: boolean;
+  passwordChangedAt: Date;
+  mustChangePassword: boolean;
 }
 
 export type AuthRequestRecord = Omit<
   AuthLoginRecord,
   'passwordHash' | 'failedLoginAttempts' | 'lockedUntil'
 > & {
-  passwordChangedAt: Date;
   /**
    * من auth_user_by_id v3 (هجرة 20260909000000): حالة آخر صف
    * اشتراك للمنظمة بأي حالة، أو null عندما لا يوجد صف إطلاقاً.
@@ -148,6 +150,61 @@ export class PrismaService
 
   async onModuleInit() {
     await this.$connect();
+    if (process.env.NODE_ENV === 'production') {
+      await this.assertLeastPrivilegeRuntimeIdentity();
+    }
+  }
+
+  private async assertLeastPrivilegeRuntimeIdentity(): Promise<void> {
+    const [identity] = await super.$queryRaw<
+      Array<{
+        name: string;
+        superuser: boolean;
+        bypassRls: boolean;
+        createRole: boolean;
+        createDb: boolean;
+        inherit: boolean;
+        ownedObjects: bigint;
+        directTableGrants: bigint;
+      }>
+    >`
+      SELECT
+        session_user AS name,
+        r.rolsuper AS superuser,
+        r.rolbypassrls AS "bypassRls",
+        r.rolcreaterole AS "createRole",
+        r.rolcreatedb AS "createDb",
+        r.rolinherit AS inherit,
+        (
+          SELECT count(*)
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname IN ('public', 'ticketty_security')
+            AND pg_get_userbyid(c.relowner) = session_user
+        ) AS "ownedObjects",
+        (
+          SELECT count(*)
+          FROM information_schema.table_privileges p
+          WHERE p.grantee = session_user
+        ) AS "directTableGrants"
+      FROM pg_roles r
+      WHERE r.rolname = session_user
+    `;
+    if (
+      !identity ||
+      identity.name !== 'ticketty_runtime' ||
+      identity.superuser ||
+      identity.bypassRls ||
+      identity.createRole ||
+      identity.createDb ||
+      identity.inherit ||
+      Number(identity.ownedObjects) !== 0 ||
+      Number(identity.directTableGrants) !== 0
+    ) {
+      throw new Error(
+        'Production DATABASE_URL must use the least-privilege ticketty_runtime role',
+      );
+    }
   }
 
   async onModuleDestroy() {
@@ -219,6 +276,29 @@ export class PrismaService
       : null;
   }
 
+  async accountingQueueDepth(): Promise<
+    Array<{ status: string; count: number }>
+  > {
+    if (this.tenantContext.current()) {
+      throw new Error('Global accounting metrics cannot run in tenant context');
+    }
+    return super.$transaction(async (transaction) => {
+      await transaction.$executeRawUnsafe(
+        `SET LOCAL ROLE ${ACCOUNTING_WORKER_ROLE}`,
+      );
+      const rows = await transaction.$queryRaw<
+        Array<{ status: string; count: bigint }>
+      >`
+        SELECT status, event_count AS count
+        FROM ticketty_security.accounting_queue_depth()
+      `;
+      return rows.map((row) => ({
+        status: row.status,
+        count: Number(row.count),
+      }));
+    });
+  }
+
   /**
    * سحب نضج الاشتراكات لـ SubscriptionSweepWorker — تحت دور
    * ticketty_app نفسه: يثبت عملياً أن المنح الممنوحة هي فقط
@@ -256,32 +336,10 @@ export class PrismaService
           locked_until AS "lockedUntil",
           role_key AS "roleKey",
           role_permissions AS permissions,
-          organization_active AS "organizationActive"
+          organization_active AS "organizationActive",
+          password_changed_at AS "passwordChangedAt",
+          must_change_password AS "mustChangePassword"
         FROM ticketty_security.auth_user_by_email(${email})
-      `,
-    );
-    return rows[0] ?? null;
-  }
-
-  async findAuthUserWithHashById(
-    userId: string,
-  ): Promise<AuthLoginRecord | null> {
-    const rows = await this.withAuthRole(
-      (transaction) => transaction.$queryRaw<AuthLoginRecord[]>`
-        SELECT
-          user_id AS id,
-          organization_id AS "organizationId",
-          branch_id AS "branchId",
-          user_name AS name,
-          user_email AS email,
-          password_hash AS "passwordHash",
-          user_active AS active,
-          failed_login_attempts AS "failedLoginAttempts",
-          locked_until AS "lockedUntil",
-          role_key AS "roleKey",
-          role_permissions AS permissions,
-          organization_active AS "organizationActive"
-        FROM ticketty_security.auth_user_by_id_with_hash(${userId})
       `,
     );
     return rows[0] ?? null;
@@ -301,6 +359,7 @@ export class PrismaService
           role_permissions AS permissions,
           organization_active AS "organizationActive",
           password_changed_at AS "passwordChangedAt",
+          must_change_password AS "mustChangePassword",
           subscription_status AS "subscriptionStatus",
           subscription_period_end AS "subscriptionPeriodEnd"
         FROM ticketty_security.auth_user_by_id(${userId})

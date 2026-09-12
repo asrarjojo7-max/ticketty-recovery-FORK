@@ -11,6 +11,10 @@ import {
 } from "./api";
 import type { CreateBookingInput } from "@/features/bookings";
 import type { TripSeatsResponse } from "@/features/bookings";
+import {
+  clearSaleIdempotencyKey,
+  idempotencyKeyForSale,
+} from "./sale-idempotency";
 
 export const posKeys = {
   trips: (date?: string) => ["pos", "trips", date ?? "all"] as const,
@@ -63,15 +67,18 @@ export function useReleasePosSeat(tripId: string) {
 }
 
 /**
- * Checkout: a fresh Idempotency-Key is generated per attempt so a network
- * retry can never double-charge; the backend deduplicates identical payloads.
+ * Checkout keeps one Idempotency-Key for the logical sale until a definitive
+ * success arrives. Timeouts, response loss, React Query retries, and page
+ * reloads therefore replay the original server operation instead of selling
+ * the same seat twice under a fresh key.
  */
 export function useCheckout(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateBookingInput) =>
-      createPosBooking(input, crypto.randomUUID()),
-    onSuccess: () => {
+    mutationFn: async (input: CreateBookingInput) =>
+      createPosBooking(input, await idempotencyKeyForSale(input)),
+    onSuccess: (_booking, input) => {
+      void clearSaleIdempotencyKey(input);
       toast.success("تم إتمام البيع بنجاح");
       qc.invalidateQueries({ queryKey: posKeys.seats(tripId) });
       qc.invalidateQueries({ queryKey: ["pos"] });

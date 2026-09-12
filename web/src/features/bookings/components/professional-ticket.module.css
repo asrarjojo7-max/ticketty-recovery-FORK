@@ -1,0 +1,98 @@
+/* One physical artboard for both screen and paper. Never reflow at a breakpoint. */
+.ticket {
+  width: 147mm;
+  height: 70mm;
+  display: grid;
+  grid-template-rows: 15mm 50mm 5mm;
+  flex: none;
+  overflow: hidden;
+  background: #fff;
+  color: #0f172a;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 7pt;
+  line-height: 1.3;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ticket *, .ticket *::before, .ticket *::after { box-sizing: border-box; }
+.ticket p, .ticket h3, .ticket h4 { margin: 0; }
+.ticket img { display: block; }
+.hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40% 40% 20%;
+  align-items: center;
+  padding: 1.5mm 3mm;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(115deg, var(--ticket-primary) 0 58%, color-mix(in srgb, var(--ticket-primary), #0ea5e9 34%) 100%);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -8% -55% 32%;
+  height: 90%;
+  border-radius: 50%;
+  border: 2mm solid var(--ticket-secondary);
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+.brand { display: flex; align-items: center; gap: 2mm; min-width: 0; z-index: 1; }
+.logo { width: 9mm; height: 9mm; flex: none; padding: .7mm; border-radius: 1.5mm; background: #fff; object-fit: contain; }
+.brandCopy { flex: 1; min-width: 0; text-align: center; }
+.brandCopy h3 { font-family: var(--font-display), var(--font-sans), sans-serif; font-size: 9pt; line-height: 1.3; overflow-wrap: anywhere; }
+.brandCopy p { margin-top: .4mm; font-size: 5.5pt; line-height: 1.25; overflow-wrap: anywhere; }
+.busArt { position: relative; z-index: 1; height: 12mm; width: 100%; object-fit: contain; }
+.numberPanel { align-self: start; z-index: 1; min-width: 0; border-radius: 1.5mm; background: #fff; padding: 1mm; text-align: center; color: var(--ticket-primary); }
+.numberPanel span { display: block; font-size: 5.5pt; font-weight: 700; }
+.numberPanel strong { display: block; font-family: monospace; font-size: 7pt; line-height: 1.5; white-space: nowrap; }
+.body { display: grid; grid-template-columns: 1.35fr .85fr 1fr .62fr; min-height: 0; }
+.body > * { min-width: 0; padding: 1.8mm; }
+.body > * + * { border-left: .2mm solid #e2e8f0; }
+.passenger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: 2mm 1.5mm; }
+.field { display: flex; min-width: 0; align-items: start; gap: 1mm; }
+.fieldIcon { display: flex; align-items: center; justify-content: center; width: 5mm; height: 5mm; flex: none; border-radius: 1mm; background: var(--ticket-primary); color: #fff; }
+.fieldIcon svg { width: 3mm; height: 3mm; }
+.fieldCopy { min-width: 0; flex: 1; }
+.fieldLabel { color: #475569; font-size: 5.5pt; font-weight: 600; }
+.ticket .fieldValue { margin-top: .6mm; font-size: 8pt; font-weight: 700; overflow-wrap: anywhere; }
+.ticket .emphasis { font-size: 10pt; font-weight: 800; color: var(--ticket-primary); }
+.name { grid-column: 1 / -1; }
+.ticket .name .fieldValue { font-size: 11pt; }
+.ticket .longName .fieldValue { font-size: 9pt; }
+.ticket .time .fieldValue { font-size: 9pt; white-space: nowrap; }
+.nowrap { white-space: nowrap; }
+.journey { display: flex; flex-direction: column; justify-content: center; gap: 2mm; }
+.routePoint { display: flex; gap: 1mm; min-width: 0; }
+.routePoint > svg { width: 4mm; height: 4mm; flex: none; color: var(--ticket-primary); }
+.routePoint > div { min-width: 0; }
+.routeLabel, .station { font-size: 5.5pt; color: #475569; overflow-wrap: anywhere; }
+.city { font-size: 8pt; font-weight: 800; color: var(--ticket-primary); overflow-wrap: anywhere; }
+.routeArrow { margin-inline-start: 1.5mm; color: var(--ticket-primary); font-size: 10pt; line-height: 1; }
+.instructions { display: flex; flex-direction: column; justify-content: center; background: #f0f9ff; }
+.ticket .instructions h4 { margin-bottom: 1mm; padding: .8mm 2mm; border-radius: 1mm; background: var(--ticket-primary); color: #fff; font-size: 7pt; font-weight: 800; }
+.baggage { display: flex; align-items: center; gap: 1mm; padding: 1mm; margin-bottom: 1mm; border: .2mm solid var(--ticket-primary); border-radius: 1mm; background: #fff; font-size: 6pt; font-weight: 700; }
+.baggage > svg { width: 5mm; height: 5mm; flex: none; color: var(--ticket-primary); }
+.baggage span { color: var(--ticket-primary); }
+.instructions ul { display: grid; gap: 1mm; padding: 0; margin: 0; list-style: none; font-size: 5.5pt; color: #334155; }
+.instruction { display: flex; align-items: start; gap: 1mm; }
+.instruction > svg { width: 2.7mm; height: 2.7mm; flex: none; color: var(--ticket-secondary); }
+.codes { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.5mm; border-left-style: dashed !important; }
+.qr { width: 16mm; height: 16mm; background: #fff; }
+.barcode { width: 100%; }
+.barcode svg { display: block; width: 100%; height: auto; max-height: 9mm; }
+.codeNumber { font-family: monospace; white-space: nowrap; font-size: 5.5pt; color: var(--ticket-primary); }
+.status { display: flex; align-items: center; gap: .5mm; padding: .7mm; border-radius: 1mm; background: #ecfdf5; color: #047857; font-size: 5pt; font-weight: 700; }
+.status svg { width: 2.5mm; height: 2.5mm; flex: none; }
+.footer { display: flex; align-items: center; justify-content: space-between; gap: 2mm; padding: .8mm 3mm; background: var(--ticket-primary); color: #fff; font-size: 5.5pt; white-space: nowrap; }
+
+/* Only the viewing surface scales; typography/grid never change. */
+.viewport { width: 100%; min-width: 0; overflow: auto; overscroll-behavior-inline: contain; }
+.sheetSpace { position: relative; margin-inline: auto; flex: none; }
+.artboard { position: absolute; top: 0; left: 0; width: 147mm; height: 70mm; transform-origin: top left; box-shadow: 0 2px 12px #0f172a26; }
+
+@media print {
+  .viewport { overflow: visible !important; }
+  .sheetSpace { width: 147mm !important; height: 70mm !important; margin: 0 !important; }
+  .artboard { position: static !important; transform: none !important; box-shadow: none !important; }
+}

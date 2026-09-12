@@ -1,10 +1,27 @@
+x-backend-environment: &backend-environment
+  NODE_ENV: production
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+  JWT_ISSUER: ${JWT_ISSUER:-ticketty-api}
+  JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketty-web}
+  WEB_ORIGIN: ${WEB_ORIGIN:?WEB_ORIGIN is required}
+  # Client → Cloudflare edge → cloudflared (localhost, proxy #1) → web/BFF.
+  TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+  ACCOUNTING_WORKER_ENABLED: ${ACCOUNTING_WORKER_ENABLED:-true}
+  ACCOUNTING_WORKER_INTERVAL_MS: ${ACCOUNTING_WORKER_INTERVAL_MS:-5000}
+  SUBSCRIPTION_SWEEP_ENABLED: ${SUBSCRIPTION_SWEEP_ENABLED:-true}
+  SUBSCRIPTION_SWEEP_INTERVAL_MS: ${SUBSCRIPTION_SWEEP_INTERVAL_MS:-21600000}
+  PILOT_PAYMENT_MODE: CASH
+  PORT: 3001
+  API_BIND_HOST: 0.0.0.0
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ticketty}
-      POSTGRES_USER: ${POSTGRES_USER:-ticketty}
+      POSTGRES_USER: ${POSTGRES_USER:-ticketty_admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - ticketty-postgres:/var/lib/postgresql/data
@@ -19,26 +36,11 @@ services:
     build:
       context: ./backend
     restart: "no"
-    environment: &backend-environment
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ticketty}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ticketty}?schema=public
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
-      JWT_ISSUER: ${JWT_ISSUER:-ticketty-api}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-ticketty-web}
-      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
-      # Client → Cloudflare edge → cloudflared (localhost, proxy #1) → backend.
-      # 1 = نثق بعمود XFF الذي يضيفه cloudflared فقط (IP عميل Cloudflare
-      # الحقيقي). ترويسة العميل المزيفة تُتجاهل (موثقة بالتجربة — راجع
-      # docs/operations/deployment.md §TRUST_PROXY_HOPS). 0 = تُتجاهل كل
-      # الترويسات (آمن لكن يجمع كل مستخدمي tunnel في IP واحد — يخنق
-      # الدخول 5/min للشركة كلها).
-      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
-      ACCOUNTING_WORKER_ENABLED: ${ACCOUNTING_WORKER_ENABLED:-true}
-      ACCOUNTING_WORKER_INTERVAL_MS: ${ACCOUNTING_WORKER_INTERVAL_MS:-5000}
-      SUBSCRIPTION_SWEEP_ENABLED: ${SUBSCRIPTION_SWEEP_ENABLED:-true}
-      SUBSCRIPTION_SWEEP_INTERVAL_MS: ${SUBSCRIPTION_SWEEP_INTERVAL_MS:-21600000}
-      PORT: 3001
+    environment:
+      <<: *backend-environment
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL is required}
+      RUNTIME_DATABASE_PASSWORD: ${RUNTIME_DATABASE_PASSWORD:?RUNTIME_DATABASE_PASSWORD is required}
+      MONITORING_DATABASE_PASSWORD: ${MONITORING_DATABASE_PASSWORD:?MONITORING_DATABASE_PASSWORD is required}
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,13 +48,24 @@ services:
     # القيود/RLS/triggers/grants — migrate deploy ثم الفحص الشامل.
     # السلسلة شرطية: الفحص يفشل = الحاوية تفشل = backend لا يبدأ
     # (service_completed_successfully).
-    command: ["sh", "-c", "pnpm exec prisma migrate deploy && pnpm test:db:invariants"]
+    command:
+      [
+        "sh",
+        "-c",
+        "pnpm exec prisma migrate deploy && pnpm db:provision-runtime && pnpm db:provision-monitoring && pnpm test:db:invariants",
+      ]
 
   backend:
     build:
       context: ./backend
+    # Controlled-pilot singleton: container_name intentionally prevents
+    # accidental `docker compose up --scale backend=N` while in-process
+    # accounting/subscription workers are enabled.
+    container_name: ticketty-backend-singleton-worker
     restart: unless-stopped
-    environment: *backend-environment
+    environment:
+      <<: *backend-environment
+      DATABASE_URL: ${RUNTIME_DATABASE_URL:?RUNTIME_DATABASE_URL is required}
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +93,7 @@ services:
     environment:
       NODE_ENV: production
       API_BASE_URL: http://backend:3001/api
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
       PORT: 3000
       HOSTNAME: 0.0.0.0
     depends_on:
@@ -101,5 +114,73 @@ services:
       retries: 5
     stop_grace_period: 30s
 
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/alert-rules.yml:/etc/prometheus/rules/ticketty.yml:ro
+      - ticketty-prometheus:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./ops/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${ALERTMANAGER_WEBHOOK_URL_FILE:-/etc/ticketty/alertmanager-webhook-url}:/run/secrets/alertmanager_webhook_url:ro
+      - ticketty-alertmanager:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:9093/-/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/textfile
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+      - ${NODE_EXPORTER_TEXTFILE_DIR:-/var/lib/ticketty/metrics}:/textfile:ro
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.27.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./ops/monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+
 volumes:
   ticketty-postgres:
+  ticketty-prometheus:
+  ticketty-alertmanager:

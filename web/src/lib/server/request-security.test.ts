@@ -3,6 +3,7 @@ import {
   hasTrustedOrigin,
   jwtRemainingSeconds,
   requestIdFrom,
+  trustedClientIp,
 } from "./request-security";
 
 function unsignedToken(payload: object): string {
@@ -34,6 +35,23 @@ describe("request security helpers", () => {
         "https://app.example.com",
       ),
     ).toBe(false);
+  });
+
+  it("uses only a valid Cloudflare client address for upstream throttling", () => {
+    expect(
+      trustedClientIp(
+        new Headers({
+          "cf-connecting-ip": "203.0.113.7",
+          "x-forwarded-for": "198.51.100.9",
+        }),
+      ),
+    ).toBe("203.0.113.7");
+    expect(
+      trustedClientIp(new Headers({ "x-forwarded-for": "198.51.100.9" })),
+    ).toBeNull();
+    expect(
+      trustedClientIp(new Headers({ "cf-connecting-ip": "not-an-ip" })),
+    ).toBeNull();
   });
 
   it("derives cookie lifetime from a valid future JWT expiry", () => {

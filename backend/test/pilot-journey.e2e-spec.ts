@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
 import { AccountingEventWorker } from '../src/accounting/accounting-event.worker';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * PILOT JOURNEY (BLOCKER-3) — رحلة أول عميل حقيقي من البداية للنهاية
@@ -280,14 +281,12 @@ describe('PILOT JOURNEY: first real client, end to end (BLOCKER-3)', () => {
   // ─── 3. Users & Roles (مالك يضيف بائعاً) ─────────────────────
 
   it('step 3: owner logs in and creates a SELLER user', async () => {
-    const login = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `owner-${slug}@ticketty.local`,
-        password: OWNER_PASSWORD,
-      });
-    expect([200, 201]).toContain(login.status);
-    ownerToken = (login.body as { access_token: string }).access_token;
+    ownerToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      OWNER_PASSWORD,
+      `${OWNER_PASSWORD}-Permanent`,
+    );
 
     // الأدوار المزروعة موجودة (seed roles تشمل SELLER)
     const roles = await request(server)
@@ -310,14 +309,12 @@ describe('PILOT JOURNEY: first real client, end to end (BLOCKER-3)', () => {
       });
     expect(seller.status).toBe(201);
 
-    const sellerLogin = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `seller-${slug}@ticketty.local`,
-        password: SELLER_PASSWORD,
-      });
-    expect([200, 201]).toContain(sellerLogin.status);
-    sellerToken = (sellerLogin.body as { access_token: string }).access_token;
+    sellerToken = await loginAndRotateTemporaryPassword(
+      server,
+      `seller-${slug}@ticketty.local`,
+      SELLER_PASSWORD,
+      `${SELLER_PASSWORD}-Permanent`,
+    );
   }, 60_000);
 
   // ─── 4-6. Vehicle → Driver → Route ──────────────────────────

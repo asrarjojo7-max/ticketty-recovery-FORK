@@ -21,7 +21,10 @@ if [[ ! -f "$backup_file" ]]; then
   exit 2
 fi
 if [[ -f "$backup_file.sha256" ]]; then
-  sha256sum --check "$backup_file.sha256"
+  (
+    cd "$(dirname "$backup_file")"
+    sha256sum --check "$(basename "$backup_file").sha256"
+  )
 fi
 
 pg_restore --list "$backup_file" >/dev/null

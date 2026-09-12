@@ -194,6 +194,13 @@ describe('authorization matrix (runtime 403) — Phase 3', () => {
       expect(res.status).toBe(201);
       const user = res.body as { id: string };
       createdUserIds.push(user.id);
+      // This suite isolates authorization semantics. First-login rotation is
+      // covered by platform-provisioning.e2e; mark these synthetic fixtures as
+      // already remediated before issuing their role-specific sessions.
+      await admin.user.update({
+        where: { id: user.id },
+        data: { mustChangePassword: false },
+      });
       tokens[roleKey] = await login(server, email, PASSWORD);
     }
     tokens.AGENT = await login(

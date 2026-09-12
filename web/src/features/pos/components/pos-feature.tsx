@@ -153,8 +153,8 @@ export function PosFeature() {
       />
 
       {/* Date filter */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-card">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 shadow-card">
           <CalendarDays className="h-4 w-4 text-primary" />
           <Input
             type="date"
@@ -163,7 +163,7 @@ export function PosFeature() {
               setDate(e.target.value);
               setSelectedTripId(null);
             }}
-            className="h-7 border-0 p-0 text-xs focus-visible:ring-0"
+            className="min-w-36 border-0 p-0 text-base focus-visible:ring-0 md:h-10 md:text-sm"
             aria-label="تاريخ الرحلات"
           />
           {date ? (
@@ -183,15 +183,11 @@ export function PosFeature() {
         </p>
       </div>
 
-      {/* مساحة تنفس أسفل الصفحة على الهاتف حتى لا يغطي الشريط
-          السفلي آخر مقعد في الخريطة — ثابتة وبسيطة (لا state ولا
-          تبديل هيكل → لا hydration mismatch). */}
-      <div className="h-24 lg:hidden" aria-hidden="true" />
       {/* 3-pane layout — شاشة واحدة: كل عمود يمرّر داخليًا داخل ارتفاع
           الشاشة (lg+) فلا تمرير صفحة طويل أثناء البيع.
           lg: أعمدة جانبية مضغوطة · xl: العرض الكامل المعتاد. */}
-      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)_320px] xl:grid-cols-[280px_minmax(0,1fr)_340px] lg:h-[calc(100vh-11rem)] lg:grid-rows-[minmax(0,1fr)]">
-        <div className="lg:min-h-0 lg:overflow-y-auto lg:pe-1">
+      <div className="grid gap-4 xl:h-[calc(100vh-11rem)] xl:grid-cols-[280px_minmax(0,1fr)_340px] xl:grid-rows-[minmax(0,1fr)]">
+        <div className="xl:min-h-0 xl:overflow-y-auto xl:pe-1">
           <TripCards
             trips={tripsQuery.data}
             isLoading={tripsQuery.isLoading}
@@ -200,7 +196,7 @@ export function PosFeature() {
           />
         </div>
 
-        <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pe-1">
+        <div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:pe-1">
           {selectedTrip ? (
             <SeatPanel
               data={seatsQuery.data}
@@ -222,7 +218,7 @@ export function PosFeature() {
         {/* عمود السلة — سطح المكتب: دائمًا ضمن ارتفاع الشاشة (شاشة بيع
             واحدة). الهاتف: مخفي هنا بـ CSS فقط (نفس الشجرة دائمًا — لا
             mismatch) وتُعرض نسخة الشريط السفلي المستقلة أسفله. */}
-        <div className="hidden min-h-0 self-start lg:block">
+        <div className="hidden min-h-0 self-start xl:block">
           <div className="sticky top-0 max-h-[calc(100vh-11rem)]">
             <Cart
               key={`desk-${selectedTripId ?? "no-trip"}`}
@@ -242,6 +238,10 @@ export function PosFeature() {
           </div>
         </div>
       </div>
+
+      {/* حجز مساحة فعلية بعد آخر عنصر حتى لا يغطي الشريط الثابت آخر
+          مقعد أو دليل الحالات عند نهاية التمرير. */}
+      <div className="h-24 xl:hidden" aria-hidden="true" />
 
       {/* شريط الهاتف السفلي — عنصر مستقل دائم البنية، يحتوى على كل
           تفاصيل السلة (المقاعد + بيانات المسافر + الدفع + إتمام البيع).

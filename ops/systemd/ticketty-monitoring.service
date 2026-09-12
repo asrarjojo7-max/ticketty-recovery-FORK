@@ -1,0 +1,17 @@
+[Unit]
+Description=Ticketty private Prometheus and Alertmanager stack
+Wants=network-online.target ticketty-alert-sink.service
+After=network-online.target docker.service ticketty-backend.service ticketty-alert-sink.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory=/srv/ticketty
+ExecStart=/srv/ticketty/ops/monitoring/run-host-monitoring.sh start
+ExecStop=/srv/ticketty/ops/monitoring/run-host-monitoring.sh stop
+TimeoutStartSec=180
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -1,8 +1,10 @@
+import { destinationAfterLogin } from "@/lib/auth-routing";
 import { getServerEnvironment, trustedOrigins } from "@/lib/server/env";
 import {
   hasTrustedOrigin,
   jwtRemainingSeconds,
   requestIdFrom,
+  trustedClientIp,
 } from "@/lib/server/request-security";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -19,6 +21,7 @@ interface LoginResponse {
     orgId: string | null;
     branchId: string | null;
     permissions: string[];
+    mustChangePassword: boolean;
   };
 }
 
@@ -32,7 +35,13 @@ function jsonResponse(body: unknown, status: number, requestId: string) {
 export async function POST(request: Request) {
   const requestId = requestIdFrom(request.headers);
   const environment = getServerEnvironment();
-  if (!hasTrustedOrigin(request, environment.appOrigin, trustedOrigins(environment))) {
+  if (
+    !hasTrustedOrigin(
+      request,
+      environment.appOrigin,
+      trustedOrigins(environment),
+    )
+  ) {
     return jsonResponse({ message: "طلب غير موثوق" }, 403, requestId);
   }
 
@@ -54,28 +63,41 @@ export async function POST(request: Request) {
         password: form.get("password") ?? "",
       };
     } else {
-      return jsonResponse({ message: "بيانات الطلب غير صالحة" }, 400, requestId);
+      return jsonResponse(
+        { message: "بيانات الطلب غير صالحة" },
+        400,
+        requestId,
+      );
     }
   } catch {
     return jsonResponse({ message: "بيانات الطلب غير صالحة" }, 400, requestId);
   }
-  const isFormSubmit = contentType.includes("application/x-www-form-urlencoded");
+  const isFormSubmit = contentType.includes(
+    "application/x-www-form-urlencoded",
+  );
   const loginFailure = () =>
     isFormSubmit
-      // 303 to a bare URL — the error flag never includes what the user typed
-      ? new NextResponse(null, {
+      ? // 303 to a bare URL — the error flag never includes what the user typed
+        new NextResponse(null, {
           status: 303,
           headers: { Location: "/login?error=1", "X-Request-Id": requestId },
         })
-      : jsonResponse({ message: "تعذر تسجيل الدخول. تحقق من البيانات وحاول مجدداً." }, 401, requestId);
+      : jsonResponse(
+          { message: "تعذر تسجيل الدخول. تحقق من البيانات وحاول مجدداً." },
+          401,
+          requestId,
+        );
 
   try {
+    const upstreamHeaders = new Headers({
+      "Content-Type": "application/json",
+      "X-Request-Id": requestId,
+    });
+    const clientIp = trustedClientIp(request.headers);
+    if (clientIp) upstreamHeaders.set("X-Forwarded-For", clientIp);
     const response = await fetch(`${environment.apiBaseUrl}/auth/login`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Request-Id": requestId,
-      },
+      headers: upstreamHeaders,
       body: JSON.stringify(credentials),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
@@ -112,12 +134,15 @@ export async function POST(request: Request) {
       priority: "high",
     });
 
-    // No-JS form submit: redirect to the dashboard. The redirect URL carries
-    // no credentials — only the session cookie does.
+    // No-JS form submit: route temporary-password users directly to the
+    // mandatory remediation screen. The redirect carries no credentials.
     if (isFormSubmit) {
       return new NextResponse(null, {
         status: 303,
-        headers: { Location: "/dashboard", "X-Request-Id": requestId },
+        headers: {
+          Location: destinationAfterLogin(login.user),
+          "X-Request-Id": requestId,
+        },
       });
     }
     return jsonResponse({ user: login.user }, 200, requestId);
@@ -133,7 +158,13 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const requestId = requestIdFrom(request.headers);
   const environment = getServerEnvironment();
-  if (!hasTrustedOrigin(request, environment.appOrigin, trustedOrigins(environment))) {
+  if (
+    !hasTrustedOrigin(
+      request,
+      environment.appOrigin,
+      trustedOrigins(environment),
+    )
+  ) {
     return jsonResponse({ message: "طلب غير موثوق" }, 403, requestId);
   }
   const cookieStore = await cookies();

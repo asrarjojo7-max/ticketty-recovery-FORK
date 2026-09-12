@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 
 const SAFE_REQUEST_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
@@ -15,6 +16,13 @@ export function hasTrustedOrigin(
   const origin = request.headers.get("origin");
   if (!origin) return false;
   return origin === appOrigin || extraOrigins.includes(origin);
+}
+
+export function trustedClientIp(headers: Headers): string | null {
+  // The supported production edge is Cloudflare Tunnel. Cloudflare replaces
+  // this header at its edge; browser-supplied X-Forwarded-For is never trusted.
+  const candidate = headers.get("cf-connecting-ip")?.trim();
+  return candidate && isIP(candidate) ? candidate : null;
 }
 
 export function jwtRemainingSeconds(

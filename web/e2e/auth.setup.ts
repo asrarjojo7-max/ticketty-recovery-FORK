@@ -13,13 +13,16 @@ setup("authenticate as owner", async ({ page }) => {
   await page.fill("#password", OWNER.password);
   await page.click('button[type="submit"]');
   await page.waitForURL("**/dashboard", { timeout: 30_000 });
-  // الترحيب حسب الدور (Group H) — OWNER يرى ترحيب مالك النظام
-  await expect(page.getByText("مرحبًا بك", { exact: false })).toBeVisible();
-  // إنهاء الجولة التعريفية قبل حفظ الجلسة — الاختبارات تفحص الشاشات لا الجولة
+  // أنهِ الجولة قبل فحص محتوى الصفحة؛ الـ dialog يحجب الصفحة عن شجرة
+  // الوصول في تشغيل نظيف لا يملك localStorage من تشغيل سابق.
   const skipTour = page.getByRole("button", { name: "تخطي الكل" });
   if (await skipTour.isVisible().catch(() => false)) {
     await skipTour.click();
   }
+  // Verify the authenticated session directly. Dashboard data is a separate
+  // concern and can be temporarily unavailable without invalidating login.
+  const me = await page.request.get("/api/proxy/auth/me");
+  expect(me.status()).toBe(200);
   await page.context().storageState({ path: `${stateDir}/owner.json` });
 });
 

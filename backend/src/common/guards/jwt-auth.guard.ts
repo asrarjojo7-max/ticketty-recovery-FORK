@@ -37,7 +37,7 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const token = header.slice(7);
       const claims = await this.jwt.verifyAsync<
-        Pick<AuthUser, 'sub'> & { iat?: number }
+        Pick<AuthUser, 'sub'> & { credentialChangedAt?: number }
       >(token);
       if (!claims.sub) throw new Error('Token subject is missing');
 
@@ -47,15 +47,10 @@ export class JwtAuthGuard implements CanActivate {
         throw new Error('User or organization is inactive');
       }
 
-      // تدقيق P1-3: تغيير كلمة المرور يُبطل كل الجلسات الصادرة قبله —
-      // طابع زمني من قاعدة البيانات يُقارن بـ iat التوكِن (ثواني).
-      if (claims.iat !== undefined) {
-        const changedAtSeconds = Math.floor(
-          user.passwordChangedAt.getTime() / 1000,
-        );
-        if (claims.iat < changedAtSeconds) {
-          throw new Error('Token predates the current password');
-        }
+      // Bind the token to the exact millisecond credential version. JWT iat
+      // has only second precision and left a same-second password-change race.
+      if (claims.credentialChangedAt !== user.passwordChangedAt.getTime()) {
+        throw new Error('Token credential version is stale');
       }
 
       request.user = {
@@ -66,6 +61,7 @@ export class JwtAuthGuard implements CanActivate {
         email: user.email,
         roleKey: user.roleKey,
         permissions: user.permissions,
+        mustChangePassword: user.mustChangePassword,
         // اشتراك المنظمة من نفس قراءة DB هذه (auth_user_by_id v3) —
         // مصدر سلطة SubscriptionGuard؛ لا قراءة إضافية ولا token.
         subscriptionStatus: user.subscriptionStatus ?? null,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
 
 /**
  * ticket-master DNA empty state: glowing icon tile, bold title, muted
@@ -45,11 +46,6 @@ export function EmptyState({
     >
       {(Icon || node) && (
         <div className="relative inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-soft text-primary [&_svg]:h-6 [&_svg]:w-6">
-          <div
-            className="pointer-events-none absolute inset-0 rounded-2xl opacity-40 blur-xl"
-            style={{ background: "var(--color-primary)" }}
-            aria-hidden="true"
-          />
           {Icon ? <Icon className="h-6 w-6" /> : node}
         </div>
       )}
@@ -58,7 +54,7 @@ export function EmptyState({
       {ctaLabel && ctaHref && (
         <Link
           href={ctaHref}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-gradient-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-glow transition hover:-translate-y-0.5"
+          className={cn(buttonVariants({ size: "sm" }), "mt-2")}
         >
           <PlusCircle className="h-3.5 w-3.5" />
           {ctaLabel}

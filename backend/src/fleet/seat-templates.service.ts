@@ -8,8 +8,38 @@ import {
   UpdateSeatTemplateDto,
 } from './dto';
 
-function columnLetter(column: number): string {
-  return String.fromCharCode(64 + column);
+/**
+ * ترقيم المقاعد: أرقام فقط (1، 2، 3، …) لكل الحافلة.
+ *
+ * الرقم يُشتق من موضع المقعد داخل الحافلة (يمين-يسار، صف-صف)
+ * وليس من حرف عمود — هذا هو الترقيم الذي يفهمه الراكب والكاشير
+ * وموظف الصعود. الترتيب القياسي لحافلة 2+2 (الممر بعد العمود 2):
+ *
+ *   الصف 1: 1  2 | 3  4
+ *   الصف 2: 5  6 | 7  8   …
+ *
+ * تنفيذ الاشتقاق مشترك بين الحافلة والواجهة (نفس الترتيب في POS
+ * والتذكرة والمنفستو) — القاعدة الوحيدة: رقم واحد لكل مقعد قابل
+ * للبيع، ومقاعد السائق/المعطلة لا تستهلك أرقامًا (لا تُباع أصلًا).
+ */
+export function seatNumberFor(
+  row: number,
+  column: number,
+  columnsPerRow: number,
+): number {
+  return (row - 1) * columnsPerRow + column;
+}
+
+export function generateSeatNumberLabel(
+  row: number,
+  column: number,
+  columnsPerRow: number,
+): string {
+  return String(seatNumberFor(row, column, columnsPerRow));
+}
+
+export function isNumericSeatLabel(label: string): boolean {
+  return /^\d{1,3}$/.test(label);
 }
 
 function generateSeats(rows: number, columnsPerRow: number) {
@@ -24,7 +54,7 @@ function generateSeats(rows: number, columnsPerRow: number) {
       seats.push({
         row,
         column,
-        label: `${columnLetter(column)}${row}`,
+        label: generateSeatNumberLabel(row, column, columnsPerRow),
         seatType: SeatType.REGULAR,
       });
     }
@@ -38,11 +68,14 @@ export class SeatTemplatesService {
 
   create(orgId: string, dto: CreateSeatTemplateDto) {
     const { rows, columnsPerRow, seats, ...data } = dto;
+    // الترقيم الرسمي أرقام فقط. المدخل قد يأتي بحروف عمود قديمة
+    // (A1) من صانع القوالب — نعيد اشتقاق الرقم من الموضع دائمًا
+    // كي تبقى العرضة والتذكرة متسقة مع خريطة المقاعد.
     const seatRows = seats?.length
       ? seats.map((s) => ({
           row: s.row,
           column: s.column,
-          label: s.label ?? `${columnLetter(s.column)}${s.row}`,
+          label: generateSeatNumberLabel(s.row, s.column, columnsPerRow),
           seatType: s.seatType ?? SeatType.REGULAR,
         }))
       : generateSeats(rows, columnsPerRow);

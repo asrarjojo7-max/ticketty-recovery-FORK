@@ -9,6 +9,7 @@ export default async function DashboardLayout({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (user.mustChangePassword) redirect("/change-password");
 
   return <AppShell user={user}>{children}</AppShell>;
 }

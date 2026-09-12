@@ -19,7 +19,7 @@ Organization and branch IDs from the client are identifiers to validate, never a
 - Next.js dev servers allow only allowlisted cross-site origins for /_next/* assets (`allowedDevOrigins`); the tunnel domain is allowlisted so hydration cannot silently fail (a failed hydration previously degraded the login form to a native GET submission).
 - Environment files ignored by Git; checked-in examples contain placeholders only.
 - Fail-fast backend and server-side web configuration validation.
-- JWT verification pins HS256, issuer, and audience; BFF cookie lifetime follows token expiry.
+- JWT verification pins HS256, issuer, and audience; BFF cookie lifetime follows token expiry. Production token lifetime is capped at one hour (15-minute deployment default), and every token is bound to the exact millisecond `passwordChangedAt` credential version.
 - Strict same-origin checks on state-changing BFF requests.
 - Sanitized request IDs propagate through the BFF and backend structured completion logs.
 

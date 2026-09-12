@@ -23,6 +23,11 @@ import {
 } from '../common/idempotency';
 import { requireOrgId, tenantScope } from '../common/org';
 import { lockTripTransaction } from '../common/transaction-locks';
+
+/** ترقيم المقاعد الرسمي: أرقام فقط (مشترك مع fleet لتفادي دورة استيراد). */
+function isNumericSeatLabel(label: string): boolean {
+  return /^\d{1,3}$/.test(label);
+}
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTripDto, QueryTripDto, UpdateTripDto } from './dto';
 
@@ -185,10 +190,16 @@ export class TripsService {
         driverName: driver?.name ?? rest.driverName,
         driverPhone: driver?.phone ?? rest.driverPhone,
         tripSeats: {
+          // نسخة كاملة من قالب الحافلة بأرقام مقاعد رسمية (أرقام فقط) —
+          // الترقيم الرقمي مشتق من الموضع وليس من حرف العمود.
           create: bus.seatTemplate.seats.map((seat) => ({
             row: seat.row,
             column: seat.column,
-            label: seat.label,
+            label: isNumericSeatLabel(seat.label)
+              ? seat.label
+              : String(
+                  (seat.row - 1) * bus.seatTemplate.columnsPerRow + seat.column,
+                ),
             seatType: seat.seatType,
             status: initialSeatStatus(seat.seatType),
             price: new Prisma.Decimal(price),
@@ -256,9 +267,14 @@ export class TripsService {
 
     // إصلاح الرحلات القديمة التي أُنشئت قبل اعتماد نسخة كاملة من قالب المقاعد.
     // عمليات إنشاء الرحلات الجديدة تنسخ القالب كاملًا داخل create().
-    const existingLabels = new Set(trip.tripSeats.map((seat) => seat.label));
-    const missingTemplateSeats = trip.bus.seatTemplate.seats.filter(
-      (seat) => !existingLabels.has(seat.label),
+    const template = trip.bus.seatTemplate;
+    const expectedLabel = (row: number, column: number) =>
+      String((row - 1) * template.columnsPerRow + column);
+    const existingPositions = new Set(
+      trip.tripSeats.map((seat) => `${seat.row}-${seat.column}`),
+    );
+    const missingTemplateSeats = template.seats.filter(
+      (seat) => !existingPositions.has(`${seat.row}-${seat.column}`),
     );
     const fallbackPrice = trip.tripSeats[0]?.price;
     if (missingTemplateSeats.length > 0 && fallbackPrice) {
@@ -267,12 +283,50 @@ export class TripsService {
           tripId: trip.id,
           row: seat.row,
           column: seat.column,
-          label: seat.label,
+          label: expectedLabel(seat.row, seat.column),
           seatType: seat.seatType,
           status: initialSeatStatus(seat.seatType),
           price: fallbackPrice,
         })),
         skipDuplicates: true,
+      });
+    }
+
+    // الترقيم الرسمي: أرقام فقط. الرحلات التي أُنشئت قبل هذا الترقيم قد
+    // تحمل حروفًا (A1) — نعيد اشتقاق الرقم من الموضع داخل الحافلة،
+    // لكن نحافظ على المقاعد المحجوزة (الحجز مرتبط بـ id وليس بـ label).
+    // المقاعد المبنية حديثًا (أعلاه) تُنشأ بالترقيم الرقمي مباشرة.
+    const legacySeats = trip.tripSeats.filter(
+      (seat) => !isNumericSeatLabel(seat.label),
+    );
+    if (legacySeats.length > 0) {
+      // معاملة تفاعلية واحدة (نموذج الدالة) — وكيل RLS لا يدعم نموذج
+      // المصفوفة داخل سياق الطلب، وكل التحديثات يجب أن تكون ذرّية.
+      await this.prisma.$transaction(async (tx) => {
+        for (const seat of legacySeats) {
+          await tx.tripSeat.update({
+            where: { id: seat.id },
+            data: {
+              label: expectedLabel(seat.row, seat.column),
+            },
+          });
+        }
+        // الرقم المطبوع على التذاكر القديمة يبقى مطابقًا للمقعد نفسه:
+        // تحديث تسمية التذكرة لتتبع الرقم الجديد (نفس tripSeatId).
+        const affectedTicketSeats = legacySeats.map((seat) => seat.id);
+        const tickets = await tx.ticket.findMany({
+          where: { tripSeatId: { in: affectedTicketSeats } },
+          select: { id: true, tripSeatId: true },
+        });
+        for (const ticket of tickets) {
+          const seat = legacySeats.find((s) => s.id === ticket.tripSeatId);
+          if (seat) {
+            await tx.ticket.update({
+              where: { id: ticket.id },
+              data: { seatLabel: expectedLabel(seat.row, seat.column) },
+            });
+          }
+        }
       });
     }
 
@@ -291,6 +345,7 @@ export class TripsService {
       orderBy: [{ row: 'asc' }, { column: 'asc' }],
     });
 
+    const soldCount = seats.filter((seat) => seat.status === 'BOOKED').length;
     const { seatTemplate, ...bus } = trip.bus;
     return {
       trip: {
@@ -303,13 +358,27 @@ export class TripsService {
         driverName: trip.driverName,
         driverPhone: trip.driverPhone,
         route: trip.route,
-        bus,
+        bus: { ...bus, totalSeats: template.seats.length },
         bookable: BOOKABLE_STATUSES.includes(trip.status),
       },
       layout: {
         rows: seatTemplate.rows,
         columnsPerRow: seatTemplate.columnsPerRow,
         aisleAfterColumn: seatTemplate.aisleAfterColumn,
+        // معلومات فيزيائية الحافلة للواجهة: أين السائق، أين الأبواب،
+        // وأين الممر — مشتقة من التكوين، وتتغير تلقائيًا مع كل قالب.
+        driverPosition: 'FRONT_LEFT',
+        entranceDoor: 'FRONT_RIGHT',
+        rearDoor: 'LEFT',
+      },
+      summary: {
+        total: seats.length,
+        sold: soldCount,
+        available: seats.filter(
+          (seat) =>
+            seat.status === 'AVAILABLE' &&
+            BOOKABLE_SEAT_TYPES.includes(seat.seatType),
+        ).length,
       },
       seats,
     };

@@ -39,6 +39,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // مؤشر dev (nextjs-portal) يطفو فوق الصفحة ويعترض نقرات/لمسات
+  // Playwright على الهاتف؛ يخفى في dev فقط أما الإنتاج لا يحتويه أصلًا.
+  devIndicators: false,
   // Next.js 16 dev servers block cross-origin requests to /_next/* assets
   // (block-cross-site-dev) for CSRF safety. The dev preview is served through
   // a Cloudflare tunnel on this domain, so its Origin header must be
@@ -54,14 +57,18 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
-      {
-        // Dev-server asset URLs are not content-hashed, so intermediate caches
-        // (Cloudflare in front of the tunnel, browsers) must always
-        // revalidate them — otherwise code changes stay invisible for hours on
-        // the preview domain while the local server already serves them.
-        source: "/_next/static/:path*",
-        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
-      },
+      ...(isDev
+        ? [
+            {
+              // Dev asset URLs are not content-hashed. Never override the
+              // immutable cache policy of production static assets.
+              source: "/_next/static/:path*",
+              headers: [
+                { key: "Cache-Control", value: "no-cache, must-revalidate" },
+              ],
+            },
+          ]
+        : []),
     ];
   },
 };

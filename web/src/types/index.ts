@@ -7,4 +7,5 @@ export interface SessionUser {
   email: string;
   roleKey: string;
   permissions: string[];
+  mustChangePassword: boolean;
 }

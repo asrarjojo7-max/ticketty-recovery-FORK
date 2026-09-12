@@ -74,10 +74,10 @@ Record start/end time, backup timestamp, achieved RPO/RTO, row-count sanity chec
 |---|---|
 | جدولة تلقائية | cron يومي 02:30 (الأمر أدناه) |
 | نسخة خارج الخادم | `RCLONE_REMOTE` (B2/S3/Google/…) + **تحقق حجم طرف-للطرف بعد الرفع** |
-| retention | `BACKUP_RETENTION_DAYS` (افتراضي 30) — محلي **و**خارجي |
+| retention | `BACKUP_RETENTION_DAYS` — معطّل افتراضيًا (`0`) حتى اعتماد سياسة الحذف؛ عند قيمة موجبة يطبق على Daily محليًا وخارجيًا |
 | فشل مرئي | exit 1 (يفشل cron التوثيقي) + سجل CSV + **إنذار HIGH عبر نفس قناة الـ watchdog** |
 | سلامة النسخة | `pg_restore --list` فوريًا + `sha256sum --check` بعد الكتابة |
-| فشل الـ cron نفسه | فحص قِدم: لا نجاح خلال 25 ساعة → إنذار |
+| فشل الـ cron نفسه | `backup-watchdog.sh` في جدول مستقل: لا نجاح خلال 25 ساعة → exit 1 + إنذار |
 | الاستعادة | نفس `restore-postgres.sh` + التمرين الربعي `verify-restore.sh` |
 
 ### التثبيت (cron على الخادم)
@@ -85,6 +85,11 @@ Record start/end time, backup timestamp, achieved RPO/RTO, row-count sanity chec
 ```cron
 30 2 * * * cd /srv/ticketty && set -a; . /etc/ticketty/backup.env; set +a; \
   ./ops/backup-nightly.sh >> /var/log/ticketty/backup.log 2>&1
+
+# Independent heartbeat monitor. This must be a separate scheduler entry;
+# otherwise a stopped backup cron could also stop its own monitor.
+17 * * * * cd /srv/ticketty && set -a; . /etc/ticketty/backup.env; set +a; \
+  ./ops/backup-watchdog.sh >> /var/log/ticketty/backup-watchdog.log 2>&1
 ```
 
 `/etc/ticketty/backup.env` (وضع 600):
@@ -114,10 +119,27 @@ BACKUP_WEBHOOK_URL=https://ntfy.sh/<topic>
 | قاعدة مقطوعة + webhook | exit 1 + سجل FAILED + **إنذار HIGH وصل فعليًا** (تحقق ntfy poll) |
 | بلا RCLONE_REMOTE | تحذير صريح + إنذار WARNING (لا نشر prod هكذا) |
 
-### ما لم يُثبت بعد (بصدق)
+### تحقق دورة hardening — 2026-09-12
 
-- رفع فعلي إلى سحابة حقيقية (الإثبات أعلاه بوجهة local rclone
-  تحاكي المسار كاملًا؛ التكوين السحابي يحدث عند النشر على
-  الخادم الحقيقي — نفس السكربت بلا تغيير).
-- استعادة على خادم مختلف (مُغطى منطقيًا بالنسخة الخارجية +
-  `--no-owner --no-acl`؛ التمرين الربعي على staging هو مكان إثباتها).
+- نُشرت نسخة من قاعدة اصطناعية نظيفة إلى Google Drive عبر `rclone`،
+  ثم حُذفت النسخة المحلية، ونُزّلت النسخة الخارجية من جديد.
+- نجح SHA-256 و`pg_restore --list`، ثم نجحت استعادة كاملة إلى قاعدة
+  scratch مستقلة، و42 migration، و71 عبارة ACL، وكل SQL contracts،
+  وRLS probe، وapplication bootstrap، ومقارنة أعداد الصفوف. RTO: 16s.
+- حُذف مجلد التحقق الخارجي بعد الاختبار. لا يُعد ذلك دليلاً على تشغيل
+  جدول production المستمر؛ يجب ضبط المسار الدائم وسياسة الاحتفاظ في الخادم.
+- تحذير تشغيلي: remote الاختبار يستخدم Google Drive client id المشترك
+  لـ rclone والمقرر إيقافه في 2026؛ أنشئ client id مملوكًا للشركة قبل pilot.
+- الاستعادة على خادم فعلي مختلف ما زالت شرط نشر؛ الاختبار استخدم قاعدة
+  مستقلة على نفس خادم PostgreSQL المحلي.
+
+### التنفيذ التشغيلي النهائي — 2026-09-12
+
+- الوجهة الرسمية الموصولة: `gdrive:Ticketty Production/01_Database_Backups/`.
+- أُنشئت طبقات `Daily/Weekly/Monthly`، ونسخة baseline موجودة في الطبقات الثلاث.
+- النسخ اليومي والـwatchdog مثبتان كـsystemd timers مستقلين على الخادم الحالي؛ تشغيل الخدمة اليدوي نجح ورفع نسخة خارجية.
+- `backup-nightly.sh` يكتب مقاييس textfile لـnode-exporter: آخر نجاح ونتيجة آخر محاولة.
+- حذف retention **معطل افتراضياً** (`BACKUP_RETENTION_DAYS=0`) حتى اعتماد السياسة؛ لا تُحذف نسخة صالحة تلقائياً قبل ذلك.
+- النسخ الأسبوعي يعمل يوم الأحد عند ضبط `RCLONE_WEEKLY_REMOTE`، والشهري في اليوم الأول عند ضبط `RCLONE_MONTHLY_REMOTE`.
+- الدليل التفصيلي للنسخة الحالية موجود في `database-backup-manifest-2026-09-12.txt` و`PRODUCTION_OPERATIONS_EVIDENCE_2026-09-12.md`.
+- **Independent restore on second server = DEFERRED** لعدم وجود خادم ثانٍ. لا يُعاد تصنيفها VERIFIED قبل تنفيذ `SECOND_SERVER_RESTORE_CHECKLIST.md` على مضيف مستقل.

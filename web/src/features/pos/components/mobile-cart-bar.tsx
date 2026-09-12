@@ -50,7 +50,9 @@ export function MobileCartBar({
   // حالة الفتح تُقرأ فقط من تفاعل المستخدم — لا من طول السلة —
   // فلا يتبدل هيكل الشجرة بين الخادم والعميل (لا hydration mismatch).
   const [open, setOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  // Pilot: النقد هو الطريقة الوحيدة المتاحة فعليًا — القيمة ثابتة
+  // وتُرسل في الحمولة كمسؤولية خادم (مطابقة لسلوك سلة سطح المكتب).
+  const paymentMethod = "CASH" satisfies PaymentMethod;
   const [boardingSel, setBoardingStop] = useState<string | null>(null);
   const [dropOffSel, setDropOffStop] = useState<string | null>(null);
   const boardingStop = boardingSel ?? stops[0] ?? "";
@@ -68,7 +70,7 @@ export function MobileCartBar({
 
   // من lg فما فوق: لا وجود للشريط إطلاقًا (العمود الجانبي يتكفل)
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 shadow-elevated backdrop-blur lg:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 shadow-elevated backdrop-blur xl:hidden">
       {open ? (
         <div className="max-h-[68vh] overflow-y-auto overscroll-contain p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
@@ -116,7 +118,7 @@ export function MobileCartBar({
                           passengerName: e.target.value,
                         })
                       }
-                      className="h-10 text-sm"
+                      className="h-11 text-base"
                     />
                     <Input
                       placeholder="هاتف الراكب"
@@ -127,8 +129,9 @@ export function MobileCartBar({
                           passengerPhone: e.target.value,
                         })
                       }
-                      className="h-10 text-sm"
+                      className="h-11 text-base"
                       dir="ltr"
+                      inputMode="tel"
                     />
                   </div>
                   <Input
@@ -140,8 +143,9 @@ export function MobileCartBar({
                         passengerNationalId: e.target.value,
                       })
                     }
-                    className="mt-2 h-10 text-sm"
+                    className="mt-2 h-11 text-base"
                     dir="ltr"
+                    inputMode="numeric"
                   />
                 </div>
               );
@@ -153,7 +157,7 @@ export function MobileCartBar({
             <label className="grid gap-1 text-[11px] font-bold text-muted-foreground">
               محطة الصعود
               <select
-                className="h-10 rounded-xl border border-input bg-card px-2 text-sm"
+                className="h-11 rounded-xl border border-input bg-card px-2 text-base"
                 value={boardingStop}
                 onChange={(e) => setBoardingStop(e.target.value)}
               >
@@ -165,7 +169,7 @@ export function MobileCartBar({
             <label className="grid gap-1 text-[11px] font-bold text-muted-foreground">
               محطة النزول
               <select
-                className="h-10 rounded-xl border border-input bg-card px-2 text-sm"
+                className="h-11 rounded-xl border border-input bg-card px-2 text-base"
                 value={dropOffStop}
                 onChange={(e) => setDropOffStop(e.target.value)}
               >

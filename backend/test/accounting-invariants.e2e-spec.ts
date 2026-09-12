@@ -6,6 +6,7 @@ import { App } from 'supertest/types';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
+import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
  * ACCOUNTING INVARIANTS (Phase 4 — من جدول الخطة)
@@ -78,13 +79,12 @@ describe('accounting invariants (Phase 4)', () => {
     tenantOrgId = (provisioned.body as { organization: { id: string } })
       .organization.id;
 
-    const tenantLogin = await request(server)
-      .post('/api/auth/login')
-      .send({
-        email: `owner-${slug}@ticketty.local`,
-        password: 'Acc-Inv-Passw0rd-2026',
-      });
-    tenantToken = (tenantLogin.body as { access_token: string }).access_token;
+    tenantToken = await loginAndRotateTemporaryPassword(
+      server,
+      `owner-${slug}@ticketty.local`,
+      'Acc-Inv-Passw0rd-2026',
+      'Acc-Inv-Permanent-2026!',
+    );
 
     // دليل حسابات + يومية + فترتان (مفتوحة/مغلقة)
     const cash = await request(server)

@@ -28,7 +28,7 @@ const initialForm = {
 const fieldClass = "space-y-2";
 const labelClass = "text-sm font-medium";
 const selectClass =
-  "flex h-10 w-full rounded-xl border border-input bg-card px-3.5 py-1 text-sm shadow-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10 disabled:opacity-50";
+  "flex h-11 w-full rounded-xl border border-input bg-card px-3.5 py-1 text-base shadow-sm md:h-10 md:text-sm transition-colors hover:border-primary/25 focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/10 disabled:opacity-50";
 
 export function CreateTripForm({ onCreated, onCancel }: CreateTripFormProps) {
   const [form, setForm] = useState(initialForm);
@@ -206,7 +206,7 @@ export function CreateTripForm({ onCreated, onCancel }: CreateTripFormProps) {
         </p>
       ) : null}
 
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         {onCancel ? (
           <Button type="button" variant="outline" onClick={onCancel}>إلغاء</Button>
         ) : null}

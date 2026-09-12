@@ -85,10 +85,6 @@ BEGIN
     RAISE NOTICE 'e2e-setup: missing route/template fixture (skipped)';
     RETURN;
   END IF;
-  INSERT INTO buses (id, "organizationId", "seatTemplateId", "plateNumber", status, "createdAt", "updatedAt")
-  VALUES ('e2e-bus-' || extract(epoch from now())::bigint::text, org.id, template.id,
-          'E2E-' || extract(epoch from now())::bigint::text, 'READY', now(), now())
-  RETURNING id INTO bus_ready;
   -- Freshness WITHOUT touching real data: the POS golden path needs a
   -- sellable future trip. Old fixture trips accumulate REAL bookings
   -- (FK-protected — deleting them is impossible and wrong anyway), so
@@ -105,6 +101,10 @@ BEGIN
   ELSE
     RAISE NOTICE 'e2e-setup: no sellable trip — provisioning one on a fresh fixture bus';
   END IF;
+  INSERT INTO buses (id, "organizationId", "seatTemplateId", "plateNumber", status, "createdAt", "updatedAt")
+  VALUES ('e2e-bus-' || extract(epoch from now())::bigint::text, org.id, template.id,
+          'E2E-' || extract(epoch from now())::bigint::text, 'READY', now(), now())
+  RETURNING id INTO bus_ready;
   v_trip_id := 'e2e-trip-' || extract(epoch from now())::bigint::text;
   INSERT INTO trips (id, "organizationId", "routeId", "busId", "departureAt", "status", "updatedAt")
   VALUES (v_trip_id, org.id, route.id, bus_ready.id, tomorrow, 'OPEN', now());

@@ -13,8 +13,10 @@ export type ValidatedEnvironment = Record<string, unknown> & {
   JWT_ISSUER: string;
   JWT_AUDIENCE: string;
   PORT: number;
+  API_BIND_HOST: string;
   TRUST_PROXY_HOPS: number;
   WEB_ORIGIN: string;
+  PILOT_PAYMENT_MODE: 'CASH';
 };
 
 function requiredString(
@@ -27,6 +29,14 @@ function requiredString(
     throw new Error(`${key} is required`);
   }
   return value.trim();
+}
+
+function jwtLifetimeSeconds(value: string): number | null {
+  const match = /^(\d+)(s|m|h)$/.exec(value);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const multiplier = match[2] === 'h' ? 3600 : match[2] === 'm' ? 60 : 1;
+  return amount * multiplier;
 }
 
 function httpUrl(value: string, key: string): string {
@@ -78,10 +88,42 @@ export function validateEnvironment(
     throw new Error('PORT must be an integer between 1 and 65535');
   }
 
+  const apiBindHost = requiredString(
+    environment,
+    'API_BIND_HOST',
+    nodeEnv === 'production' ? '127.0.0.1' : '0.0.0.0',
+  );
+  if (!['127.0.0.1', '0.0.0.0'].includes(apiBindHost)) {
+    throw new Error('API_BIND_HOST must be 127.0.0.1 or 0.0.0.0');
+  }
+
   const trustProxyValue = requiredString(environment, 'TRUST_PROXY_HOPS', '0');
   const trustProxyHops = Number(trustProxyValue);
   if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0) {
     throw new Error('TRUST_PROXY_HOPS must be a nonnegative integer');
+  }
+
+  const jwtExpiresIn = requiredString(environment, 'JWT_EXPIRES_IN', '15m');
+  const jwtSeconds = jwtLifetimeSeconds(jwtExpiresIn);
+  if (nodeEnv === 'production' && (!jwtSeconds || jwtSeconds > 3600)) {
+    throw new Error(
+      'JWT_EXPIRES_IN must be an s/m/h duration no longer than 1h in production',
+    );
+  }
+  const webOrigin = httpUrl(
+    requiredString(environment, 'WEB_ORIGIN', 'http://localhost:3000'),
+    'WEB_ORIGIN',
+  );
+  const pilotPaymentMode = requiredString(
+    environment,
+    'PILOT_PAYMENT_MODE',
+    'CASH',
+  );
+  if (pilotPaymentMode !== 'CASH') {
+    throw new Error('PILOT_PAYMENT_MODE must be CASH for the controlled pilot');
+  }
+  if (nodeEnv === 'production' && new URL(webOrigin).protocol !== 'https:') {
+    throw new Error('WEB_ORIGIN must use HTTPS in production');
   }
 
   return {
@@ -89,14 +131,13 @@ export function validateEnvironment(
     NODE_ENV: nodeEnv as ValidatedEnvironment['NODE_ENV'],
     DATABASE_URL: databaseUrl,
     JWT_SECRET: jwtSecret,
-    JWT_EXPIRES_IN: requiredString(environment, 'JWT_EXPIRES_IN', '15m'),
+    JWT_EXPIRES_IN: jwtExpiresIn,
     JWT_ISSUER: requiredString(environment, 'JWT_ISSUER', 'ticketty-api'),
     JWT_AUDIENCE: requiredString(environment, 'JWT_AUDIENCE', 'ticketty-web'),
     PORT: port,
+    API_BIND_HOST: apiBindHost,
     TRUST_PROXY_HOPS: trustProxyHops,
-    WEB_ORIGIN: httpUrl(
-      requiredString(environment, 'WEB_ORIGIN', 'http://localhost:3000'),
-      'WEB_ORIGIN',
-    ),
+    WEB_ORIGIN: webOrigin,
+    PILOT_PAYMENT_MODE: 'CASH',
   };
 }

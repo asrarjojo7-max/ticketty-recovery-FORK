@@ -30,7 +30,7 @@ model Organization {
   branches           Branch[]
   users              User[]
   roles              Role[]
-  subscription       Subscription?
+  subscriptions      Subscription[]
   customers          Customer[]
   routes             Route[]
   buses              Bus[]
@@ -49,6 +49,7 @@ model Organization {
   expenseAdjustments ExpenseAdjustment[]
   idempotencyRecords IdempotencyRecord[]
   settlementLines    SettlementLine[]
+  ticketBranding     OrganizationTicketBranding?
   accounts           Account[]
   fiscalPeriods      FiscalPeriod[]
   journals           Journal[]
@@ -58,6 +59,31 @@ model Organization {
   accountingEvents   AccountingEvent[]
 
   @@map("organizations")
+}
+
+/// هوية التذكرة منفصلة عن بيانات المؤسسة حتى لا تُحمّل الصور الثنائية
+/// مع كل استعلام للمؤسسة. الصور محفوظة في PostgreSQL لضمان بقائها عبر النشر.
+model OrganizationTicketBranding {
+  organizationId String   @id
+  tagline        String?
+  primaryColor   String   @default("#07558C")
+  secondaryColor String   @default("#F7941D")
+  checkInMinutes Int      @default(30)
+  baggagePieces  Int      @default(1)
+  logo           Bytes?
+  logoMime       String?
+  logoBytes      Int?
+  logoSha256     String?
+  busImage       Bytes?
+  busImageMime   String?
+  busImageBytes  Int?
+  busImageSha256 String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_ticket_branding")
 }
 
 model Branch {
@@ -116,6 +142,7 @@ model User {
   phone               String?
   passwordHash        String
   passwordChangedAt   DateTime  @default("1970-01-01T00:00:00Z")
+  mustChangePassword  Boolean   @default(false)
   failedLoginAttempts Int       @default(0)
   lockedUntil         DateTime?
   lastLoginAt         DateTime?
@@ -408,6 +435,7 @@ model Booking {
 
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, tripId])
+  @@index([organizationId, createdAt])
   @@index([branchId, createdAt])
   @@map("bookings")
 }
@@ -425,7 +453,7 @@ model Ticket {
   bookingId           String
   tripId              String
   tripSeatId          String
-  number              String       @unique // رقم تذكرة قابل للقراءة TK-2026-000184
+  number              String // فريد داخل المنظمة عبر @@unique أدناه
   passengerName       String
   passengerPhone      String
   passengerNationalId String?
@@ -441,7 +469,7 @@ model Ticket {
   printedAt           DateTime?
   printedById         String?
   boardedAt           DateTime?
-  boardedById          String?
+  boardedById         String?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -451,8 +479,9 @@ model Ticket {
   tripSeat     TripSeat     @relation(fields: [tripSeatId], references: [id])
   commission   Commission?
 
-  @@index([organizationId, tripId])
   @@unique([organizationId, number])
+  @@index([organizationId, tripId])
+  @@index([organizationId, createdAt])
   @@index([tripSeatId])
   @@map("tickets")
 }
@@ -490,6 +519,7 @@ model Payment {
 
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, bookingId])
+  @@index([organizationId, createdAt])
   @@index([branchId, createdAt])
   @@map("payments")
 }
@@ -967,7 +997,7 @@ model JournalEntryLine {
 
 model Subscription {
   id               String    @id @default(cuid())
-  organizationId   String    @unique
+  organizationId   String
   planKey          String // TRIAL | MONTHLY | YEARLY
   priceSdg         Int       @default(0)
   currency         String    @default("SDG")
@@ -977,12 +1007,29 @@ model Subscription {
   cancelledAt      DateTime?
   notes            String?
   createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  updatedAt        DateTime  @default(now()) @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  @@index([status, currentPeriodEnd])
+  // The one-active-subscription rule is a SQL partial unique index because
+  // Prisma cannot represent a predicate in @@unique.
+  @@index([status, currentPeriodEnd], map: "subscriptions_status_period_idx")
   @@map("subscriptions")
+}
+
+model SystemEvent {
+  id               String    @id
+  level            String    @default("INFO")
+  category         String
+  message          String
+  context          Json?
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  createdAt        DateTime  @default(now())
+
+  @@index([level, createdAt(sort: Desc)], map: "system_events_level_created_idx")
+  @@index([category, createdAt(sort: Desc)], map: "system_events_category_created_idx")
+  @@map("system_events")
 }
 
 model AuditLog {

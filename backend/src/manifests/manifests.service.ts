@@ -134,6 +134,13 @@ export class ManifestsService {
       include: { booking: { include: { agent: true } } },
       orderBy: [{ seatLabel: 'asc' }],
     });
+    // أرقام المقاعد نصية في القاعدة (أرقام فقط بعد الترقيم الجديد،
+    // وحروف قديمة للتذاكر التاريخية) — نرتب رقميًا في الذاكرة حتى
+    // يظهر "9" قبل "10" في المنفستو، مع تراجع آمن للترتيب الأبجدي
+    // لأي تذاكر حروف لم تُرحّل بعد.
+    const numericOr = (a: string, b: string) =>
+      a.localeCompare(b, 'en', { numeric: true, sensitivity: 'base' });
+    tickets.sort((a, b) => numericOr(a.seatLabel, b.seatLabel));
 
     const revenue = tickets.reduce((sum, t) => sum + t.fare.toNumber(), 0);
     return {

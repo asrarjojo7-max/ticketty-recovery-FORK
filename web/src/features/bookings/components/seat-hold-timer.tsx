@@ -6,9 +6,11 @@ import { Clock3 } from "lucide-react";
 interface SeatHoldTimerProps {
   expiresAt: string;
   onExpired: () => void;
+  /** داخل شريط سفلي ثابت على الهاتف — بلا هوامش خارجية. */
+  embedded?: boolean;
 }
 
-export function SeatHoldTimer({ expiresAt, onExpired }: SeatHoldTimerProps) {
+export function SeatHoldTimer({ expiresAt, onExpired, embedded = false }: SeatHoldTimerProps) {
   const [remaining, setRemaining] = useState(() => Math.max(0, new Date(expiresAt).getTime() - Date.now()));
 
   useEffect(() => {
@@ -31,9 +33,9 @@ export function SeatHoldTimer({ expiresAt, onExpired }: SeatHoldTimerProps) {
   const urgent = remaining < 120_000;
 
   return (
-    <div className={`mb-4 flex items-center justify-between rounded-xl border px-3 py-2.5 text-xs ${urgent ? "border-amber-500/30 bg-warning/15 text-warning-foreground dark:text-amber-300" : "border-blue-500/20 bg-info/15 text-blue-700 dark:text-blue-300"}`}>
+    <div className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-sm ${embedded ? "" : "mb-4"} ${urgent ? "border-amber-500/30 bg-warning/15 text-warning-foreground dark:text-amber-300" : "border-blue-500/20 bg-info/15 text-blue-700 dark:text-blue-300"}`}>
       <span className="flex items-center gap-2"><Clock3 className="h-4 w-4" />المقعد محجوز مؤقتًا</span>
-      <span className="font-mono text-sm font-bold" dir="ltr">{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>
+      <span className="font-mono text-base font-bold" dir="ltr">{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>
     </div>
   );
 }

@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
  * المستخدم مدير شركة نقل — ليس مهندس مصفوفات. لذلك يرى هنا
  * *باصًا* له مقدمة واضحة واتجاه سير وممر ومقعد سائق وباب خلفي،
  * ويضيف/يحذف الصفوف والمقاعد بالنقر، مع ترقيم تلقائي واقعي
- * (A1، A2، …) وترقيم يتحرك معه. المعاينة حية قبل الحفظ.
+ * (أرقام متسلسلة 1، 2، 3… مشتقة من الموضع) تتحرك مع التعديل.
+ * المعاينة حية قبل الحفظ.
  *
  * الناتج هو نفس JSON القالب الموجود (rows/columnsPerRow/aisleAfterColumn
  * + قائمة المقاعد) — لا تغيير في الـ API إطلاقًا.
@@ -38,9 +39,13 @@ const KIND_LABEL: Record<SeatKind, string> = {
   BLOCKED: "غير متاح",
 };
 
-/** حرف عمود واقعي: 1→A، 2→B … (الترقيم القياسي في الباصات). */
-function columnLetter(c: number): string {
-  return String.fromCharCode(64 + c);
+/**
+ * رقم المقعد الرسمي: أرقام فقط — مشتق من الموضع داخل الحافلة
+ * (نفس اشتقاق الخادم). لا حروف أعمدة: الراكب والكاشير وموظف
+ * الصعود يقرؤون رقمًا واحدًا بسيطًا.
+ */
+function seatNumber(row: number, column: number, columnsPerRow: number): number {
+  return (row - 1) * columnsPerRow + column;
 }
 
 export function SeatTemplateBuilder({
@@ -73,7 +78,7 @@ export function SeatTemplateBuilder({
         const key = `${r}:${c}`;
         if (holes.has(key)) continue;
         const kind = kinds[key] ?? "REGULAR";
-        out.push({ row: r, column: c, seatType: kind, label: `${columnLetter(c)}${r}` });
+        out.push({ row: r, column: c, seatType: kind, label: String(seatNumber(r, c, columnsPerRow)) });
       }
     }
     return out;
@@ -133,32 +138,32 @@ export function SeatTemplateBuilder({
         <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} placeholder="اكتب اسمًا تعرفه به هذا التخطيط" />
       </label>
 
-      <div className="grid grid-cols-3 gap-3 rounded-2xl border border-border bg-muted/30 p-4">
+      <div className="grid gap-4 rounded-2xl border border-border bg-muted/30 p-4 sm:grid-cols-3">
         <label className="grid gap-1.5 text-xs font-bold">
           عدد الصفوف
           <div className="flex items-center gap-1">
-            <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => setRowsCount((n) => Math.max(1, n - 1))} aria-label="صف أقل">−</Button>
+            <Button type="button" size="icon" variant="outline" className="h-11 w-11 sm:h-9 sm:w-9" onClick={() => setRowsCount((n) => Math.max(1, n - 1))} aria-label="صف أقل">−</Button>
             <span className="w-8 text-center font-display text-lg font-bold">{rowsCount}</span>
-            <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => addRowAt(rowsCount)} aria-label="صف أكثر"><Plus className="h-4 w-4" /></Button>
+            <Button type="button" size="icon" variant="outline" className="h-11 w-11 sm:h-9 sm:w-9" onClick={() => addRowAt(rowsCount)} aria-label="صف أكثر"><Plus className="h-4 w-4" /></Button>
           </div>
         </label>
         <label className="grid gap-1.5 text-xs font-bold">
           مقاعد الصف الواحد
           <div className="flex items-center gap-1">
-            <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => setColumnsPerRow((n) => Math.max(1, Math.min(10, n - 1)))} aria-label="مقعد أقل">−</Button>
+            <Button type="button" size="icon" variant="outline" className="h-11 w-11 sm:h-9 sm:w-9" onClick={() => setColumnsPerRow((n) => Math.max(1, Math.min(10, n - 1)))} aria-label="مقعد أقل">−</Button>
             <span className="w-8 text-center font-display text-lg font-bold">{columnsPerRow}</span>
-            <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => setColumnsPerRow((n) => Math.max(1, Math.min(10, n + 1)))} aria-label="مقعد أكثر"><Plus className="h-4 w-4" /></Button>
+            <Button type="button" size="icon" variant="outline" className="h-11 w-11 sm:h-9 sm:w-9" onClick={() => setColumnsPerRow((n) => Math.max(1, Math.min(10, n + 1)))} aria-label="مقعد أكثر"><Plus className="h-4 w-4" /></Button>
           </div>
         </label>
         <label className="grid gap-1.5 text-xs font-bold">
           الممر بعد العمود
           <select
-            className="h-8 rounded-lg border border-input bg-card px-2 text-sm"
+            className="h-11 w-full rounded-lg border border-input bg-card px-2 text-base md:h-10 md:text-sm"
             value={aisleAfterColumn}
             onChange={(e) => setAisleAfterColumn(Number(e.target.value))}
           >
             {Array.from({ length: columnsPerRow }).map((_, i) => (
-              <option key={i} value={i}>{i === 0 ? "بلا ممر" : `بعد العمود ${columnLetter(i)}`}</option>
+              <option key={i} value={i}>{i === 0 ? "بلا ممر" : `بعد العمود ${i}`}</option>
             ))}
           </select>
         </label>
@@ -180,8 +185,9 @@ export function SeatTemplateBuilder({
           </span>
         </div>
 
-        <div className="mx-auto grid w-fit gap-2" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 3rem))` }}>
-          {Array.from({ length: rowsCount }).map((_, ri) => {
+        <div className="w-full overflow-x-auto pb-2">
+          <div className="mx-auto grid w-fit gap-2" style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 3rem))` }}>
+            {Array.from({ length: rowsCount }).map((_, ri) => {
             const r = ri + 1;
             const cells = [];
             for (let c = 1; c <= columnsPerRow; c++) {
@@ -210,15 +216,15 @@ export function SeatTemplateBuilder({
                         e.preventDefault();
                         removeSeat(r, c);
                       }}
-                      title={`مقعد ${columnLetter(c)}${r} — ${KIND_LABEL[kind]}\nنقرة: تغيير النوع · نقرة يمنى: حذف المقعد`}
+                      title={`مقعد ${seatNumber(r, c, columnsPerRow)} — ${KIND_LABEL[kind]}\nنقرة: تغيير النوع · نقرة يمنى: حذف المقعد`}
                       className={cn(
                         "flex h-11 w-12 flex-col items-center justify-center rounded-xl border text-[10px] font-bold transition",
                         KIND_CLS[kind],
                       )}
-                      aria-label={`مقعد ${columnLetter(c)}${r}، النوع ${KIND_LABEL[kind]}`}
+                      aria-label={`مقعد رقم ${seatNumber(r, c, columnsPerRow)}، النوع ${KIND_LABEL[kind]}`}
                     >
                       <Armchair className="h-4 w-4" />
-                      {columnLetter(c)}{r}
+                      <span dir="ltr" className="tabular-nums">{seatNumber(r, c, columnsPerRow)}</span>
                     </button>
                   </div>,
                 );
@@ -231,8 +237,9 @@ export function SeatTemplateBuilder({
                 );
               }
             }
-            return cells;
-          })}
+              return cells;
+            })}
+          </div>
         </div>
 
         {/* باب الخلف */}
@@ -258,7 +265,7 @@ export function SeatTemplateBuilder({
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl bg-primary/5 px-4 py-3 text-xs">
+      <div className="flex flex-col gap-3 rounded-xl bg-primary/5 px-4 py-3 text-xs sm:flex-row sm:items-center sm:justify-between">
         <span className="font-semibold">سيُنشأ التخطيط بـ <strong className="text-primary">{seatList.length}</strong> مقعد قابل للبيع</span>
         <Button type="submit" disabled={pending || !name.trim() || seatList.length === 0}>
           <Plus /> حفظ التخطيط

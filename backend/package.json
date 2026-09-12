@@ -31,6 +31,8 @@
     "test:db:trip-overlap": "prisma db execute --schema prisma/schema.prisma --file test/sql/trip-overlap.sql",
     "db:seed": "prisma db seed",
     "db:seed-demo": "ts-node prisma/seed-demo.ts",
+    "db:provision-runtime": "bash scripts/provision-runtime-role.sh",
+    "db:provision-monitoring": "bash scripts/provision-monitoring-role.sh",
     "test:db:invariants": "prisma db execute --schema prisma/schema.prisma --file test/sql/database-invariants.sql",
     "prestart:dev": "npm run --silent test:db:invariants --if-present"
   },
@@ -52,7 +54,8 @@
     "prisma": "^6.19.3",
     "prom-client": "^15.1.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -95,6 +98,20 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageThreshold": {
+      "global": {
+        "statements": 48,
+        "branches": 43,
+        "functions": 26,
+        "lines": 48
+      },
+      "src/common/idempotency.ts": {
+        "statements": 90,
+        "branches": 80,
+        "functions": 75,
+        "lines": 90
+      }
+    }
   }
 }

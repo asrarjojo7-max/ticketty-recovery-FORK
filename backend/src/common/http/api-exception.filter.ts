@@ -17,6 +17,7 @@ export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
+  | 'PASSWORD_CHANGE_REQUIRED'
   | 'SUBSCRIPTION_REQUIRED'
   | 'NOT_FOUND'
   | 'CONFLICT'
@@ -80,6 +81,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       code = errorCodeForStatus(status);
+      const exceptionResponse = exception.getResponse();
+      if (
+        typeof exceptionResponse === 'object' &&
+        exceptionResponse !== null &&
+        'errorCode' in exceptionResponse &&
+        exceptionResponse.errorCode === 'PASSWORD_CHANGE_REQUIRED'
+      ) {
+        code = 'PASSWORD_CHANGE_REQUIRED';
+      }
       message = httpMessage(exception);
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {

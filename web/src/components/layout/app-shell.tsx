@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { MobileBottomNav } from "./mobile-bottom-nav";
 import { SessionProvider } from "./session-context";
 import { OnboardingTour } from "@/components/onboarding/onboarding-tour";
 import type { SessionUser } from "@/types";
@@ -35,12 +36,16 @@ export function AppShell({ user, children }: AppShellProps) {
       <OnboardingTour roleKey={user.roleKey} />
       <div className="app-canvas flex min-h-screen bg-background text-foreground">
         <Sidebar collapsed={!open} onClose={() => setOpen(false)} />
-        <div className="flex min-w-0 flex-1 flex-col lg:ps-64">
+        <div className="flex min-w-0 flex-1 flex-col lg:ps-60">
           <Header user={user} onMenuClick={() => setOpen((o) => !o)} />
-          <main className="flex-1 p-3 sm:p-4 lg:p-6 lg:px-8">
-            <div className="mx-auto max-w-7xl">{children}</div>
+          <main className="flex-1 p-4 pb-[calc(5.25rem+env(safe-area-inset-bottom))] sm:p-5 sm:pb-[calc(5.25rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6">
+            <div className="mx-auto w-full max-w-[90rem]">{children}</div>
           </main>
         </div>
+        <MobileBottomNav
+          menuOpen={open}
+          onMoreClick={() => setOpen(true)}
+        />
       </div>
     </SessionProvider>
   );

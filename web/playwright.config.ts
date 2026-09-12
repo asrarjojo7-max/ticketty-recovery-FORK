@@ -30,6 +30,39 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         storageState: "playwright/.auth/owner.json",
       },
+      testMatch: /.*\.spec\.ts/,
+      // كل ملفات اختبار الهاتف (mobile / agent-mobile) تتبع مشاريع
+      // الأجهزة المحمولة المخصصة — لا تعمل على سطح المكتب إطلاقًا.
+      testIgnore: /mobile/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "mobile-chromium-owner",
+      use: {
+        ...devices["Pixel 7"],
+        storageState: "playwright/.auth/owner.json",
+      },
+      testMatch: /.*\.mobile\.spec\.ts/,
+      testIgnore: /.*\.agent-mobile\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "mobile-webkit-owner",
+      use: {
+        ...devices["iPhone 13"],
+        storageState: "playwright/.auth/owner.json",
+      },
+      testMatch: /.*\.mobile\.spec\.ts/,
+      testIgnore: /.*\.agent-mobile\.spec\.ts/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "mobile-chromium-agent",
+      use: {
+        ...devices["Pixel 7"],
+        storageState: "playwright/.auth/agent.json",
+      },
+      testMatch: /.*\.agent-mobile\.spec\.ts/,
       dependencies: ["setup"],
     },
   ],

@@ -1,7 +1,8 @@
-# Observability Baseline — Phase 6 (Pre-Launch Hardening)
+# Production Observability — Controlled Pilot
 
-> الحد الأدنى المفيد والموثوق قبل أول عميل — لا منظومة مراقبة ضخمة.
-> dependency واحدة (prom-client 15.1.3)، بلا hosted service.
+> تطبيق داخلي متكامل: application metrics + Prometheus + Alertmanager +
+> PostgreSQL exporter + node-exporter + blackbox web probe. واجهات المراقبة خاصة وغير
+> مكشوفة عبر BFF، وأسرار الإشعار تبقى في ملف خارج Git.
 
 ## المصدر: `GET /api/metrics`
 
@@ -34,27 +35,40 @@
 `c…base36` / أرقام) تُقلص إلى `:id`/`:num` — cardinality محدودة
 فلا تنفجر الليبلات مهما طال التشغيل.
 
-## قواعد التنبيه — `ops/alert-rules.yml`
+## Prometheus + Alertmanager
 
-جاهزة للربط بأي Prometheus/Alertmanager عند النشر (لا نشر
-hosted الآن). الجوهر:
+ملفات النشر في `ops/monitoring/` ومربوطة بخدمات Compose الخاصة. Prometheus
+يجمع التطبيق والويب وPostgreSQL وموارد المضيف، ويقيّم 26 قاعدة في أربع
+مجموعات: التطبيق، قاعدة البيانات، النسخ الاحتياطي، والبنية التحتية.
 
-1. **AccountingWorkerStale** (critical): العامل لم ينجح منذ >15 دقيقة.
-2. **AccountingWorkerFailing** (warning): فشل متكرر >10 دقائق.
-3. **AccountingEventsFailing** (warning): أحداث أعمال فاشلة (مربع مالي).
-4. **AccountingQueueBacklog** (warning): PENDING > 100 منذ 15 دقيقة.
-5. **AccountingStalePending** (critical): أحداث معلقة + عامل متوقف.
-6. **SubscriptionSweepStale/Erroring** (warning): سحّال الاشتراكات.
-7. **SubscriptionBlocksSurge** (info): موجة 402 — فرصة تجارية.
-8. **Backend5xxRate** (critical): أخطاء 5xx > 5%.
-9. **DatabaseDown** (critical): scrape فشل.
+تغطي القواعد: توقف التطبيق، 5xx، p95 latency (>750ms لمدة 10 دقائق مقابل
+baseline مقاس 333ms)، إعادة التشغيل، ضغط الذاكرة/event-loop، توقف قاعدة
+البيانات، استهلاك الاتصالات >80%، deadlocks، توقف العامل أو فشله وتراكم
+الطابور، فشل/تقادم النسخ، CPU/ذاكرة/قرص/readonly filesystem، وإعادة تشغيل
+الحاويات.
+
+التحقق في 2026-09-12:
+
+- `promtool check config`: نجاح، 25 قاعدة/4 مجموعات.
+- `amtool check-config`: نجاح.
+- خمسة targets حيّة أثناء الاختبار: التطبيق وPrometheus وPostgreSQL exporter
+  وnode-exporter وblackbox-exporter.
+- Alertmanager استقبل تنبيهًا مضبوطًا وأرسله إلى webhook اختباري محلي؛ هذا
+  يثبت pipeline فقط.
+- **قناة خارجية حقيقية: BLOCKED** — لا يوجد webhook/SMTP/Telegram معتمد أو
+  secret على الخادم. `alertmanager.yml` يقرأ URL من ملف secret غير ملتزم
+  (`/run/secrets/alertmanager_webhook_url`) ويفشل مغلقًا عند غيابه. لا يجوز
+  وصف التنبيه الخارجي بأنه VERIFIED قبل إثبات وصوله إلى قناة مملوكة للشركة.
 
 ## Health — الجاهزية توسعة (لا استبدال)
 
-`/api/health/readiness` يضيف `stalePendingAccountingEvents`
-(أحداث PENDING أقدم من 10 دقائق، أو -1 إن تعذر الاستعلام) —
-**degraded وليس not-ready**: تذبذب العامل لا يقتل الحاوية،
-لكن يظهر للمراقبة. `database: up` يبقى شرط الجاهزية الفعلي.
+`/api/health/readiness` يعلن حالة العامل صراحةً:
+`disabled` أو `never_succeeded` أو `failing` أو `stale` أو `healthy`،
+مع `secondsSinceLastSuccess=null` عندما لا يوجد نجاح سابق. العامل المفعّل
+الذي لم ينجح أو أصبح متعطلاً يجعل الحالة العامة `degraded` بدل نجاح صامت،
+مع إبقاء HTTP 200 كي لا يؤدي تعطل العامل إلى حلقة إعادة تشغيل توقف البيع.
+`database: up` يبقى شرط الجاهزية الفعلي، وقواعد التنبيه/watchdog مسؤولة
+عن تصعيد الحالة المتدهورة.
 
 ## الاختبار
 
