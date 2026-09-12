@@ -92,8 +92,10 @@ No second-server success is claimed. The repository provides `ops/restore-postgr
 - Production response contained CSP, HSTS, nosniff, frame denial, referrer policy, and permissions policy; CSP omitted development-only `unsafe-eval`.
 - `ticketty-monitoring.service` and the local evidence sink are enabled and active. Prometheus, Alertmanager, postgres-exporter, node-exporter, and blackbox-exporter listen only on loopback.
 
-## Final artifact evidence to attach after commit
+## Git, test, and archive evidence
 
-- Final Git commit SHA and clean-tree status.
-- Final full integration/browser/container verification result.
-- Source/release archive names, hashes, and Drive download verification.
+- Consolidated engineering release commit: `5836b27430d3089fe678d2e98f911fd9c30ad77e` (`release: prepare Ticketty controlled pilot`).
+- Backend final gates: lint/typecheck/build/audit passed; 32 unit suites/202 tests passed; 17 API E2E suites/173 tests passed; all six SQL contract commands and Prisma migration validation/status passed.
+- Web final gates: lint/typecheck/build/audit passed; 7 unit files/31 tests passed; 55 Playwright tests passed against the public HTTPS production runtime across desktop Chromium, mobile Chromium, and mobile WebKit.
+- Backend and web production container images built successfully and declare the non-root `node` user.
+- `ops/create-release-archive.sh` refuses a dirty tree and generated a full Git archive plus Backend/Web/Database/Migrations/Shared archives, each with SHA-256 and tar integrity checks. The final archive commit/hash is recorded in the Drive recovery manifest and the execution report rather than recursively embedding a commit SHA in its own commit.
