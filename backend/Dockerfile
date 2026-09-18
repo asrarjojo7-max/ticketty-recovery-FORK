@@ -38,4 +38,4 @@ COPY --from=build --chown=node:node /app/prisma.config.ts ./prisma.config.ts
 
 USER node
 EXPOSE 3001
-CMD ["node", "dist/main.js"]
+CMD ["sh", "scripts/render-entrypoint.sh"]
