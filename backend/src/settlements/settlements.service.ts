@@ -59,9 +59,12 @@ export class SettlementsService {
           agentId: dto.agentId,
           reversedAt: null,
           createdAt: { gte: from, lte: to },
-          settlementLine: overlapping
-            ? { is: { settlementId: overlapping.id } }
-            : { is: null },
+          OR: [
+            { settlementLine: { is: null } },
+            ...(overlapping
+              ? [{ settlementLine: { is: { settlementId: overlapping.id } } }]
+              : []),
+          ],
         },
         include: { ticket: true },
       });
