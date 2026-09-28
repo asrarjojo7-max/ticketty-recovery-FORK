@@ -2,7 +2,9 @@
 set -Eeuo pipefail
 umask 077
 
+CONFIG_ENV="${TICKETTY_ENV_FILE:-/etc/ticketty/ticketty.env}"
 REPO="${TICKETTY_GITHUB_REPOSITORY:-}"
+if [[ -z "$REPO" && -f "$CONFIG_ENV" ]]; then REPO="$(grep "^TICKETTY_GITHUB_REPOSITORY=" "$CONFIG_ENV" | cut -d= -f2- || true)"; fi
 REF="${1:-}"
 TOKEN_FILE="${GITHUB_READONLY_TOKEN_FILE:-/etc/ticketty/secrets/github-readonly-token}"
 die(){ echo "ERROR: $*" >&2; exit 1; }
