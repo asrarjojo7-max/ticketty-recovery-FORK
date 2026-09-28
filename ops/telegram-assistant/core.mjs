@@ -58,6 +58,15 @@ function intentFromText(input) {
   }
 
   if (
+    text.includes('حالة التحديث') ||
+    text.includes('هل انتهى التحديث') ||
+    text.includes('ما الذي يحدث في التحديث') ||
+    text.includes('ماذا يحدث في التحديث')
+  ) {
+    return 'deployment_status';
+  }
+
+  if (
     text.includes('هل يوجد تحديث') ||
     text.includes('في تحديث') ||
     text.includes('التحديث') ||
