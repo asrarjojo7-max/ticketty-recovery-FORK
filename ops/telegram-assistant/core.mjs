@@ -21,6 +21,8 @@ function intentFromText(input) {
 
   if (
     text.includes('حالة النظام') ||
+    text.includes('حالة التحديث') ||
+    text.includes('هل تم التحديث') ||
     text.includes('النظام شغال') ||
     text.includes('النظام يعمل') ||
     text === 'النظام'
