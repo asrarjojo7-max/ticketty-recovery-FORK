@@ -104,7 +104,7 @@ describe('AccountingEventWorker', () => {
       metrics,
     );
 
-    await expect(worker.runOnce()).resolves.toBe(true);
+    await expect(worker.runOnce()).resolves.toBe(false);
     expect(markEventFailed).toHaveBeenCalledWith(
       expect.objectContaining({ orgId: 'org-1' }),
       'event-1',
@@ -114,5 +114,6 @@ describe('AccountingEventWorker', () => {
     expect(consecutiveInc2).toHaveBeenCalled();
     expect(lastSuccessSet2).not.toHaveBeenCalled();
     expect(consecutiveSet2).not.toHaveBeenCalledWith(0);
+    expect(queueDepthSet2).toHaveBeenCalledWith({ status: 'PENDING' }, 2);
   });
 });
