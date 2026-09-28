@@ -186,8 +186,11 @@ describe('accounting lifecycle under tenant RLS', () => {
         },
       });
       const processed = await accounting.processNextEvent(user);
-      if (!processed.processed)
-        throw new Error('Expected queued event processing');
+      if (!processed.processed) {
+        throw new Error(
+          `Expected queued event processing: ${processed.error ?? 'no event was claimed'}`,
+        );
+      }
       const replay = await accounting.processEvent(user, event.id);
       return {
         first: processed.result.journalEntry,
