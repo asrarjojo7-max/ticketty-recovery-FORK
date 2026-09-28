@@ -342,18 +342,22 @@ async function activeAlerts() {
   }
 }
 
-async function sendMessage(chatId, messageText) {
+async function sendMessage(chatId, messageText, replyMarkup) {
   const text =
     messageText.length > MAX_TELEGRAM_MESSAGE
       ? messageText.slice(0, MAX_TELEGRAM_MESSAGE - 80) +
         '\n\n[تم اختصار الرسالة]'
       : messageText;
 
-  await telegram('sendMessage', {
+  const body = {
     chat_id: chatId,
     text,
     disable_web_page_preview: true,
-  });
+  };
+
+  if (replyMarkup) body.reply_markup = replyMarkup;
+
+  await telegram('sendMessage', body);
 }
 
 function formatAge(seconds) {
@@ -986,16 +990,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function sendMessage(chatId, text, replyMarkup) {
-  const body = {
-    chat_id: chatId,
-    text: text.slice(0, MAX_TELEGRAM_MESSAGE),
-    disable_web_page_preview: true,
-  };
-  if (replyMarkup) body.reply_markup = replyMarkup;
-  return telegram('sendMessage', body);
-}
-
 async function deliverAlertGroup(payload) {
   const alerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
   if (!alerts.length || state.operators.length === 0) return;
@@ -1121,6 +1115,14 @@ server.listen(config.port, '0.0.0.0', async () => {
     }
 
     const me = await telegram('getMe');
+
+    await telegram('setMyCommands', {
+      commands: [
+        { command: 'status', description: 'حالة النظام' },
+        { command: 'update', description: 'فحص التحديثات' },
+        { command: 'help', description: 'المساعدة' },
+      ],
+    });
 
     console.log(
       'Ticketty Telegram Assistant started as @' +
