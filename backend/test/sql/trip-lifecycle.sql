@@ -22,7 +22,8 @@ VALUES
   ('test-trip-lifecycle-route', 'test-trip-lifecycle-org', 'R', 'A', 'B', CURRENT_TIMESTAMP);
 
 -- The database must reject terminal state insertion.
-DO $$ BEGIN
+DO $$
+BEGIN
   BEGIN
     INSERT INTO "trips"
       ("id", "organizationId", "routeId", "busId", "departureAt", "arrivalAt", "status", "updatedAt")
@@ -32,9 +33,9 @@ DO $$ BEGIN
        'COMPLETED', CURRENT_TIMESTAMP);
     RAISE EXCEPTION 'TEST_FAILURE: terminal trip state accepted on insert';
   EXCEPTION
-    WHEN raise_exception THEN
+    WHEN OTHERS THEN
       IF SQLERRM LIKE 'TEST_FAILURE:%' THEN RAISE; END IF;
-    WHEN check_violation THEN NULL;
+      IF SQLERRM <> 'Trips must start in SCHEDULED or OPEN state' THEN RAISE; END IF;
   END;
 END $$;
 
@@ -46,7 +47,8 @@ VALUES
    'OPEN', CURRENT_TIMESTAMP);
 
 -- An open-ended active trip reserves the bus indefinitely.
-DO $$ BEGIN
+DO $$
+BEGIN
   BEGIN
     INSERT INTO "trips"
       ("id", "organizationId", "routeId", "busId", "departureAt", "arrivalAt", "status", "updatedAt")
@@ -56,27 +58,28 @@ DO $$ BEGIN
        'SCHEDULED', CURRENT_TIMESTAMP);
     RAISE EXCEPTION 'TEST_FAILURE: open-ended bus overlap accepted';
   EXCEPTION
-    WHEN raise_exception THEN
+    WHEN OTHERS THEN
       IF SQLERRM LIKE 'TEST_FAILURE:%' THEN RAISE; END IF;
-    WHEN exclusion_violation THEN NULL;
+      IF SQLSTATE <> '23P01' THEN RAISE; END IF;
   END;
 END $$;
 
 -- OPEN -> COMPLETED is forbidden.
-DO $$ BEGIN
+DO $$
+BEGIN
   BEGIN
     UPDATE "trips"
     SET "status" = 'COMPLETED'
     WHERE "id" = 'test-trip-lifecycle-trip';
     RAISE EXCEPTION 'TEST_FAILURE: OPEN -> COMPLETED accepted';
   EXCEPTION
-    WHEN raise_exception THEN
+    WHEN OTHERS THEN
       IF SQLERRM LIKE 'TEST_FAILURE:%' THEN RAISE; END IF;
-    WHEN raise_exception THEN NULL;
+      IF SQLERRM NOT LIKE 'Invalid trip status transition:%' THEN RAISE; END IF;
   END;
 END $$;
 
--- OPEN -> DEPARTED -> COMPLETED is the only completion route.
+-- OPEN -> DEPARTED -> COMPLETED is the valid completion route.
 UPDATE "trips"
 SET "status" = 'DEPARTED'
 WHERE "id" = 'test-trip-lifecycle-trip';
@@ -86,16 +89,17 @@ SET "status" = 'COMPLETED'
 WHERE "id" = 'test-trip-lifecycle-trip';
 
 -- COMPLETED is terminal.
-DO $$ BEGIN
+DO $$
+BEGIN
   BEGIN
     UPDATE "trips"
     SET "status" = 'OPEN'
     WHERE "id" = 'test-trip-lifecycle-trip';
     RAISE EXCEPTION 'TEST_FAILURE: COMPLETED -> OPEN accepted';
   EXCEPTION
-    WHEN raise_exception THEN
+    WHEN OTHERS THEN
       IF SQLERRM LIKE 'TEST_FAILURE:%' THEN RAISE; END IF;
-    WHEN raise_exception THEN NULL;
+      IF SQLERRM NOT LIKE 'Invalid trip status transition:%' THEN RAISE; END IF;
   END;
 END $$;
 
