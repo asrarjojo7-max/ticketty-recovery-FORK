@@ -31,6 +31,15 @@ function intentFromText(input) {
   }
 
   if (
+    text.includes('حالة التحديث') ||
+    text.includes('هل انتهى التحديث') ||
+    text.includes('ما الذي يحدث في التحديث') ||
+    text.includes('ماذا يحدث في التحديث')
+  ) {
+    return 'deployment_status';
+  }
+
+  if (
     text.includes('المحاسبة') ||
     text.includes('المحاسبي') ||
     text.includes('العمليات المعلقة') ||
@@ -55,15 +64,6 @@ function intentFromText(input) {
     text.includes('مشاكل')
   ) {
     return 'alerts';
-  }
-
-  if (
-    text.includes('حالة التحديث') ||
-    text.includes('هل انتهى التحديث') ||
-    text.includes('ما الذي يحدث في التحديث') ||
-    text.includes('ماذا يحدث في التحديث')
-  ) {
-    return 'deployment_status';
   }
 
   if (
