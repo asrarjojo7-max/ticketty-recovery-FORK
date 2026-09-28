@@ -54,6 +54,16 @@ env_set(){
   fi
 }
 secret_file(){ local f="$1" n="$2"; [[ -s "$f" ]] || { openssl rand -base64 "$n" | tr -d '\n' > "$f"; chmod 600 "$f"; }; }
+configure_alertmanager_receiver(){
+  local file="$ETC_ROOT/alertmanager-webhook-url"
+  if [[ ! -f "$file" ]]; then
+    printf '%s\n' 'http://telegram-assistant:8090/alerts' > "$file"
+    chmod 640 "$file"
+  fi
+  chown root:65534 "$file" 2>/dev/null || true
+  chmod 640 "$file"
+  ok "قناة تنبيهات Telegram داخل الشبكة جاهزة"
+}
 ensure_env(){
   local f="$ETC_ROOT/ticketty.env"
   [[ -f "$f" ]] || return
@@ -164,6 +174,7 @@ cmd_install(){
   setv PROJECT_DIR "$INSTALL_ROOT"; setv REPOSITORY "$REPOSITORY"
   phase ENV write_env
   ensure_env
+  configure_alertmanager_receiver
   ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"
   phase DOMAIN domain
   phase TELEGRAM telegram
