@@ -357,6 +357,34 @@ describe('booking invariants (Phase 4)', () => {
 
   // ─── مقعد محجوز لا يُباع مرتين (unique + claim) ───────────
 
+  it('concurrent sales with different keys allow exactly one seat claim', async () => {
+    const tripId = await freshTrip();
+    const seat = await freeSeat(tripId);
+
+    const [first, second] = await Promise.all([
+      book(tripId, [seat.id], `inv-concurrent-seat-a-${suffix}`),
+      book(tripId, [seat.id], `inv-concurrent-seat-b-${suffix}`),
+    ]);
+
+    const statuses = [first.status, second.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 409]);
+
+    const bookings = await admin.booking.findMany({
+      where: { organizationId: tenantOrgId, tripId },
+      include: { tickets: true, payments: true },
+    });
+    expect(bookings).toHaveLength(1);
+    expect(bookings[0].tickets).toHaveLength(1);
+    expect(bookings[0].tickets[0].tripSeatId).toBe(seat.id);
+    expect(bookings[0].payments).toHaveLength(1);
+
+    const seatRow = await admin.tripSeat.findUniqueOrThrow({
+      where: { id: seat.id },
+    });
+    expect(seatRow.status).toBe('BOOKED');
+    expect(seatRow.ticketId).toBe(bookings[0].tickets[0].id);
+  });
+
   it('a BOOKED seat cannot be sold again (409, no second ticket)', async () => {
     const tripId = await freshTrip();
     const seat = await freeSeat(tripId);
