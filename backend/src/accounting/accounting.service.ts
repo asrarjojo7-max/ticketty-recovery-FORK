@@ -353,7 +353,6 @@ export class AccountingService {
         processed: false as const,
         eventId: claimed.id,
         error: message,
-        leaseOwned: failed,
       };
     }
   }
