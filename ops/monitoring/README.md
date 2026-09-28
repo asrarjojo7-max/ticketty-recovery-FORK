@@ -124,6 +124,16 @@ assistant translates known alert types into human Arabic, for example:
 
 A resolved alert is reported as a normal-language recovery message.
 
+### Telegram Remote Operations
+
+The Telegram assistant is connected to the host Deployment Manager through the
+private Unix socket `/run/ticketty/ops.sock`. The host accepts only allowlisted
+status/update-plan/cancel/execute-plan operations with HMAC, timestamp, nonce,
+and audit logging.
+
+A deployment plan expires after 10 minutes and is executed once. The bot never
+receives shell commands, SQL, arbitrary URLs, or unrestricted release refs.
+
 ### Safety boundary
 
 The first release is read-only. No Telegram message can:
