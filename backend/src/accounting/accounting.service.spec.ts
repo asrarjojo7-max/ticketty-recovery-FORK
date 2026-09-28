@@ -70,10 +70,9 @@ describe('AccountingService', () => {
         }),
       },
       account: {
-        findMany: jest.fn().mockResolvedValue([
-          { id: 'cash' },
-          { id: 'revenue' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'cash' }, { id: 'revenue' }]),
       },
       journalEntry: {
         create: jest.fn().mockResolvedValue({
