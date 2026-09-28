@@ -12,6 +12,8 @@ test('understands natural Arabic status questions', () => {
   assert.equal(intentFromText('هل توجد مشاكل الآن؟'), 'alerts');
   assert.equal(intentFromText('هل أخذ النظام نسخة احتياطية؟'), 'backup');
   assert.equal(intentFromText('ماذا حدث اليوم؟'), 'summary');
+  assert.equal(intentFromText('هل يوجد تحديث؟'), 'update');
+  assert.equal(intentFromText('يوجد إصدار جديد؟'), 'update');
 });
 
 test('does not guess unknown requests', () => {
