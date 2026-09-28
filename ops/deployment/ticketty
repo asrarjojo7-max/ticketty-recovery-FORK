@@ -200,7 +200,17 @@ stack_up(){
   fi
   ok "الخدمات"
 }
-ops_service(){ getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"; cp "$INSTALL_ROOT/ops/systemd/ticketty-ops.service" /etc/systemd/system/ticketty-ops.service; systemctl daemon-reload; systemctl enable --now ticketty-ops.service; systemctl is-active --quiet ticketty-ops.service || die "Remote Ops لم يبدأ."; ok "Remote Ops"; }
+ops_service(){
+  getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
+  install -d -m 0750 -o root -g "$OPS_GROUP" /run/ticketty
+  sed "s#__TICKETTY_ROOT__#${INSTALL_ROOT}#g" "$INSTALL_ROOT/ops/systemd/ticketty-ops.service" > /etc/systemd/system/ticketty-ops.service
+  chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"
+  chmod 640 "$OPS_HMAC_FILE"
+  systemctl daemon-reload
+  systemctl enable --now ticketty-ops.service
+  systemctl is-active --quiet ticketty-ops.service || die "Remote Ops لم يبدأ."
+  ok "Remote Ops"
+}
 health(){ local bp="$BACKEND_PORT" wp="$WEB_PORT"; [[ -n "$bp" ]] || bp=3001; [[ -n "$wp" ]] || wp=3000; curl -fsS "http://127.0.0.1:$bp/api/health/liveness" >/dev/null && curl -fsS "http://127.0.0.1:$wp/api/health/live" >/dev/null; }
 public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "الدومين العام متصل عبر Cloudflare"; return 0; }; sleep 5; done; return 1; }
 
