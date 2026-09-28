@@ -143,6 +143,7 @@ services:
     volumes:
       - ./ops/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - ${ALERTMANAGER_WEBHOOK_URL_FILE:-/etc/ticketty/alertmanager-webhook-url}:/run/secrets/alertmanager_webhook_url:ro
+      - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
       - ticketty-alertmanager:/alertmanager
     ports:
       - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
@@ -180,7 +181,76 @@ services:
     volumes:
       - ./ops/monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
 
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARE_TUNNEL_IMAGE_TAG:-2026.9.3}
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token-file
+      - /run/secrets/cloudflare_tunnel_token
+    depends_on:
+      web:
+        condition: service_healthy
+    profiles:
+      - cloudflare
+    volumes:
+      - ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/ticketty/cloudflare-tunnel-token}:/run/secrets/cloudflare_tunnel_token:ro
+
+  telegram-assistant:
+    build:
+      context: ./ops/telegram-assistant
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram_bot_token
+      TELEGRAM_PAIRING_CODE: ${TELEGRAM_PAIRING_CODE:-}
+      TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/telegram_alert_webhook_token
+      TICKETTY_OPS_SOCKET: /run/ticketty/ops.sock
+      TICKETTY_OPS_HMAC_FILE: /run/secrets/ticketty_ops_hmac
+      TICKETTY_REMOTE_OPS_ENABLED: ${TICKETTY_REMOTE_OPS_ENABLED:-true}
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERTMANAGER_URL: http://alertmanager:9093
+      TELEGRAM_PORT: 8090
+      TELEGRAM_STATE_FILE: /var/lib/ticketty/telegram/state.json
+      TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      TELEGRAM_REQUEST_TIMEOUT_MS: ${TELEGRAM_REQUEST_TIMEOUT_MS:-15000}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      alertmanager:
+        condition: service_healthy
+    expose:
+      - "8090"
+    group_add:
+      - "${TICKETTY_OPS_GID:?TICKETTY_OPS_GID is required}"
+    volumes:
+      - ticketty-telegram:/var/lib/ticketty/telegram
+      - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
+      - ${TELEGRAM_BOT_TOKEN_FILE:-/etc/ticketty/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
+      - ${TICKETTY_OPS_HMAC_FILE:-/etc/ticketty/ticketty-ops-hmac}:/run/secrets/ticketty_ops_hmac:ro
+      - /run/ticketty:/run/ticketty:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8090/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 volumes:
   ticketty-postgres:
   ticketty-prometheus:
   ticketty-alertmanager:
+  ticketty-telegram:

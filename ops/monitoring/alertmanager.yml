@@ -18,6 +18,10 @@ receivers:
     webhook_configs:
       - url_file: /run/secrets/alertmanager_webhook_url
         send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /run/secrets/telegram_alert_webhook_token
 
 inhibit_rules:
   - source_matchers:

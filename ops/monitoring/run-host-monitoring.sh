@@ -28,6 +28,7 @@ for file in \
   /etc/ticketty/alertmanager.yml \
   /etc/ticketty/alert-rules.yml \
   /etc/ticketty/alertmanager-webhook-url \
+  /etc/ticketty/telegram-alert-webhook-token \
   /etc/ticketty/monitoring-exporter.env; do
   [[ -r "$file" ]] || { echo "Missing required monitoring file: $file" >&2; exit 2; }
 done
@@ -41,6 +42,7 @@ docker run -d --name ticketty-alertmanager --restart unless-stopped \
   --network host \
   -v /etc/ticketty/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro \
   -v /etc/ticketty/alertmanager-webhook-url:/run/secrets/alertmanager_webhook_url:ro \
+  -v /etc/ticketty/telegram-alert-webhook-token:/run/secrets/telegram_alert_webhook_token:ro \
   -v ticketty-alertmanager:/alertmanager \
   prom/alertmanager:v0.28.1 \
   --config.file=/etc/alertmanager/alertmanager.yml \
