@@ -166,7 +166,7 @@ async function main() {
           driverName: `سائق ${t + 1}`,
           driverPhone: '0990000000',
           departureAt,
-          status: dayOffset === 0 ? 'SCHEDULED' : 'COMPLETED',
+          status: dayOffset === 0 ? 'SCHEDULED' : 'OPEN',
           tripSeats: {
             create: seats.map((seat) => ({
               row: seat.row,
@@ -238,6 +238,20 @@ async function main() {
             receivedById: admin.id,
             createdAt: new Date(createdAt.getTime() + 30 * 60000),
           },
+        });
+      }
+
+      // Historical demo trips follow the same lifecycle as production:
+      // OPEN -> DEPARTED -> COMPLETED. We never insert a terminal state
+      // directly, so the database transition guard is exercised by seed data.
+      if (dayOffset !== 0) {
+        await prisma.trip.update({
+          where: { id: trip.id },
+          data: { status: 'DEPARTED' },
+        });
+        await prisma.trip.update({
+          where: { id: trip.id },
+          data: { status: 'COMPLETED' },
         });
       }
     }
