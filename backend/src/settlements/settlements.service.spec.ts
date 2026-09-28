@@ -196,5 +196,4 @@ describe('SettlementsService integrity', () => {
     expect(updateSettlement).not.toHaveBeenCalled();
     expect(executeRaw).not.toHaveBeenCalled();
   });
-
 });
