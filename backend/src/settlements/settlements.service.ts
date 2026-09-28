@@ -161,7 +161,6 @@ export class SettlementsService {
   async settle(user: AuthUser, id: string) {
     const orgId = requireOrgId(user);
     const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:settlement-record:${id}`}))`;
       // Finalization must share the generation lock for the same agent.
       // Otherwise generate() can rewrite a settlement after it is finalized.
       const settlementIdentity = await tx.settlement.findFirst({
