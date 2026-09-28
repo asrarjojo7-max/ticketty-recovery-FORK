@@ -195,9 +195,8 @@ describe('accounting lifecycle under tenant RLS', () => {
       };
     });
 
-    const processed = await runtime.withTenantContext(
-      organizationId,
-      () => accounting.processNextEvent(user),
+    const processed = await runtime.withTenantContext(organizationId, () =>
+      accounting.processNextEvent(user),
     );
     if (!processed.processed) {
       throw new Error(
