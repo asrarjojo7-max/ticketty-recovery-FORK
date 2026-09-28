@@ -431,7 +431,6 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
     });
     expect(seat.status).toBe('BOOKED');
     expect(seat.ticketId).toBe(tickets[0].id);
-
   }, 120_000);
 
   it('serializes seat hold against departure and leaves no stale HELD seat', async () => {
