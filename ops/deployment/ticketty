@@ -174,6 +174,14 @@ cmd_install(){
   phase OPS ops_service
   setv DEPLOYMENT_STATUS READY
   step "اكتمل التثبيت"
+  local pair
+  pair="$(cat "$STATE_DIR/pairing-code" 2>/dev/null || true)"
+  if [[ -n "$pair" ]]; then
+    printf '\n'
+    ok "لربط Telegram:"
+    printf '  /start %s\n' "$pair"
+    printf '  (هذه القيمة سرية؛ لا ترسلها في قناة عامة)\n'
+  fi
 }
 cmd_resume(){ cmd_install; }
 cmd_update(){ load; local p t; p="$(plan_json)"; if [[ "$JSON_OUTPUT" -eq 1 ]]; then printf '%s\n' "$p"; return; fi; [[ "$(printf '%s' "$p" | jq -r '.update // false')" == true ]] || { ok "لا يوجد Release أحدث."; return; }; t="$(printf '%s' "$p" | jq -r '.latest')"; if [[ "$CONFIRMED" -eq 0 ]]; then read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; update_ref "$t"; }
@@ -202,7 +210,11 @@ cmd_status(){
   printf '  الدومين: %s\n' "$d"
   printf '  حالة النشر: %s\n' "$s"
   printf '  Remote Ops: %s\n\n' "$o"
-  docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps || true
+  if [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]]; then
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps || true
+  else
+    warn "ملفات تشغيل Ticketty غير مكتملة بعد."
+  fi
 }
 cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
 cmd_setup_cf(){
