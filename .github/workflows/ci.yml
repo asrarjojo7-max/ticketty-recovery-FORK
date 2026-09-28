@@ -256,6 +256,7 @@ jobs:
           bash -n ops/deployment/bootstrap.sh
           bash -n ops/deployment/cloudflare.sh
           python3 -m py_compile ops/deployment/ops-server.py
+          python3 ops/deployment/remote-ops.test.py
       - name: Validate Compose configuration
         run: |
           cat > .env.ci <<'EOF'
