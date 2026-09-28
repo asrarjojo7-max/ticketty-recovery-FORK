@@ -13,7 +13,7 @@ TICKETTY_BIN=os.environ.get("TICKETTY_BIN","/usr/local/bin/ticketty")
 REQUEST_TTL=60
 PLAN_TTL=600
 MAX_LINE=262144
-ALLOWED={"STATUS","PLAN_UPDATE","CANCEL_PLAN","EXECUTE_UPDATE"}
+ALLOWED={"STATUS","PLAN_UPDATE","CANCEL_PLAN","EXECUTE_UPDATE","OPERATION_STATUS"}
 
 def now(): return int(time.time())
 
@@ -126,6 +126,24 @@ def handle(m):
         if plan.get("status")!="planned": raise ValueError("plan is no longer cancellable")
         plan["status"]="cancelled"; save_state(); audit(actor,op,plan["ref"],"cancelled",rid,{"plan_id":pid})
         return {"plan_id":pid,"status":"cancelled"}
+    if op=="OPERATION_STATUS":
+        pid=str(payload.get("plan_id",""))
+        operation=STATE["operations"].get(pid)
+        if not operation:
+            plan=STATE["plans"].get(pid)
+            if plan:
+                return {"plan_id":pid,"ref":plan.get("ref"),"status":plan.get("status"),"expires_at":plan.get("expires_at")}
+            raise ValueError("unknown operation")
+        audit(actor,op,pid,"success",rid)
+        return {
+            "plan_id":operation.get("plan_id"),
+            "ref":operation.get("ref"),
+            "status":operation.get("status"),
+            "started_at":operation.get("started_at"),
+            "finished_at":operation.get("finished_at"),
+            "exit_code":operation.get("exit_code"),
+        }
+
     if op=="EXECUTE_UPDATE":
         pid=str(payload.get("plan_id","")); plan=STATE["plans"].get(pid)
         if not plan or int(plan.get("expires_at",0))<now(): raise ValueError("unknown or expired plan")
