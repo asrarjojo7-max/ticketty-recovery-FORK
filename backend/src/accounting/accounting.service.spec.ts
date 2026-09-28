@@ -107,9 +107,8 @@ describe('AccountingService', () => {
         }),
       },
     };
-    const transaction = jest.fn(
-      (callback: (client: typeof tx) => unknown) =>
-        Promise.resolve(callback(tx)),
+    const transaction = jest.fn((callback: (client: typeof tx) => unknown) =>
+      Promise.resolve(callback(tx)),
     );
     const service = new AccountingService({
       $transaction: transaction,
