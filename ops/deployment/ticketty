@@ -17,6 +17,7 @@ DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
 BACKEND_PORT=3001
 WEB_PORT=3000
+PHASES=(PREFLIGHT PACKAGES CHECKOUT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY OPS)
 ok(){ printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
 err(){ printf '  \033[31m✗\033[0m %s\n' "$*" >&2; }
@@ -26,7 +27,41 @@ root(){ [[ "$(id -u)" -eq 0 ]] || die "شغّل باستخدام sudo/root."; }
 dirs(){ install -d -m 0700 "$STATE_DIR" "$STATE_DIR/logs" "$ETC_ROOT/secrets"; install -d -m 0750 /run/ticketty /run/lock; }
 get(){ local key="$1"; [[ -f "$STATE_FILE" ]] || return 1; awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE"; }
 setv(){ local key="$1" val="$2" tmp; dirs; tmp="$(mktemp "$STATE_DIR/state.XXXXXX")"; [[ -f "$STATE_FILE" ]] && awk -F= -v k="$key" '$1!=k{print}' "$STATE_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$val" >> "$tmp"; chmod 600 "$tmp"; mv "$tmp" "$STATE_FILE"; }
-phase(){ local name="$1"; shift; [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]] && { ok "$name — مكتمل سابقًا"; return; }; setv "PHASE_$name" RUNNING; if "$@"; then setv "PHASE_$name" DONE; setv "PHASE_${name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; ok "$name"; else setv "PHASE_$name" FAILED; die "$name فشل. استخدم sudo ticketty resume."; fi; }
+phase(){
+  local name="$1"; shift
+  local idx=0 item label
+  for item in "${PHASES[@]}"; do
+    idx=$((idx+1))
+    [[ "$item" == "$name" ]] && break
+  done
+  case "$name" in
+    PREFLIGHT) label="فحص السيرفر";;
+    PACKAGES) label="المتطلبات";;
+    CHECKOUT) label="كود Ticketty";;
+    ENV) label="الإعداد والأسرار";;
+    DOMAIN) label="الدومين";;
+    TELEGRAM) label="Telegram";;
+    CLOUDFLARE) label="Cloudflare";;
+    COMPOSE) label="فحص Docker Compose";;
+    DEPLOY) label="تشغيل الخدمات";;
+    OPS) label="Remote Operations";;
+    *) label="$name";;
+  esac
+  if [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]]; then
+    ok "[$idx/${#PHASES[@]}] $label — مكتمل سابقًا"
+    return
+  fi
+  printf "\n  \033[36m●\033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
+  setv "PHASE_$name" RUNNING
+  if "$@"; then
+    setv "PHASE_$name" DONE
+    setv "PHASE_${name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    ok "$label — تم"
+  else
+    setv "PHASE_$name" FAILED
+    die "$label فشل. استخدم: sudo ticketty resume"
+  fi
+}
 lock(){ dirs; exec 9>"$LOCK_FILE"; flock -n 9 || die "هناك عملية نشر أخرى تعمل."; }
 load(){
   local v
