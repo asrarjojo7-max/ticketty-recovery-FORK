@@ -828,8 +828,13 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    if (request.method === 'POST' && request.url?.startsWith('/alerts')) {
+    if (request.method === 'POST' && request.url) {
       const url = new URL(request.url, 'http://127.0.0.1');
+      if (url.pathname !== '/alerts') {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
 
       if (
         !sameSecret(
