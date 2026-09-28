@@ -20,7 +20,8 @@ export_profile(){
   install -d -m 0700 "$PROFILE_DIR"
   local repo root domain tunnel channel backup weekly monthly backend web proxy server
   repo="$(grep "^TICKETTY_GITHUB_REPOSITORY=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
-  root="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
+  root="$(grep "^TICKETTY_INSTALL_ROOT=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
+  [[ -n "$root" ]] || root="/srv/ticketty"
   domain="$(grep "^APP_ORIGIN=" "$ETC_ROOT/ticketty.env" | sed "s#^APP_ORIGIN=https://##" || true)"
   tunnel="$(grep "^CLOUDFLARE_TUNNEL_ID=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
   channel="$(grep "^TICKETTY_RELEASE_CHANNEL=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || echo stable)"
