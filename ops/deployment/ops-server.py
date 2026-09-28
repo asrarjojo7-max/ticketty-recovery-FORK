@@ -98,9 +98,21 @@ def handle(m):
     op=str(m["operation"]); actor=m.get("actor",{}); payload=m.get("payload",{}); rid=str(m.get("request_id",secrets.token_hex(8)))
     if op=="STATUS":
         result=json.loads(run(["status","--json"],30))
-        result["remote_operations"]=[v for v in STATE["operations"].values() if v.get("status") in {"running","success","failed"}][-10:]
+        result["remote_operations"]=[
+            {
+                "plan_id": v.get("plan_id"),
+                "ref": v.get("ref"),
+                "status": v.get("status"),
+                "started_at": v.get("started_at"),
+                "finished_at": v.get("finished_at"),
+                "exit_code": v.get("exit_code"),
+            }
+            for v in list(STATE["operations"].values())[-10:]
+        ]
         audit(actor,op,None,"success",rid); return result
     if op=="PLAN_UPDATE":
+        if any(v.get("status")=="running" for v in STATE["operations"].values()):
+            raise ValueError("another deployment is already running")
         plan=json.loads(run(["update","--plan"],30))
         if plan.get("update"):
             pid="plan-"+secrets.token_hex(8)
