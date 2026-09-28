@@ -56,6 +56,16 @@ function intentFromText(input) {
   }
 
   if (
+    text.includes('هل يوجد تحديث') ||
+    text.includes('في تحديث') ||
+    text.includes('التحديث') ||
+    text.includes('إصدار جديد') ||
+    text === 'تحديث'
+  ) {
+    return 'update';
+  }
+
+  if (
     text.includes('ملخص اليوم') ||
     text.includes('ملخص') ||
     text.includes('ماذا حدث اليوم')
