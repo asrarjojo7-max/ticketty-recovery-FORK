@@ -52,6 +52,13 @@ export class TripsService {
     const { routeId, busId, driverId, departureAt, arrivalAt, price, ...rest } =
       dto;
 
+    const initialStatus = dto.status ?? TripStatus.OPEN;
+    if (![TripStatus.SCHEDULED, TripStatus.OPEN].includes(initialStatus)) {
+      throw new BadRequestException(
+        'الحالة الابتدائية المسموحة للرحلة هي مجدولة أو مفتوحة فقط',
+      );
+    }
+
     const [route, bus, driver] = await Promise.all([
       this.prisma.route.findFirst({
         where: { id: routeId, ...tenantScope(user) },
@@ -119,10 +126,13 @@ export class TripsService {
             }
           : {
               OR: [
-                { departureAt: { lte: newDeparture }, arrivalAt: null },
+                { departureAt: { gte: newDeparture } },
                 {
-                  departureAt: { lte: newDeparture },
-                  arrivalAt: { gt: newDeparture },
+                  departureAt: { lt: newDeparture },
+                  OR: [
+                    { arrivalAt: null },
+                    { arrivalAt: { gt: newDeparture } },
+                  ],
                 },
               ],
             }),
@@ -158,10 +168,13 @@ export class TripsService {
               }
             : {
                 OR: [
-                  { departureAt: { lte: newDeparture }, arrivalAt: null },
+                  { departureAt: { gte: newDeparture } },
                   {
-                    departureAt: { lte: newDeparture },
-                    arrivalAt: { gt: newDeparture },
+                    departureAt: { lt: newDeparture },
+                    OR: [
+                      { arrivalAt: null },
+                      { arrivalAt: { gt: newDeparture } },
+                    ],
                   },
                 ],
               }),
@@ -177,42 +190,54 @@ export class TripsService {
       }
     }
 
-    return this.prisma.trip.create({
-      data: {
-        organizationId: orgId,
-        routeId,
-        busId,
-        driverId: driver?.id,
-        branchId: user.branchId ?? route.branchId ?? bus.branchId,
-        departureAt: new Date(departureAt),
-        arrivalAt: arrivalAt ? new Date(arrivalAt) : undefined,
-        status: rest.status ?? TripStatus.OPEN,
-        driverName: driver?.name ?? rest.driverName,
-        driverPhone: driver?.phone ?? rest.driverPhone,
-        tripSeats: {
-          // نسخة كاملة من قالب الحافلة بأرقام مقاعد رسمية (أرقام فقط) —
-          // الترقيم الرقمي مشتق من الموضع وليس من حرف العمود.
-          create: bus.seatTemplate.seats.map((seat) => ({
-            row: seat.row,
-            column: seat.column,
-            label: isNumericSeatLabel(seat.label)
-              ? seat.label
-              : String(
-                  (seat.row - 1) * bus.seatTemplate.columnsPerRow + seat.column,
-                ),
-            seatType: seat.seatType,
-            status: initialSeatStatus(seat.seatType),
-            price: new Prisma.Decimal(price),
-          })),
+    try {
+      return this.prisma.trip.create({
+        data: {
+          organizationId: orgId,
+          routeId,
+          busId,
+          driverId: driver?.id,
+          branchId: user.branchId ?? route.branchId ?? bus.branchId,
+          departureAt: new Date(departureAt),
+          arrivalAt: arrivalAt ? new Date(arrivalAt) : undefined,
+          status: initialStatus,
+          driverName: driver?.name ?? rest.driverName,
+          driverPhone: driver?.phone ?? rest.driverPhone,
+          tripSeats: {
+            // نسخة كاملة من قالب الحافلة بأرقام مقاعد رسمية (أرقام فقط) —
+            // الترقيم الرقمي مشتق من الموضع وليس من حرف العمود.
+            create: bus.seatTemplate.seats.map((seat) => ({
+              row: seat.row,
+              column: seat.column,
+              label: isNumericSeatLabel(seat.label)
+                ? seat.label
+                : String(
+                    (seat.row - 1) * bus.seatTemplate.columnsPerRow + seat.column,
+                  ),
+              seatType: seat.seatType,
+              status: initialSeatStatus(seat.seatType),
+              price: new Prisma.Decimal(price),
+            })),
+          },
         },
-      },
-      include: {
-        route: true,
-        bus: { include: { seatTemplate: true } },
-        driver: true,
-        tripSeats: { orderBy: [{ row: 'asc' }, { column: 'asc' }] },
-      },
-    });
+        include: {
+          route: true,
+          bus: { include: { seatTemplate: true } },
+          driver: true,
+          tripSeats: { orderBy: [{ row: 'asc' }, { column: 'asc' }] },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('23P01') ||
+        message.includes('trips_bus_schedule_no_overlap_excl') ||
+        message.includes('trips_driver_schedule_no_overlap_excl')
+      ) {
+        throw new ConflictException('يوجد تعارض زمني في جدولة الحافلة أو السائق');
+      }
+      throw error;
+    }
   }
 
   findAll(user: AuthUser, query: QueryTripDto) {
