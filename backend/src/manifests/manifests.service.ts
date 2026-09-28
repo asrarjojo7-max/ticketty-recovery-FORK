@@ -91,6 +91,11 @@ export class ManifestsService {
           lockedAt,
         },
       });
+      await tx.tripSeat.updateMany({
+        where: { tripId, status: 'HELD' },
+        data: { status: 'AVAILABLE', heldByUserId: null, holdExpiresAt: null },
+      });
+
       const departed = await tx.trip.update({
         where: { id: tripId },
         data: { manifestLockedAt: lockedAt, status: 'DEPARTED' },
@@ -168,6 +173,10 @@ export class ManifestsService {
       const locked = await tx.manifest.update({
         where: { id },
         data: { lockedAt },
+      });
+      await tx.tripSeat.updateMany({
+        where: { tripId: manifest.tripId, status: 'HELD' },
+        data: { status: 'AVAILABLE', heldByUserId: null, holdExpiresAt: null },
       });
       await tx.trip.update({
         where: { id: manifest.tripId },
