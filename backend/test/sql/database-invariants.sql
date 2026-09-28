@@ -14,7 +14,7 @@
 -- ─── 0) الفحص يعمل داخل معاملة قابلة للتراجع ───────────────────────────
 -- (لا يكتب شيئاً؛ read-only كلياً ما عدا فحوص DO التي تتراجع ذاتياً)
 
-DO $$ BEGIN
+DO $ticketty_invariants$ BEGIN
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- القسم 1 — عزل المستأجرين (composite tenant FKs + unique composites)
@@ -373,7 +373,7 @@ IF NOT EXISTS (
   RAISE EXCEPTION 'INVARIANT FAIL [fiscal-period-exclusion]: fiscal period overlap exclusion constraint missing';
 END IF;
 
-END $;
+END $ticketty_invariants$;
 
 -- نجاح كل ما سبق = القيود حية. النتيجة الإيجابية للاستهلاك الآلي:
 SELECT 'ALL DATABASE INVARIANTS OK' AS result,
