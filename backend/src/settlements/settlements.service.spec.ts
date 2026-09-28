@@ -45,6 +45,7 @@ describe('SettlementsService integrity', () => {
       deleteMany: jest.fn(),
       createMany: createLines,
     },
+    accountingEvent: { upsert: jest.fn().mockResolvedValue({ id: 'event-1' }) },
   };
   const transaction = jest.fn((callback: (client: typeof tx) => unknown) =>
     Promise.resolve(callback(tx)),
@@ -158,5 +159,41 @@ describe('SettlementsService integrity', () => {
       { settlementLine: { is: { settlementId: 'settlement-1' } } },
     ]);
     expect(updateSettlement).toHaveBeenCalled();
+  });
+  it('serializes settlement finalization with generation for the same agent', async () => {
+    findSettlement
+      .mockResolvedValueOnce({ agentId: 'agent-1' })
+      .mockResolvedValueOnce({
+        id: 'settlement-1',
+        agentId: 'agent-1',
+        status: 'OPEN',
+      });
+    updateSettlement.mockResolvedValue({
+      id: 'settlement-1',
+      status: 'SETTLED',
+      netAmount: new Prisma.Decimal(90),
+      agent: { id: 'agent-1' },
+    });
+
+    await service.settle(user, 'settlement-1');
+
+    expect(executeRaw).toHaveBeenCalledTimes(2);
+    expect(updateSettlement).toHaveBeenCalled();
+    const [args] = updateSettlement.mock.calls[0] as [
+      { where: { id: string }; data: { status: string } },
+    ];
+    expect(args.where).toEqual({ id: 'settlement-1' });
+    expect(args.data.status).toBe('SETTLED');
+  });
+
+  it('does not finalize a settlement that disappears before locking', async () => {
+    findSettlement.mockResolvedValueOnce(null);
+
+    await expect(service.settle(user, 'settlement-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(updateSettlement).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 });
