@@ -316,7 +316,6 @@ describe('TripsService seats() — realistic coach map payload', () => {
   });
 });
 
-
 describe('TripsService lifecycle transitions', () => {
   function makeService(status: string) {
     const findFirst = jest.fn().mockResolvedValue({
@@ -340,8 +339,14 @@ describe('TripsService lifecycle transitions', () => {
         Promise.resolve(callback(tx)),
       ),
     } as unknown as PrismaService;
-    const audit = { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
-    return { service: new TripsService(prisma, audit), findFirst, update, audit };
+    const auditLog = jest.fn().mockResolvedValue(undefined);
+    const audit = { log: auditLog } as unknown as AuditService;
+    return {
+      service: new TripsService(prisma, audit),
+      findFirst,
+      update,
+      auditLog,
+    };
   }
 
   it('rejects direct status changes through PATCH/update', async () => {
@@ -353,7 +358,7 @@ describe('TripsService lifecycle transitions', () => {
   });
 
   it('opens only a scheduled trip and audits the transition', async () => {
-    const { service, update, audit } = makeService('SCHEDULED');
+    const { service, update, auditLog } = makeService('SCHEDULED');
 
     await expect(service.open(user, 'existing-trip')).resolves.toMatchObject({
       status: 'OPEN',
@@ -364,7 +369,7 @@ describe('TripsService lifecycle transitions', () => {
         data: { status: 'OPEN' },
       }),
     );
-    expect(audit.log).toHaveBeenCalledWith(
+    expect(auditLog).toHaveBeenCalledWith(
       user,
       'TRIP_OPENED_FOR_BOOKING',
       'Trip',
@@ -373,9 +378,11 @@ describe('TripsService lifecycle transitions', () => {
   });
 
   it('completes only a departed trip and audits the transition', async () => {
-    const { service, update, audit } = makeService('DEPARTED');
+    const { service, update, auditLog } = makeService('DEPARTED');
 
-    await expect(service.complete(user, 'existing-trip')).resolves.toMatchObject({
+    await expect(
+      service.complete(user, 'existing-trip'),
+    ).resolves.toMatchObject({
       status: 'COMPLETED',
     });
     expect(update).toHaveBeenCalledWith(
@@ -384,7 +391,7 @@ describe('TripsService lifecycle transitions', () => {
         data: { status: 'COMPLETED' },
       }),
     );
-    expect(audit.log).toHaveBeenCalledWith(
+    expect(auditLog).toHaveBeenCalledWith(
       user,
       'TRIP_COMPLETED',
       'Trip',
