@@ -89,6 +89,15 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm db:provision-runtime
+      # Backend E2E relies on the canonical platform-operator fixture.
+      # Seed only this isolated CI database before running the integration suite.
+      - name: Seed backend E2E operator
+        run: pnpm db:seed
+        env:
+          INITIAL_ADMIN_EMAIL: e2e-owner@ticketty.local
+          INITIAL_ADMIN_PASSWORD: E2eTest-Passw0rd-2026
+          INITIAL_ORG_NAME: Ticketty
+          INITIAL_ORG_SLUG: ticketty
       - run: pnpm test:e2e --runInBand
       # TD-016: المظلة الشاملة أولاً — أي قيد/RLS/trigger/grant يسقط
       # يفشل البناء هنا قبل الفحوص الفردية (استبدال "تذكر" بآلة).

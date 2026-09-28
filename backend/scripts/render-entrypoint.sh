@@ -21,6 +21,8 @@ url.username = "ticketty_runtime";
 url.password = process.env.RUNTIME_DATABASE_PASSWORD;
 process.stdout.write(url.toString());
 ')"
-unset MIGRATION_DATABASE_URL RUNTIME_DATABASE_PASSWORD
+# Bootstrap secrets are no longer needed once the runtime DATABASE_URL is built.
+# Do not expose the initial admin password to the long-lived Nest process.
+unset MIGRATION_DATABASE_URL RUNTIME_DATABASE_PASSWORD INITIAL_ADMIN_PASSWORD
 
 exec node dist/main.js

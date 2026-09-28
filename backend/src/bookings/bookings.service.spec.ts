@@ -39,6 +39,10 @@ describe('BookingsService seat eligibility', () => {
   const prisma = {
     trip: { findFirst: findTrip },
     tripSeat: { updateMany: updateSeats },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn((fn: (tx: PrismaService) => unknown) =>
+      Promise.resolve(fn(prisma)),
+    ),
   } as unknown as PrismaService;
   const audit = { log: auditLog } as unknown as AuditService;
   const service = new BookingsService(prisma, audit);
@@ -60,6 +64,10 @@ describe('BookingsService seat eligibility', () => {
       SeatType.VIP,
     ]);
     expect(auditLog).toHaveBeenCalled();
+    const rawPrisma = prisma as unknown as {
+      $executeRaw: jest.Mock;
+    };
+    expect(rawPrisma.$executeRaw).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a seat when the guarded claim does not match', async () => {

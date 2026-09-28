@@ -6,7 +6,6 @@ import { App } from 'supertest/types';
 import { PrismaClient } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap/configure-app';
-import { AccountingEventWorker } from '../src/accounting/accounting-event.worker';
 import { loginAndRotateTemporaryPassword } from './helpers/auth';
 
 /**
@@ -23,7 +22,8 @@ import { loginAndRotateTemporaryPassword } from './helpers/auth';
  *   ③ لا حجز مزدوج: booking واحد + تذكرة واحدة + دفعة واحدة
  *   ④ لا حدث محاسبي مزدوج: PAYMENT_RECEIVED واحد بالضبط
  *   ⑤ الحالة النهائية للمقعد: BOOKED بـ ticketId واحد — لا يتيم
- *   ⑥ المعالج المحاسبي يرحّل الحدث الوحيد مرة واحدة (لا قيد مزدوج)
+ *   ملاحظة: ترحيل الحدث عبر العامل له suite مستقلة؛ هذا الاختبار يركز على
+ *   عدم ازدواج البيع/الدفع/حدث الطابور تحت التزامن الحقيقي.
  *
  * لماذا هذا الاختبار كان مفقودًا: كل اختبارات الحجز الحالية تسلسلية
  * («مقعد مبيع لا يُبع ثانية» بعد إتمام البيع الأول). الحماية منطقية
@@ -431,33 +431,37 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
     });
     expect(seat.status).toBe('BOOKED');
     expect(seat.ticketId).toBe(tickets[0].id);
+  }, 120_000);
 
-    // ⑥ العامل يرحّل الحدث الوحيد مرة واحدة — قيد متوازن واحد
-    const worker = app.get(AccountingEventWorker);
-    for (let i = 0; i < 200 && events[0]; i++) {
-      const fresh = await admin.accountingEvent.findUnique({
-        where: { id: events[0].id },
-      });
-      if (fresh?.status === 'POSTED') break;
-      const did = await worker.runOnce();
-      if (!did) break; // لا مزيد من العمل
-    }
-    const final = await admin.accountingEvent.findUniqueOrThrow({
-      where: { id: events[0].id },
-      include: { journalEntry: { include: { lines: true } } },
+  it('serializes seat hold against departure and leaves no stale HELD seat', async () => {
+    const target = await createAdditionalTrip('hold-depart', 120);
+
+    const [holdResponse, departResponse] = await Promise.all([
+      request(server)
+        .post('/api/bookings/hold')
+        .set('Authorization', `Bearer ${sellerToken}`)
+        .send({ tripId: target.tripId, seatId: target.seatId }),
+      request(server)
+        .post(`/api/manifests/trip/${target.tripId}/depart`)
+        .set('Authorization', `Bearer ${ownerToken}`),
+    ]);
+
+    expect([200, 201, 409]).toContain(holdResponse.status);
+    expect(departResponse.status).toBe(201);
+
+    const trip = await admin.trip.findUniqueOrThrow({
+      where: { id: target.tripId },
+      select: { status: true },
     });
-    expect(final.status).toBe('POSTED');
-
-    const journalEntries = await admin.journalEntry.findMany({
-      where: { organizationId: orgId, status: 'POSTED' },
+    const seat = await admin.tripSeat.findUniqueOrThrow({
+      where: { id: target.seatId },
+      select: { status: true, heldByUserId: true, holdExpiresAt: true },
     });
-    expect(journalEntries.length).toBe(1); // لا قيد مزدوج
 
-    const lines = final.journalEntry!.lines;
-    const sumDebit = lines.reduce((a, l) => a + Number(l.debit), 0);
-    const sumCredit = lines.reduce((a, l) => a + Number(l.credit), 0);
-    expect(sumDebit).toBeCloseTo(seatPrice, 2);
-    expect(sumCredit).toBeCloseTo(seatPrice, 2);
+    expect(trip.status).toBe('DEPARTED');
+    expect(seat.status).not.toBe('HELD');
+    expect(seat.heldByUserId).toBeNull();
+    expect(seat.holdExpiresAt).toBeNull();
   }, 120_000);
 
   it('allocates distinct organization ticket numbers for simultaneous sales on different trips', async () => {

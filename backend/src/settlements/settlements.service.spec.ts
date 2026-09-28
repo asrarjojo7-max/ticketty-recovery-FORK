@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../common/audit/audit.service';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
@@ -45,6 +49,7 @@ describe('SettlementsService integrity', () => {
       deleteMany: jest.fn(),
       createMany: createLines,
     },
+    accountingEvent: { upsert: jest.fn().mockResolvedValue({ id: 'event-1' }) },
   };
   const transaction = jest.fn((callback: (client: typeof tx) => unknown) =>
     Promise.resolve(callback(tx)),
@@ -119,5 +124,80 @@ describe('SettlementsService integrity', () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(updateSettlement).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds an open settlement with existing and newly earned commissions', async () => {
+    findAgent.mockResolvedValue({ id: 'agent-1' });
+    findSettlement.mockResolvedValue({
+      id: 'settlement-1',
+      status: 'OPEN',
+      fromDate: new Date('2026-08-01T00:00:00.000Z'),
+      toDate: new Date('2026-08-10T23:59:59.999Z'),
+    });
+    updateSettlement.mockResolvedValue({
+      id: 'settlement-1',
+      netAmount: new Prisma.Decimal(180),
+    });
+    commissionResults.push(
+      {
+        id: 'commission-existing',
+        amount: new Prisma.Decimal(20),
+        ticket: { fare: new Prisma.Decimal(100) },
+      },
+      {
+        id: 'commission-new',
+        amount: new Prisma.Decimal(10),
+        ticket: { fare: new Prisma.Decimal(90) },
+      },
+    );
+
+    await service.generate(user, {
+      agentId: 'agent-1',
+      from: '2026-08-01',
+      to: '2026-08-10',
+    });
+
+    expect(commissionQueries[0]?.where?.settlementLine).toBeUndefined();
+    expect(commissionQueries[0]?.where?.OR).toEqual([
+      { settlementLine: { is: null } },
+      { settlementLine: { is: { settlementId: 'settlement-1' } } },
+    ]);
+    expect(updateSettlement).toHaveBeenCalled();
+  });
+  it('serializes settlement finalization with generation for the same agent', async () => {
+    findSettlement
+      .mockResolvedValueOnce({ agentId: 'agent-1' })
+      .mockResolvedValueOnce({
+        id: 'settlement-1',
+        agentId: 'agent-1',
+        status: 'OPEN',
+      });
+    updateSettlement.mockResolvedValue({
+      id: 'settlement-1',
+      status: 'SETTLED',
+      netAmount: new Prisma.Decimal(90),
+      agent: { id: 'agent-1' },
+    });
+
+    await service.settle(user, 'settlement-1');
+
+    expect(executeRaw).toHaveBeenCalledTimes(2);
+    expect(updateSettlement).toHaveBeenCalled();
+    const [args] = updateSettlement.mock.calls[0] as [
+      { where: { id: string }; data: { status: string } },
+    ];
+    expect(args.where).toEqual({ id: 'settlement-1' });
+    expect(args.data.status).toBe('SETTLED');
+  });
+
+  it('does not finalize a settlement that disappears before locking', async () => {
+    findSettlement.mockResolvedValueOnce(null);
+
+    await expect(service.settle(user, 'settlement-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(updateSettlement).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 });

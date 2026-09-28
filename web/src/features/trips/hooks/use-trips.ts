@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { cancelTrip, createTrip, fetchTrips, updateTrip } from "../api";
+import { cancelTrip, completeTrip, createTrip, fetchTrips, openTrip, updateTrip } from "../api";
 import type { CreateTripInput, TripFilters, UpdateTripInput } from "../types";
 
 export const tripKeys = {
@@ -44,6 +44,36 @@ export function useUpdateTrip() {
     },
     onError: (error) =>
       toast.error("تعذّر تحديث الرحلة", {
+        description: error instanceof Error ? error.message : undefined,
+      }),
+  });
+}
+
+export function useOpenTrip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => openTrip(id),
+    onSuccess: () => {
+      toast.success("تم فتح الحجز للرحلة");
+      queryClient.invalidateQueries({ queryKey: tripKeys.all });
+    },
+    onError: (error) =>
+      toast.error("تعذّر فتح الحجز", {
+        description: error instanceof Error ? error.message : undefined,
+      }),
+  });
+}
+
+export function useCompleteTrip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => completeTrip(id),
+    onSuccess: () => {
+      toast.success("تم إكمال الرحلة");
+      queryClient.invalidateQueries({ queryKey: tripKeys.all });
+    },
+    onError: (error) =>
+      toast.error("تعذّر إكمال الرحلة", {
         description: error instanceof Error ? error.message : undefined,
       }),
   });

@@ -37,3 +37,39 @@ export async function lockTicketNumberSequence(
     )
   `;
 }
+
+/**
+ * Serializes every transaction that can create/post/close entries in the same
+ * fiscal period. createEntry() and closePeriod() both take this lock before
+ * reading the period so a period cannot become CLOSED between a successful
+ * OPEN check and the subsequent write.
+ */
+export async function lockFiscalPeriodTransaction(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  fiscalPeriodId: string,
+): Promise<void> {
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtext(${`ticketty:fiscal-period`}),
+      hashtext(${`${organizationId}:${fiscalPeriodId}`})
+    )
+  `;
+}
+
+/**
+ * Serializes creation of fiscal periods for one organization. Application-side
+ * overlap checks must use the same lock so two concurrent CREATE requests
+ * cannot both pass the read-before-write check; the database EXCLUDE
+ * constraint remains the final authority.
+ */
+export async function lockFiscalPeriodCatalogTransaction(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+): Promise<void> {
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtext(${`ticketty:fiscal-period-catalog:${organizationId}`})
+    )
+  `;
+}

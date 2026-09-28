@@ -63,6 +63,18 @@ export class TripsController {
     return this.tripsService.update(user, id, dto);
   }
 
+  @Post(':id/open')
+  @Permissions('trips.write')
+  open(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tripsService.open(user, id);
+  }
+
+  @Post(':id/complete')
+  @Permissions('trips.write')
+  complete(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.tripsService.complete(user, id);
+  }
+
   @Post(':id/cancel')
   @Permissions('trips.write')
   cancel(

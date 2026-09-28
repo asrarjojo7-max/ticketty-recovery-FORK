@@ -173,6 +173,7 @@ describe('authorization matrix (runtime 403) — Phase 3', () => {
       'STATION_MANAGER',
       'SELLER',
       'VIEWER',
+      'AGENT',
     ];
     for (const [i, roleKey] of roleKeys.entries()) {
       if (i > 0 && i % 3 === 0) {
@@ -203,11 +204,6 @@ describe('authorization matrix (runtime 403) — Phase 3', () => {
       });
       tokens[roleKey] = await login(server, email, PASSWORD);
     }
-    tokens.AGENT = await login(
-      server,
-      'e2e-agent@ticketty.local',
-      'E2eTest-Passw0rd-2026',
-    );
   }, 240_000); // sleeps بين الدفعات — login throttle 5/min/IP
 
   afterAll(async () => {

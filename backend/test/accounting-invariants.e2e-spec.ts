@@ -323,6 +323,24 @@ describe('accounting invariants (Phase 4)', () => {
     ).rejects.toThrow();
   });
 
+  it('concurrent overlapping fiscal periods are rejected', async () => {
+    const requests = [1, 2].map((periodNumber) =>
+      request(server)
+        .post('/api/accounting/periods')
+        .set('Authorization', `Bearer ${tenantToken}`)
+        .send({
+          fiscalYear: 2099,
+          periodNumber,
+          startsAt: '2099-01-01',
+          endsAt: '2099-12-31',
+        }),
+    );
+
+    const [first, second] = await Promise.all(requests);
+    const statuses = [first.status, second.status].sort((a, b) => a - b);
+    expect(statuses).toEqual([201, 409]);
+  });
+
   // ─── ④ period مغلق = لا POST ─────────────────────────────
 
   it('entry inside a CLOSED period is rejected at creation (409 — stronger than plan)', async () => {

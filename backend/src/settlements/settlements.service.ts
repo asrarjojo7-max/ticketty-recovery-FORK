@@ -59,9 +59,12 @@ export class SettlementsService {
           agentId: dto.agentId,
           reversedAt: null,
           createdAt: { gte: from, lte: to },
-          settlementLine: overlapping
-            ? { is: { settlementId: overlapping.id } }
-            : { is: null },
+          OR: [
+            { settlementLine: { is: null } },
+            ...(overlapping
+              ? [{ settlementLine: { is: { settlementId: overlapping.id } } }]
+              : []),
+          ],
         },
         include: { ticket: true },
       });
@@ -158,6 +161,20 @@ export class SettlementsService {
   async settle(user: AuthUser, id: string) {
     const orgId = requireOrgId(user);
     const updated = await this.prisma.$transaction(async (tx) => {
+      // Finalization must share the generation lock for the same agent.
+      // Otherwise generate() can rewrite a settlement after it is finalized.
+      const settlementIdentity = await tx.settlement.findFirst({
+        where: {
+          id,
+          organizationId: orgId,
+          ...(user.branchId ? { agent: { branchId: user.branchId } } : {}),
+        },
+        select: { agentId: true },
+      });
+      if (!settlementIdentity) {
+        throw new NotFoundException('التسوية غير موجودة');
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:settlement:${settlementIdentity.agentId}`}))`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${orgId}:settlement-record:${id}`}))`;
       const settlement = await tx.settlement.findFirst({
         where: {
