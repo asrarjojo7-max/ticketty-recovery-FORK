@@ -215,7 +215,8 @@ export class TripsService {
               label: isNumericSeatLabel(seat.label)
                 ? seat.label
                 : String(
-                    (seat.row - 1) * bus.seatTemplate.columnsPerRow + seat.column,
+                    (seat.row - 1) * bus.seatTemplate.columnsPerRow +
+                      seat.column,
                   ),
               seatType: seat.seatType,
               status: initialSeatStatus(seat.seatType),
