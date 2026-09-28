@@ -98,38 +98,46 @@ export class BookingsService {
   ) {}
 
   async hold(user: AuthUser, dto: HoldSeatDto) {
-    const trip = await this.prisma.trip.findFirst({
-      where: { id: dto.tripId, ...tenantScope(user) },
-    });
-    if (!trip) throw new NotFoundException('الرحلة غير موجودة');
-    if (!BOOKABLE_STATUSES.includes(trip.status)) {
-      throw new ConflictException('الرحلة غير مفتوحة للحجز');
-    }
+    const result = await this.prisma.$transaction(async (tx) => {
+      // نفس قفل الرحلة الذي تستخدمه عملية البيع والإلغاء والمغادرة:
+      // لا يمكن أن تنجح عملية HOLD بعد أن تصبح الرحلة DEPARTED.
+      await lockTripTransaction(tx, this.org(user), dto.tripId);
 
-    const now = new Date();
-    const result = await this.prisma.tripSeat.updateMany({
-      where: {
-        id: dto.seatId,
-        tripId: dto.tripId,
-        seatType: { in: BOOKABLE_SEAT_TYPES },
-        OR: [
-          { status: 'AVAILABLE' },
-          {
-            status: 'HELD',
-            heldByUserId: user.sub,
-            holdExpiresAt: { gte: now },
-          },
-        ],
-      },
-      data: {
-        status: 'HELD',
-        heldByUserId: user.sub,
-        holdExpiresAt: new Date(now.getTime() + HOLD_MINUTES * 60_000),
-      },
+      const trip = await tx.trip.findFirst({
+        where: { id: dto.tripId, ...tenantScope(user) },
+      });
+      if (!trip) throw new NotFoundException('الرحلة غير موجودة');
+      if (!BOOKABLE_STATUSES.includes(trip.status)) {
+        throw new ConflictException('الرحلة غير مفتوحة للحجز');
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + HOLD_MINUTES * 60_000);
+      const updated = await tx.tripSeat.updateMany({
+        where: {
+          id: dto.seatId,
+          tripId: dto.tripId,
+          seatType: { in: BOOKABLE_SEAT_TYPES },
+          OR: [
+            { status: 'AVAILABLE' },
+            {
+              status: 'HELD',
+              heldByUserId: user.sub,
+              holdExpiresAt: { gte: now },
+            },
+          ],
+        },
+        data: {
+          status: 'HELD',
+          heldByUserId: user.sub,
+          holdExpiresAt: expiresAt,
+        },
+      });
+      if (updated.count === 0) {
+        throw new ConflictException('المقعد غير متاح');
+      }
+      return expiresAt;
     });
-    if (result.count === 0) {
-      throw new ConflictException('المقعد غير متاح');
-    }
 
     await this.audit.log(user, 'SEAT_HELD', 'TripSeat', dto.seatId, {
       tripId: dto.tripId,
@@ -137,7 +145,7 @@ export class BookingsService {
     return {
       held: true,
       seatId: dto.seatId,
-      expiresAt: new Date(now.getTime() + HOLD_MINUTES * 60_000),
+      expiresAt: result,
     };
   }
 
