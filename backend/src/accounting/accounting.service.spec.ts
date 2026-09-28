@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { AccountType, AccountingEventType } from '@prisma/client';
+import { AccountType, AccountingEventType, Prisma } from '@prisma/client';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingService } from './accounting.service';
@@ -41,10 +41,6 @@ describe('AccountingService', () => {
   });
 
   it('posts a business event through one database transaction', async () => {
-    const transaction = jest.fn(
-      (callback: (client: typeof tx) => unknown) =>
-        Promise.resolve(callback(tx)),
-    );
     const tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
       accountingPolicy: {
@@ -112,6 +108,10 @@ describe('AccountingService', () => {
         }),
       },
     };
+    const transaction = jest.fn(
+      (callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+    );
     const service = new AccountingService({
       $transaction: transaction,
     } as unknown as PrismaService);
