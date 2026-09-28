@@ -573,10 +573,8 @@ async function alertsStatus() {
         ' ' +
         nameInArabic(alert.labels?.alertname ?? 'تنبيه'),
     );
-    lines.push(
-      alert.annotations?.summary ?? 'توجد مشكلة تحتاج متابعة.',
-    );
-    lines.push('');
+    lines.push(alertMessage(alert));
+    lines.push('', '────────────', '');
   }
 
   if (alerts.length > 10) {
