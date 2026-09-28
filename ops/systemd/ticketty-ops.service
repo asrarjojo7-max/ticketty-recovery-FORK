@@ -1,0 +1,30 @@
+[Unit]
+Description=Ticketty Remote Operations Control Plane
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+SupplementaryGroups=ticketty-ops
+WorkingDirectory=/srv/ticketty
+ExecStart=/usr/bin/python3 /srv/ticketty/ops/deployment/ops-server.py
+Restart=always
+RestartSec=3
+Environment=TICKETTY_OPS_SOCKET=/run/ticketty/ops.sock
+Environment=TICKETTY_OPS_HMAC_FILE=/etc/ticketty/secrets/ticketty-ops-hmac
+Environment=TICKETTY_DEPLOYMENT_STATE_DIR=/var/lib/ticketty/deployment
+Environment=TICKETTY_OPS_GROUP=ticketty-ops
+Environment=TICKETTY_BIN=/usr/local/bin/ticketty
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/ticketty /var/lib/ticketty /etc/ticketty /run/ticketty /run/lock
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
