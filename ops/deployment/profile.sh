@@ -60,7 +60,7 @@ import_profile(){
   value="$(load_value install_root)"; [[ -n "$value" ]] && set_state PROJECT_DIR "$value"
   value="$(load_value repository)"; [[ -n "$value" ]] && set_state REPOSITORY "$value"
   value="$(load_value domain)"; [[ -n "$value" ]] && set_state APP_HOSTNAME "$value"
-  value="$(load_value server_id)"; [[ -n "$value" ]] && set_state SERVER_ID "$value"
+  # A new VPS must receive a new identity. The source server ID remains metadata only.
   value="$(load_value release_channel)"; [[ -n "$value" ]] && set_state RELEASE_CHANNEL "$value"
   value="$(load_value backup_remote)"; [[ -n "$value" ]] && set_state BACKUP_REMOTE "$value"
   value="$(load_value backup_weekly_remote)"; [[ -n "$value" ]] && set_state BACKUP_WEEKLY_REMOTE "$value"

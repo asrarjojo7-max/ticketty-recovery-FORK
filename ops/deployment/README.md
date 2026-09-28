@@ -10,11 +10,16 @@ sudo ticketty install
 sudo ticketty resume
 sudo ticketty update
 sudo ticketty update --plan
+sudo ticketty migrate
 sudo ticketty status
 sudo ticketty doctor
+sudo ticketty gate <release-tag>
 sudo ticketty setup-cloudflare
+sudo ticketty profile-export
+sudo ticketty profile-import <profile.json>
+sudo ticketty transfer-export
+sudo ticketty transfer-import <bundle.tar.gz>
 ```
-
 ## فلسفة التشغيل
 
 - GitHub هو مصدر الكود فقط. لا يوجد `git push` من Installer ولا GitHub write credential على السيرفر.
@@ -23,6 +28,8 @@ sudo ticketty setup-cloudflare
 - إعادة `ticketty resume` تعيد فقط المراحل غير المكتملة وتتحقق من الحالة الفعلية قبل المتابعة.
 - التحديثات الإنتاجية مبنية على GitHub Releases/tags وليس على `master`.
 - قبل أي تحديث توجد نسخة PostgreSQL احتياطية محلية مع checksum.
+- تحديث Release الإنتاجي يمر عبر release-gate ويتطلب نجاح CI على نفس commit.
+- migration يمكن تشغيله مستقلًا عبر ticketty migrate مع نسخة احتياطية مسبقة.
 - فشل التطبيق أو health checks يعيد كود التطبيق إلى الإصدار السابق؛ migrations لا تُعكس تلقائيًا.
 
 ## Cloudflare
@@ -64,24 +71,29 @@ Telegram ليس Shell.
 
 ## النقل إلى VPS جديد
 
-الهدف التشغيلي:
+أصبح هناك profile وtransfer bundle رسميان لنقل الإعدادات غير السرية فقط.
 
 ```text
-VPS جديد
+السيرفر القديم
   ↓
-ticketty install
+ticketty profile-export
   ↓
-domain + Cloudflare + Telegram
+ticketty transfer-export
   ↓
-restore backup
+السيرفر الجديد
   ↓
-release
+ticketty transfer-import <bundle>
   ↓
-health + verification
+إعادة إدخال الأسرار عند الحاجة
+  ↓
+استعادة قاعدة البيانات من النسخة الخارجية
+  ↓
+ticketty migrate
+  ↓
+التحقق
 ```
 
-المرحلة التالية ستضيف bundle/profile رسميًا لنقل الإعدادات غير السرية واستعادة قاعدة البيانات بصورة قابلة للتكرار.
-
+الـtransfer bundle لا يحتوي أسرارًا ولا قاعدة البيانات. هوية السيرفر الجديد تُنشأ محليًا ولا تُنسخ من السيرفر القديم.
 ## ملاحظات أمان
 
 - لا تستخدم أسرارًا حقيقية من `.env.production.example`.
