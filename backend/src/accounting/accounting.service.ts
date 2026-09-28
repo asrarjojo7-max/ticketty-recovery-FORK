@@ -14,6 +14,7 @@ import {
 } from '../common/idempotency';
 import { paginationArgs } from '../common/dto/pagination-query.dto';
 import { requireOrgId } from '../common/org';
+import { lockFiscalPeriodTransaction } from '../common/transaction-locks';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ConfigureAccountingPolicyDto,
@@ -438,6 +439,7 @@ export class AccountingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await lockFiscalPeriodTransaction(tx, organizationId, dto.fiscalPeriodId);
       const [journal, period, accounts] = await Promise.all([
         tx.journal.findFirst({ where: { id: dto.journalId, organizationId } }),
         tx.fiscalPeriod.findFirst({
@@ -666,6 +668,7 @@ export class AccountingService {
   async closePeriod(user: AuthUser, id: string) {
     const organizationId = requireOrgId(user);
     return this.prisma.$transaction(async (tx) => {
+      await lockFiscalPeriodTransaction(tx, organizationId, id);
       const period = await tx.fiscalPeriod.findFirst({
         where: { id, organizationId },
       });
