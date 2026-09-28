@@ -330,3 +330,19 @@
 ثم نفتح الإجراءات التشغيلية الآمنة بعد نجاح المرحلة الأولى.
 
 المعيار الأساسي: Telegram يجب أن يزيد وضوح النظام وسرعة الإدارة، لا أن يصبح بابًا جديدًا واسعًا للوصول إلى النظام.
+
+
+### Remote deployment boundary
+
+The Telegram service talks to the host deployment control plane over
+`/run/ticketty/ops.sock`. Requests are HMAC-SHA256 signed and contain a timestamp,
+nonce, actor and request ID. The host accepts only `STATUS`, `PLAN_UPDATE`,
+`CANCEL_PLAN`, and `EXECUTE_UPDATE`.
+
+The release ref is never trusted from callback data. A plan created on the host
+stores the release ref and expires after 10 minutes. The callback carries only the
+opaque plan ID.
+
+Deployment execution is asynchronous. Telegram immediately reports that the
+operation started; the host records its state and audit event under
+`/var/lib/ticketty/deployment`.
