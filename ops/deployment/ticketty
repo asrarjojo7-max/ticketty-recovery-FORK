@@ -232,7 +232,7 @@ verify_phase(){
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
     DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && ! grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
     TELEGRAM) [[ -s "$TELEGRAM_TOKEN_FILE" && -s "$TELEGRAM_ALERT_TOKEN_FILE" && -s "$OPS_HMAC_FILE" ]];;
-    CLOUDFLARE) [[ ! -s "$CLOUDFLARE_TOKEN_FILE" || -s "$CLOUDFLARE_TOKEN_FILE" ]];;
+    CLOUDFLARE) [[ ! -s "$CLOUDFLARE_TOKEN_FILE" ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
     COMPOSE) docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config --quiet >/dev/null 2>&1;;
     DEPLOY) health;;
     OPS) systemctl is-active --quiet ticketty-ops.service && [[ -S "$OPS_SOCKET" ]];;
@@ -246,8 +246,73 @@ public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ 
 current_release(){ get RELEASE_REF 2>/dev/null || git -C "$INSTALL_ROOT" describe --tags --exact-match HEAD 2>/dev/null || git -C "$INSTALL_ROOT" rev-parse --short=12 HEAD; }
 latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; }
 plan_json(){ local cur latest; cur="$(current_release)"; latest="$(latest_json | jq -r '.tag_name // empty')"; [[ -n "$latest" ]] || { jq -n --arg c "$cur" '{ok:true,update:false,current:$c,reason:"no-release"}'; return; }; if [[ "$cur" == "$latest" ]]; then jq -n --arg c "$cur" --arg l "$latest" '{ok:true,update:false,current:$c,latest:$l}'; else latest_json | jq --arg c "$cur" '{ok:true,update:true,current:$c,latest:.tag_name,url:.html_url,name:(.name//.tag_name),published_at:.published_at,body:(.body//"")}'; fi; }
-prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }
-update_ref(){ local target="$1" old; [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Release tag غير صالح."; ensure_checkout; clean; [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: $target"; return; }; prebackup; old="$(git -C "$INSTALL_ROOT" rev-parse HEAD)"; git -C "$INSTALL_ROOT" fetch --tags --force origin; git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release غير موجود."; git -C "$INSTALL_ROOT" checkout --detach "$target"; if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build migrate; then git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل migration؛ لم يتم عكسه تلقائيًا."; fi; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || { git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل تشغيل الإصدار الجديد."; }; health || { git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل health check."; }; setv RELEASE_REF "$target"; setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"; setv DEPLOYMENT_STATUS READY; setv LAST_UPDATE_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; ok "تم نشر $target"; }
+select_initial_release(){
+  local target
+  target="$REF"
+  if [[ -z "$target" ]]; then target="$(latest_json 2>/dev/null | jq -r ".tag_name // empty" || true)"; fi
+  if [[ -n "$target" ]]; then
+    "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
+    git -C "$INSTALL_ROOT" fetch --tags --force origin
+    git -C "$INSTALL_ROOT" checkout --detach "$target"
+    setv RELEASE_REF "$target"
+    setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
+    setv DEPLOYMENT_CHANNEL stable
+    ok "تم اعتماد الإصدار $target"
+    return 0
+  fi
+  if [[ -n "$(get RELEASE_REF 2>/dev/null || true)" ]]; then return 0; fi
+  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then die "لا يوجد GitHub Release منشور؛ مرّر --ref أو أنشئ Release."; fi
+  warn "لا يوجد GitHub Release منشور حاليًا."
+  read -r -p "تثبيت master للتطوير بدلًا من Release؟ [y/N]: " answer
+  [[ "$answer" =~ ^[Yy]$ ]] || die "أنشئ GitHub Release ثم أعد المحاولة."
+  git -C "$INSTALL_ROOT" fetch origin master
+  git -C "$INSTALL_ROOT" checkout --detach origin/master
+  setv RELEASE_REF master
+  setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
+  setv DEPLOYMENT_CHANNEL development
+  warn "تم اختيار master للتطوير؛ هذه ليست نسخة إنتاجية رسمية."
+}
+prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }update_ref(){
+  local target="$1" old
+  [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Release tag غير صالح."
+  ensure_checkout
+  clean
+  [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: $target"; return; }
+  "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
+  prebackup
+  old="$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
+  git -C "$INSTALL_ROOT" fetch --tags --force origin
+  git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release غير موجود."
+  git -C "$INSTALL_ROOT" checkout --detach "$target"
+  if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" run --rm migrate; then
+    git -C "$INSTALL_ROOT" checkout --detach "$old"
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true
+    die "فشل migration؛ لم يتم عكس migration تلقائيًا."
+  fi
+  if ! stack_up; then
+    git -C "$INSTALL_ROOT" checkout --detach "$old"
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true
+    die "فشل تشغيل الإصدار الجديد."
+  fi
+  if ! health; then
+    git -C "$INSTALL_ROOT" checkout --detach "$old"
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true
+    die "فشل health check. قاعدة البيانات لم تُرجع للخلف."
+  fi
+  setv RELEASE_REF "$target"
+  setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
+  setv DEPLOYMENT_CHANNEL stable
+  setv DEPLOYMENT_STATUS READY
+  setv LAST_UPDATE_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ok "تم نشر $target"
+}
+
+verify_final(){
+  health || return 1
+  docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps --status running >/dev/null 2>&1 || return 1
+  systemctl is-active --quiet ticketty-ops.service || return 1
+  [[ -S "$OPS_SOCKET" ]] || return 1
+}
 cmd_install(){
   root; lock; dirs; load
   step "TICKETTY — التثبيت الذكي"
@@ -261,6 +326,7 @@ cmd_install(){
   [[ -n "$(get DEPLOYMENT_ID 2>/dev/null || true)" ]] || setv DEPLOYMENT_ID "DEP-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 3)"
   phase ENV write_env
   ensure_env
+  if [[ -z "$(get RELEASE_REF 2>/dev/null || true)" || -n "$REF" ]]; then select_initial_release; fi
   configure_alertmanager_receiver
   ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"
   phase DOMAIN domain
@@ -270,6 +336,7 @@ cmd_install(){
   phase DEPLOY stack_up
   if public_health; then ok "الدومين العام"; else warn "الدومين لم يستجب بعد؛ يمكن إعادة الفحص من ticketty doctor."; fi
   phase OPS ops_service
+  phase VERIFY verify_final
   setv DEPLOYMENT_STATUS READY
   step "اكتمل التثبيت"
   local pair
@@ -281,10 +348,9 @@ cmd_install(){
     printf '  (هذه القيمة سرية؛ لا ترسلها في قناة عامة)\n'
   fi
 }
-cmd_resume(){ cmd_install; }
-cmd_migrate(){
+cmd_resume(){ cmd_install; }cmd_migrate(){
   root
-  lock
+  acquire_lock
   dirs
   load
   [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]] || die "Ticketty غير مهيأ."
@@ -294,7 +360,20 @@ cmd_migrate(){
   setv LAST_MIGRATION_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   ok "اكتمل migration والتحققات المدمجة"
 }
-cmd_update(){ load; local p t; p="$(plan_json)"; if [[ "$JSON_OUTPUT" -eq 1 ]]; then printf '%s\n' "$p"; return; fi; [[ "$(printf '%s' "$p" | jq -r '.update // false')" == true ]] || { ok "لا يوجد Release أحدث."; return; }; t="$(printf '%s' "$p" | jq -r '.latest')"; if [[ "$CONFIRMED" -eq 0 ]]; then read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; update_ref "$t"; }
+cmd_update(){
+  root
+  acquire_lock
+  dirs
+  load
+  local p t
+  p="$(plan_json)"
+  if [[ "$JSON_OUTPUT" -eq 1 || "$DRY_RUN" -eq 1 ]]; then printf "%s\n" "$p"; return; fi
+  [[ "$(printf "%s" "$p" | jq -r ".update // false")" == true ]] || { ok "لا يوجد Release أحدث."; return; }
+  t="$(printf "%s" "$p" | jq -r ".latest")"
+  [[ "$CONFIRMED" -eq 1 ]] || { read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; }
+  update_ref "$t"
+}
+
 status_json(){
   load
   local r d s o
