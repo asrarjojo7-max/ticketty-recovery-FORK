@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   Injectable,
   Logger,
@@ -15,7 +16,7 @@ export class AccountingEventWorker implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AccountingEventWorker.name);
   private timer?: NodeJS.Timeout;
   private running = false;
-  private readonly workerId = `accounting:${process.pid}`;
+  private readonly workerId = `accounting:${process.pid}:${randomUUID()}`;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -84,17 +85,27 @@ export class AccountingEventWorker implements OnModuleInit, OnModuleDestroy {
           this.accounting.processEvent(user, claimed.id),
         );
         this.metrics.accountingEventsProcessedTotal.inc();
+        this.metrics.accountingWorkerLastSuccess.set(Date.now() / 1000);
+        this.metrics.accountingWorkerConsecutiveFailures.set(0);
+        await this.observeQueueDepth();
+        return true;
       } catch (error) {
-        await this.prisma.withTenantContext(claimed.organizationId, () =>
-          this.accounting.markEventFailed(user, claimed.id, error),
+        const markedFailed = await this.prisma.withTenantContext(
+          claimed.organizationId,
+          () => this.accounting.markEventFailed(user, claimed.id, error),
         );
-        this.metrics.accountingEventsFailedTotal.inc();
-        this.logger.warn(`Accounting event ${claimed.id} failed`);
+        if (markedFailed) {
+          this.metrics.accountingEventsFailedTotal.inc();
+          this.logger.warn(`Accounting event ${claimed.id} failed`);
+          this.metrics.accountingWorkerConsecutiveFailures.inc();
+        } else {
+          this.logger.warn(
+            `Accounting event ${claimed.id} failure was not applied because the worker no longer owns the lease`,
+          );
+        }
+        await this.observeQueueDepth();
+        return false;
       }
-      this.metrics.accountingWorkerLastSuccess.set(Date.now() / 1000);
-      this.metrics.accountingWorkerConsecutiveFailures.set(0);
-      await this.observeQueueDepth();
-      return true;
     } catch (error) {
       // فشل الدورة نفسها (DB غير متاح، فشل claim) — العداد الذي
       // يستعمله alert rule: consecutive_failures > 0 خلال 10m.
