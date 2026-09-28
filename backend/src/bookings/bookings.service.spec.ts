@@ -39,6 +39,8 @@ describe('BookingsService seat eligibility', () => {
   const prisma = {
     trip: { findFirst: findTrip },
     tripSeat: { updateMany: updateSeats },
+    $executeRaw: jest.fn().mockResolvedValue(1),
+    $transaction: jest.fn(async (fn: (tx: PrismaService) => unknown) => fn(prisma)),
   } as unknown as PrismaService;
   const audit = { log: auditLog } as unknown as AuditService;
   const service = new BookingsService(prisma, audit);
