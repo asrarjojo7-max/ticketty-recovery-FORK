@@ -37,6 +37,7 @@ export async function lockTicketNumberSequence(
     )
   `;
 
+}
 /**
  * Serializes every transaction that can create/post/close entries in the same
  * fiscal period. createEntry() and closePeriod() both take this lock before
