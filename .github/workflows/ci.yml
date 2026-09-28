@@ -232,9 +232,23 @@ jobs:
           path: web/test-results/
           retention-days: 7
 
+  telegram-assistant-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate Telegram assistant
+        run: |
+          node --check ops/telegram-assistant/server.mjs
+          node --test ops/telegram-assistant/core.test.mjs
+      - name: Build Telegram assistant image
+        run: docker build --file ops/telegram-assistant/Dockerfile --tag ticketty-telegram-assistant:ci ops/telegram-assistant
+
   container-builds:
     runs-on: ubuntu-latest
-    needs: [backend-quality, backend-integration, web-quality, web-e2e]
+    needs: [backend-quality, backend-integration, web-quality, web-e2e, telegram-assistant-quality]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
