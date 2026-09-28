@@ -460,6 +460,37 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
     expect(sumCredit).toBeCloseTo(seatPrice, 2);
   }, 120_000);
 
+  it('serializes seat hold against departure and leaves no stale HELD seat', async () => {
+    const target = await createAdditionalTrip('hold-depart', 120);
+
+    const [holdResponse, departResponse] = await Promise.all([
+      request(server)
+        .post('/api/bookings/hold')
+        .set('Authorization', `Bearer ${sellerToken}`)
+        .send({ tripId: target.tripId, seatId: target.seatId }),
+      request(server)
+        .post(`/api/manifests/trip/${target.tripId}/depart`)
+        .set('Authorization', `Bearer ${ownerToken}`),
+    ]);
+
+    expect([200, 201, 409]).toContain(holdResponse.status);
+    expect(departResponse.status).toBe(201);
+
+    const trip = await admin.trip.findUniqueOrThrow({
+      where: { id: target.tripId },
+      select: { status: true },
+    });
+    const seat = await admin.tripSeat.findUniqueOrThrow({
+      where: { id: target.seatId },
+      select: { status: true, heldByUserId: true, holdExpiresAt: true },
+    });
+
+    expect(trip.status).toBe('DEPARTED');
+    expect(seat.status).not.toBe('HELD');
+    expect(seat.heldByUserId).toBeNull();
+    expect(seat.holdExpiresAt).toBeNull();
+  }, 120_000);
+
   it('allocates distinct organization ticket numbers for simultaneous sales on different trips', async () => {
     const [first, second] = await Promise.all([
       createAdditionalTrip('a', 72),
