@@ -10,7 +10,7 @@ const config = {
   prometheusUrl: process.env.PROMETHEUS_URL ?? 'http://prometheus:9090',
   alertmanagerUrl:
     process.env.ALERTMANAGER_URL ?? 'http://alertmanager:9093',
-  alertWebhookToken: required('TELEGRAM_ALERT_WEBHOOK_TOKEN'),
+  alertWebhookTokenFile: required('TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE'),
   stateFile:
     process.env.TELEGRAM_STATE_FILE ??
     '/var/lib/ticketty/telegram/state.json',
@@ -28,6 +28,8 @@ const config = {
 const MAX_ALERT_BODY_BYTES = 512 * 1024;
 const MAX_TELEGRAM_MESSAGE = 3900;
 const state = await loadState();
+const alertWebhookToken = (await readFile(config.alertWebhookTokenFile, 'utf8')).trim();
+if (!alertWebhookToken) throw new Error('Telegram alert webhook token file is empty');
 
 if (!config.pairingCode && state.operators.length === 0) {
   throw new Error(
@@ -833,7 +835,7 @@ const server = createServer(async (request, response) => {
 
       if (
         !sameSecret(
-          config.alertWebhookToken,
+          alertWebhookToken,
           url.searchParams.get('token'),
         )
       ) {
