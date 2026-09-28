@@ -3,8 +3,8 @@ set -Eeuo pipefail
 umask 077
 [[ "$(id -u)" -eq 0 ]] || { echo "استخدم sudo/root." >&2; exit 1; }
 
-repo="\x24{TICKETTY_REPOSITORY_URL:-https://github.com/mogahedadamy/ticketty-recovery.git}"
-root="\x24{TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
+repo="${TICKETTY_REPOSITORY_URL:-https://github.com/mogahedadamy/ticketty-recovery.git}"
+root="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
 
 read -r -p "مستودع Ticketty [$repo]: " v
 [[ -n "$v" ]] && repo="$v"
