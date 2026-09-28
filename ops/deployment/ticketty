@@ -93,18 +93,39 @@ BACKUP_RETENTION_DAYS=0
 EOF
 chmod 600 "$f"; printf '%s\n' "$pair" > "$STATE_DIR/pairing-code"; chmod 600 "$STATE_DIR/pairing-code"; ok "Environment + secrets"; }
 domain(){ local d; d="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$d" ]] && return; if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="${TICKETTY_DOMAIN:-}"; else read -r -p "الدومين (مثال app.example.com): " d; fi; [[ -n "$d" ]] || die "الدومين مطلوب."; sed -i "s#^WEB_ORIGIN=.*#WEB_ORIGIN=https://$d#;s#^APP_ORIGIN=.*#APP_ORIGIN=https://$d#;s#^CLOUDFLARE_HOSTNAME=.*#CLOUDFLARE_HOSTNAME=$d#" "$ETC_ROOT/ticketty.env"; setv APP_HOSTNAME "$d"; ok "الدومين $d"; }
-telegram(){ if [[ ! -s "$TELEGRAM_TOKEN_FILE" ]]; then local t; if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="${TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token من BotFather: " t; printf '\n'; fi; [[ -n "$t" ]] || die "Telegram Bot Token مطلوب."; printf '%s\n' "$t" > "$TELEGRAM_TOKEN_FILE"; chmod 600 "$TELEGRAM_TOKEN_FILE"; fi; secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32; getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"; chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"; ok "Telegram"; }
+telegram(){
+  if [[ ! -s "$TELEGRAM_TOKEN_FILE" ]]; then
+    local t
+    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="${TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token من BotFather: " t; printf '\n'; fi
+    [[ -n "$t" ]] || die "Telegram Bot Token مطلوب."
+    printf '%s\n' "$t" > "$TELEGRAM_TOKEN_FILE"; chmod 600 "$TELEGRAM_TOKEN_FILE"
+  fi
+  secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32
+  getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
+  local gid; gid="$(getent group "$OPS_GROUP" | cut -d: -f3)"
+  if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
+  chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
+  ok "Telegram"; }
 cloudflare(){ [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && { ok "Cloudflare Tunnel token موجود"; return; }; [[ "$NON_INTERACTIVE" -eq 1 ]] && return; printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'; local m t; read -r -p "اختر [1]: " m; [[ -n "$m" ]] || m=1; case "$m" in 1) read -r -s -p "Tunnel Token: " t; printf '\n'; [[ -n "$t" ]] || die "Tunnel Token مطلوب."; printf '%s\n' "$t" > "$CLOUDFLARE_TOKEN_FILE"; chmod 600 "$CLOUDFLARE_TOKEN_FILE";; 2) "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE";; 3) warn "Cloudflare مؤجل.";; *) die "خيار غير صالح.";; esac; }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
-stack_up(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build; ok "الخدمات"; }
+stack_up(){
+  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d --build
+  else
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build
+  fi
+  ok "الخدمات"
+}
 ops_service(){ getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"; cp "$INSTALL_ROOT/ops/systemd/ticketty-ops.service" /etc/systemd/system/ticketty-ops.service; systemctl daemon-reload; systemctl enable --now ticketty-ops.service; systemctl is-active --quiet ticketty-ops.service || die "Remote Ops لم يبدأ."; ok "Remote Ops"; }
 health(){ local bp="$BACKEND_PORT" wp="$WEB_PORT"; [[ -n "$bp" ]] || bp=3001; [[ -n "$wp" ]] || wp=3000; curl -fsS "http://127.0.0.1:$bp/api/health/liveness" >/dev/null && curl -fsS "http://127.0.0.1:$wp/api/health/live" >/dev/null; }
+public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "الدومين العام متصل عبر Cloudflare"; return 0; }; sleep 5; done; return 1; }
+
 current_release(){ get RELEASE_REF 2>/dev/null || git -C "$INSTALL_ROOT" describe --tags --exact-match HEAD 2>/dev/null || git -C "$INSTALL_ROOT" rev-parse --short=12 HEAD; }
 latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; }
 plan_json(){ local cur latest; cur="$(current_release)"; latest="$(latest_json | jq -r '.tag_name // empty')"; [[ -n "$latest" ]] || { jq -n --arg c "$cur" '{ok:true,update:false,current:$c,reason:"no-release"}'; return; }; if [[ "$cur" == "$latest" ]]; then jq -n --arg c "$cur" --arg l "$latest" '{ok:true,update:false,current:$c,latest:$l}'; else latest_json | jq --arg c "$cur" '{ok:true,update:true,current:$c,latest:.tag_name,url:.html_url,name:(.name//.tag_name),published_at:.published_at,body:(.body//"")}'; fi; }
 prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }
 update_ref(){ local target="$1" old; [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Release tag غير صالح."; ensure_checkout; clean; [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: $target"; return; }; prebackup; old="$(git -C "$INSTALL_ROOT" rev-parse HEAD)"; git -C "$INSTALL_ROOT" fetch --tags --force origin; git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release غير موجود."; git -C "$INSTALL_ROOT" checkout --detach "$target"; if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build migrate; then git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل migration؛ لم يتم عكسه تلقائيًا."; fi; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || { git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل تشغيل الإصدار الجديد."; }; health || { git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل health check."; }; setv RELEASE_REF "$target"; setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"; setv DEPLOYMENT_STATUS READY; setv LAST_UPDATE_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; ok "تم نشر $target"; }
-cmd_install(){ root; lock; dirs; load; step "TICKETTY — التثبيت الذكي"; phase PREFLIGHT resources; phase PACKAGES packages; phase CHECKOUT checkout; setv PROJECT_DIR "$INSTALL_ROOT"; setv REPOSITORY "$REPOSITORY"; phase ENV write_env; ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"; phase DOMAIN domain; phase TELEGRAM telegram; phase CLOUDFLARE cloudflare; phase COMPOSE compose_validate; phase DEPLOY stack_up; phase OPS ops_service; setv DEPLOYMENT_STATUS READY; step "اكتمل التثبيت"; }
+cmd_install(){ root; lock; dirs; load; step "TICKETTY — التثبيت الذكي"; phase PREFLIGHT resources; phase PACKAGES packages; phase CHECKOUT checkout; setv PROJECT_DIR "$INSTALL_ROOT"; setv REPOSITORY "$REPOSITORY"; phase ENV write_env; ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"; phase DOMAIN domain; phase TELEGRAM telegram; phase CLOUDFLARE cloudflare; phase COMPOSE compose_validate; phase DEPLOY stack_up; public_health || warn "الدومين العام يحتاج وقتًا إضافيًا أو مراجعة DNS."; phase OPS ops_service; setv DEPLOYMENT_STATUS READY; step "اكتمل التثبيت"; }
 cmd_resume(){ cmd_install; }
 cmd_update(){ load; local p t; p="$(plan_json)"; if [[ "$JSON_OUTPUT" -eq 1 ]]; then printf '%s\n' "$p"; return; fi; [[ "$(printf '%s' "$p" | jq -r '.update // false')" == true ]] || { ok "لا يوجد Release أحدث."; return; }; t="$(printf '%s' "$p" | jq -r '.latest')"; if [[ "$CONFIRMED" -eq 0 ]]; then read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; update_ref "$t"; }
 status_json(){
@@ -123,7 +144,14 @@ cmd_status(){
   docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps || true
 }
 cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
-cmd_setup_cf(){ root; load; "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"; }
+cmd_setup_cf(){
+  root; load
+  "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
+  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d cloudflared
+    public_health || warn "Cloudflare يعمل لكن الدومين العام لم يستجب بعد؛ استخدم ticketty doctor."
+  fi
+}
 usage(){ printf '%s\n' 'ticketty | install | resume | update | status | doctor | setup-cloudflare'; }
 menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) الحالة\n  5) فحص النظام\n  6) Cloudflare\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_resume;;3) root;lock;cmd_update;;4) cmd_status;;5) cmd_doctor;;6) cmd_setup_cf;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
 main(){ local command=menu; while (($#)); do case "$1" in install|resume|update|status|doctor|setup-cloudflare) command="$1"; shift;; --non-interactive) NON_INTERACTIVE=1; shift;; --json) JSON_OUTPUT=1; shift;; --dry-run|--plan) DRY_RUN=1; shift;; --confirm) CONFIRMED=1; shift;; --ref) REF="$2"; shift 2;; -h|--help) usage; return;; *) die "وسيط غير معروف: $1";; esac; done; case "$command" in menu) menu;;install) cmd_install;;resume) cmd_resume;;update) [[ -n "$REF" ]] && { root;lock;update_ref "$REF"; } || { root;lock;cmd_update; };;status) cmd_status;;doctor) cmd_doctor;;setup-cloudflare) cmd_setup_cf;;esac; }
