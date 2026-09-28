@@ -30,17 +30,20 @@ def load_state():
         return {"nonces":data.get("nonces",{}),"plans":data.get("plans",{}),"operations":data.get("operations",{})}
     except (OSError,json.JSONDecodeError): return {"nonces":{},"plans":{},"operations":{}}
 STATE=load_state()
+STATE_LOCK=threading.RLock()
 
 def save_state():
-    STATE_DIR.mkdir(parents=True,exist_ok=True)
-    tmp=STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(STATE,ensure_ascii=False,separators=(",",":"))+"\n",encoding="utf-8")
-    os.chmod(tmp,0o600); tmp.replace(STATE_FILE)
+    with STATE_LOCK:
+        STATE_DIR.mkdir(parents=True,exist_ok=True)
+        tmp=STATE_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(STATE,ensure_ascii=False,separators=(",",":"))+"\n",encoding="utf-8")
+        os.chmod(tmp,0o600); tmp.replace(STATE_FILE)
 
 def prune():
-    t=now()
-    STATE["nonces"]={k:v for k,v in STATE["nonces"].items() if int(v)>t}
-    STATE["plans"]={k:v for k,v in STATE["plans"].items() if int(v.get("expires_at",0))>t}
+    with STATE_LOCK:
+        t=now()
+        STATE["nonces"]={k:v for k,v in STATE["nonces"].items() if int(v)>t}
+        STATE["plans"]={k:v for k,v in STATE["plans"].items() if int(v.get("expires_at",0))>t}
 
 def audit(actor,op,target,result,request_id,detail=None):
     STATE_DIR.mkdir(parents=True,exist_ok=True)
@@ -75,7 +78,8 @@ def launch_update(plan_id, ref, actor, request_id):
     env=os.environ.copy()
     handle=log_path.open("a",encoding="utf-8")
     process=subprocess.Popen([TICKETTY_BIN,"update","--non-interactive","--confirm","--ref",ref],stdout=handle,stderr=subprocess.STDOUT,text=True,env=env,start_new_session=True)
-    STATE["operations"][plan_id]={"plan_id":plan_id,"ref":ref,"pid":process.pid,"status":"running","started_at":now(),"log_file":str(log_path)}
+    with STATE_LOCK:
+        STATE["operations"][plan_id]={"plan_id":plan_id,"ref":ref,"pid":process.pid,"status":"running","started_at":now(),"log_file":str(log_path)}
     save_state()
     audit(actor,"EXECUTE_UPDATE",ref,"started",request_id,{"plan_id":plan_id})
 
@@ -83,9 +87,10 @@ def launch_update(plan_id, ref, actor, request_id):
         try:
             code=process.wait()
             status="success" if code==0 else "failed"
-            STATE["operations"][plan_id]["status"]=status
-            STATE["operations"][plan_id]["exit_code"]=code
-            STATE["operations"][plan_id]["finished_at"]=now()
+            with STATE_LOCK:
+                STATE["operations"][plan_id]["status"]=status
+                STATE["operations"][plan_id]["exit_code"]=code
+                STATE["operations"][plan_id]["finished_at"]=now()
             save_state()
             audit(actor,"EXECUTE_UPDATE",ref,status,request_id,{"plan_id":plan_id,"exit_code":code,"log_file":str(log_path)})
         finally:
@@ -111,46 +116,59 @@ def handle(m):
         ]
         audit(actor,op,None,"success",rid); return result
     if op=="PLAN_UPDATE":
-        if any(v.get("status")=="running" for v in STATE["operations"].values()):
-            raise ValueError("another deployment is already running")
+        with STATE_LOCK:
+            if any(v.get("status")=="running" for v in STATE["operations"].values()):
+                raise ValueError("another deployment is already running")
         plan=json.loads(run(["update","--plan"],30))
         if plan.get("update"):
             pid="plan-"+secrets.token_hex(8)
-            STATE["plans"][pid]={"ref":plan["latest"],"created_at":now(),"expires_at":now()+PLAN_TTL,"status":"planned"}
+            with STATE_LOCK:
+                STATE["plans"][pid]={"ref":plan["latest"],"created_at":now(),"expires_at":now()+PLAN_TTL,"status":"planned"}
             plan["plan_id"]=pid; save_state(); audit(actor,op,plan["latest"],"success",rid,{"plan_id":pid})
         else: audit(actor,op,None,"noop",rid)
         return plan
     if op=="CANCEL_PLAN":
-        pid=str(payload.get("plan_id","")); plan=STATE["plans"].get(pid)
-        if not plan or int(plan.get("expires_at",0))<now(): raise ValueError("unknown or expired plan")
-        if plan.get("status")!="planned": raise ValueError("plan is no longer cancellable")
-        plan["status"]="cancelled"; save_state(); audit(actor,op,plan["ref"],"cancelled",rid,{"plan_id":pid})
+        pid=str(payload.get("plan_id",""))
+        with STATE_LOCK:
+            plan=STATE["plans"].get(pid)
+            if not plan or int(plan.get("expires_at",0))<now(): raise ValueError("unknown or expired plan")
+            if plan.get("status")!="planned": raise ValueError("plan is no longer cancellable")
+            plan["status"]="cancelled"
+            ref=plan["ref"]
+        save_state(); audit(actor,op,ref,"cancelled",rid,{"plan_id":pid})
         return {"plan_id":pid,"status":"cancelled"}
     if op=="OPERATION_STATUS":
         pid=str(payload.get("plan_id",""))
-        operation=STATE["operations"].get(pid)
-        if not operation:
+        with STATE_LOCK:
+            operation=STATE["operations"].get(pid)
             plan=STATE["plans"].get(pid)
-            if plan:
-                return {"plan_id":pid,"ref":plan.get("ref"),"status":plan.get("status"),"expires_at":plan.get("expires_at")}
-            raise ValueError("unknown operation")
+            if operation:
+                result={
+                    "plan_id":operation.get("plan_id"),
+                    "ref":operation.get("ref"),
+                    "status":operation.get("status"),
+                    "started_at":operation.get("started_at"),
+                    "finished_at":operation.get("finished_at"),
+                    "exit_code":operation.get("exit_code"),
+                }
+            elif plan:
+                result={"plan_id":pid,"ref":plan.get("ref"),"status":plan.get("status"),"expires_at":plan.get("expires_at")}
+            else:
+                raise ValueError("unknown operation")
         audit(actor,op,pid,"success",rid)
-        return {
-            "plan_id":operation.get("plan_id"),
-            "ref":operation.get("ref"),
-            "status":operation.get("status"),
-            "started_at":operation.get("started_at"),
-            "finished_at":operation.get("finished_at"),
-            "exit_code":operation.get("exit_code"),
-        }
+        return result
 
     if op=="EXECUTE_UPDATE":
-        pid=str(payload.get("plan_id","")); plan=STATE["plans"].get(pid)
-        if not plan or int(plan.get("expires_at",0))<now(): raise ValueError("unknown or expired plan")
-        if plan.get("status")!="planned": raise ValueError("plan is no longer executable")
-        if any(v.get("status")=="running" for v in STATE["operations"].values()): raise ValueError("another deployment is already running")
-        plan["status"]="executing"; save_state()
-        return launch_update(pid,plan["ref"],actor,rid)
+        pid=str(payload.get("plan_id",""))
+        with STATE_LOCK:
+            plan=STATE["plans"].get(pid)
+            if not plan or int(plan.get("expires_at",0))<now(): raise ValueError("unknown or expired plan")
+            if plan.get("status")!="planned": raise ValueError("plan is no longer executable")
+            if any(v.get("status")=="running" for v in STATE["operations"].values()): raise ValueError("another deployment is already running")
+            plan["status"]="executing"
+            ref=plan["ref"]
+        save_state()
+        return launch_update(pid,ref,actor,rid)
     raise ValueError("operation not allowed")
 
 def serve():
