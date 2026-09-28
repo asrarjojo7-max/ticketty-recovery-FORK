@@ -314,7 +314,7 @@ export class AccountingService {
 
   async processNextEvent(user: AuthUser) {
     const organizationId = requireOrgId(user);
-    const workerId = `user:${user.sub}`;
+    const workerId = user.sub;
     const claimed = await this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
