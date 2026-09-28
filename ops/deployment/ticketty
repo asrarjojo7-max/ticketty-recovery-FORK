@@ -272,7 +272,8 @@ select_initial_release(){
   setv DEPLOYMENT_CHANNEL development
   warn "تم اختيار master للتطوير؛ هذه ليست نسخة إنتاجية رسمية."
 }
-prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }update_ref(){
+prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }
+update_ref(){
   local target="$1" old
   [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Release tag غير صالح."
   ensure_checkout
@@ -348,7 +349,8 @@ cmd_install(){
     printf '  (هذه القيمة سرية؛ لا ترسلها في قناة عامة)\n'
   fi
 }
-cmd_resume(){ cmd_install; }cmd_migrate(){
+cmd_resume(){ cmd_install; }
+cmd_migrate(){
   root
   acquire_lock
   dirs
