@@ -10,7 +10,7 @@ const config = {
   prometheusUrl: process.env.PROMETHEUS_URL ?? 'http://prometheus:9090',
   alertmanagerUrl:
     process.env.ALERTMANAGER_URL ?? 'http://alertmanager:9093',
-  alertWebhookToken: process.env.TELEGRAM_ALERT_WEBHOOK_TOKEN ?? '',
+  alertWebhookToken: required('TELEGRAM_ALERT_WEBHOOK_TOKEN'),
   stateFile:
     process.env.TELEGRAM_STATE_FILE ??
     '/var/lib/ticketty/telegram/state.json',
