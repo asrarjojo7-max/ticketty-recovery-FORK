@@ -10,8 +10,8 @@ envv(){ grep "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true; }
 setenv(){ local k="$1" v="$2"; if grep -q "^$k=" "$ENV_FILE"; then sed -i "s#^$k=.*#$k=$v#" "$ENV_FILE"; else printf '%s=%s\n' "$k" "$v" >> "$ENV_FILE"; fi; }
 
 cf(){
-  local method="$1" path="$2" body="\x24{3:-}"
-  [[ -n "\x24{CLOUDFLARE_API_TOKEN:-}" ]] || die "Cloudflare API Token مطلوب."
+  local method="$1" path="$2" body="${3:-}"
+  [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || die "Cloudflare API Token مطلوب."
   if [[ -n "$body" ]]; then
     curl -fsSL -X "$method" -H 'Content-Type: application/json' -H 'Accept: application/json' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" --data "$body" "$API$path"
   else
@@ -21,8 +21,8 @@ cf(){
 
 create_api_tunnel(){
   local account zone host name secret response id token records record_id target body
-  account="\x24{CLOUDFLARE_ACCOUNT_ID:-}"; zone="\x24{CLOUDFLARE_ZONE_ID:-}"; host="$(envv CLOUDFLARE_HOSTNAME)"
-  name="\x24{CLOUDFLARE_TUNNEL_NAME:-ticketty-production}"
+  account="${CLOUDFLARE_ACCOUNT_ID:-}"; zone="${CLOUDFLARE_ZONE_ID:-}"; host="$(envv CLOUDFLARE_HOSTNAME)"
+  name="${CLOUDFLARE_TUNNEL_NAME:-ticketty-production}"
   [[ -n "$account" && -n "$zone" && -n "$host" ]] || die "Account ID وZone ID وhostname مطلوبة."
   secret="$(openssl rand -base64 32 | tr -d '\n')"
   response="$(cf POST "/accounts/$account/cfd_tunnel" "$(jq -cn --arg n "$name" --arg s "$secret" '{name:$n,config_src:"cloudflare",tunnel_secret:$s}')")"
@@ -70,7 +70,7 @@ wizard(){
   esac
 }
 
-command="\x24{1:-wizard}"
+command="${1:-wizard}"
 shift || true
 while (($#)); do case "$1" in --env) ENV_FILE="$2"; shift 2;; --token-file) TOKEN_FILE="$2"; shift 2;; *) die "وسيط غير معروف: $1";; esac; done
 case "$command" in
