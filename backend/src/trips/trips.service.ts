@@ -53,7 +53,10 @@ export class TripsService {
       dto;
 
     const initialStatus = dto.status ?? TripStatus.OPEN;
-    if (![TripStatus.SCHEDULED, TripStatus.OPEN].includes(initialStatus)) {
+    if (
+      initialStatus !== TripStatus.SCHEDULED &&
+      initialStatus !== TripStatus.OPEN
+    ) {
       throw new BadRequestException(
         'الحالة الابتدائية المسموحة للرحلة هي مجدولة أو مفتوحة فقط',
       );
@@ -234,7 +237,9 @@ export class TripsService {
         message.includes('trips_bus_schedule_no_overlap_excl') ||
         message.includes('trips_driver_schedule_no_overlap_excl')
       ) {
-        throw new ConflictException('يوجد تعارض زمني في جدولة الحافلة أو السائق');
+        throw new ConflictException(
+          'يوجد تعارض زمني في جدولة الحافلة أو السائق',
+        );
       }
       throw error;
     }
@@ -421,7 +426,10 @@ export class TripsService {
       });
       if (!existing) throw new NotFoundException('الرحلة غير موجودة');
 
-      if (requestedStatus !== undefined && requestedStatus !== existing.status) {
+      if (
+        requestedStatus !== undefined &&
+        requestedStatus !== existing.status
+      ) {
         throw new ConflictException(
           'تغيير حالة الرحلة يجب أن يتم عبر إجراء الحالة المخصص',
         );
@@ -526,7 +534,7 @@ export class TripsService {
       }
 
       const effectiveDriverId =
-        driverId !== undefined ? driver?.id ?? null : existing.driverId;
+        driverId !== undefined ? (driver?.id ?? null) : existing.driverId;
       if (effectiveDriverId && (scheduleChanged || driverId !== undefined)) {
         const overlappingDriverTrip = arrivalAt
           ? await tx.trip.findFirst({
@@ -568,9 +576,7 @@ export class TripsService {
               select: { departureAt: true, arrivalAt: true },
             });
         if (overlappingDriverTrip) {
-          throw new ConflictException(
-            'السائق مشغول برحلة أخرى في هذه الفترة',
-          );
+          throw new ConflictException('السائق مشغول برحلة أخرى في هذه الفترة');
         }
       }
 
@@ -586,14 +592,14 @@ export class TripsService {
           where: { id },
           data: {
             ...data,
-            driverId: driverId !== undefined ? driver?.id ?? null : undefined,
+            driverId: driverId !== undefined ? (driver?.id ?? null) : undefined,
             driverName:
               driverId !== undefined
-                ? driver?.name ?? data.driverName ?? null
+                ? (driver?.name ?? data.driverName ?? null)
                 : data.driverName,
             driverPhone:
               driverId !== undefined
-                ? driver?.phone ?? data.driverPhone ?? null
+                ? (driver?.phone ?? data.driverPhone ?? null)
                 : data.driverPhone,
             departureAt: data.departureAt
               ? new Date(data.departureAt)
@@ -691,7 +697,6 @@ export class TripsService {
     }
     return result.trip;
   }
-
 
   async cancel(
     user: AuthUser,
