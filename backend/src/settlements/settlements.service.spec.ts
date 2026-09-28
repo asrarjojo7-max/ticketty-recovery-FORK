@@ -178,12 +178,12 @@ describe('SettlementsService integrity', () => {
     await service.settle(user, 'settlement-1');
 
     expect(executeRaw).toHaveBeenCalledTimes(2);
-    expect(updateSettlement).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'settlement-1' },
-        data: expect.objectContaining({ status: 'SETTLED' }),
-      }),
-    );
+    expect(updateSettlement).toHaveBeenCalled();
+    const [args] = updateSettlement.mock.calls[0] as [
+      { where: { id: string }; data: { status: string } },
+    ];
+    expect(args.where).toEqual({ id: 'settlement-1' });
+    expect(args.data.status).toBe('SETTLED');
   });
 
   it('does not finalize a settlement that disappears before locking', async () => {
