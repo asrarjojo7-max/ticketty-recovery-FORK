@@ -315,3 +315,80 @@ describe('TripsService seats() — realistic coach map payload', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 });
+
+
+describe('TripsService lifecycle transitions', () => {
+  function makeService(status: string) {
+    const findFirst = jest.fn().mockResolvedValue({
+      id: 'existing-trip',
+      status,
+      busId: 'bus-1',
+      driverId: null,
+      departureAt: new Date('2026-09-10T10:00:00Z'),
+      arrivalAt: new Date('2026-09-10T14:00:00Z'),
+    });
+    const update = jest.fn().mockResolvedValue({
+      id: 'existing-trip',
+      status: status === 'SCHEDULED' ? 'OPEN' : 'COMPLETED',
+    });
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      trip: { findFirst, update },
+    };
+    const prisma = {
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    } as unknown as PrismaService;
+    const audit = { log: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+    return { service: new TripsService(prisma, audit), findFirst, update, audit };
+  }
+
+  it('rejects direct status changes through PATCH/update', async () => {
+    const { service } = makeService('OPEN');
+
+    await expect(
+      service.update(user, 'existing-trip', { status: 'COMPLETED' }),
+    ).rejects.toThrow(/إجراء الحالة المخصص/);
+  });
+
+  it('opens only a scheduled trip and audits the transition', async () => {
+    const { service, update, audit } = makeService('SCHEDULED');
+
+    await expect(service.open(user, 'existing-trip')).resolves.toMatchObject({
+      status: 'OPEN',
+    });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'existing-trip' },
+        data: { status: 'OPEN' },
+      }),
+    );
+    expect(audit.log).toHaveBeenCalledWith(
+      user,
+      'TRIP_OPENED_FOR_BOOKING',
+      'Trip',
+      'existing-trip',
+    );
+  });
+
+  it('completes only a departed trip and audits the transition', async () => {
+    const { service, update, audit } = makeService('DEPARTED');
+
+    await expect(service.complete(user, 'existing-trip')).resolves.toMatchObject({
+      status: 'COMPLETED',
+    });
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'existing-trip' },
+        data: { status: 'COMPLETED' },
+      }),
+    );
+    expect(audit.log).toHaveBeenCalledWith(
+      user,
+      'TRIP_COMPLETED',
+      'Trip',
+      'existing-trip',
+    );
+  });
+});
