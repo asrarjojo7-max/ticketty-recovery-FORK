@@ -113,7 +113,10 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
         {trips.map((trip) => {
           const action = nextAction(trip.status);
           const ActionIcon = action?.icon;
-          const isUpdating = anyActionPending;
+          const isUpdating =
+            (openMutation.isPending && openMutation.variables === trip.id) ||
+            (departMutation.isPending && departMutation.variables === trip.id) ||
+            (completeMutation.isPending && completeMutation.variables === trip.id);
           return (
             <article key={trip.id} className="rounded-2xl border border-border bg-card p-4 shadow-card">
               <div className="flex items-start justify-between gap-3">
