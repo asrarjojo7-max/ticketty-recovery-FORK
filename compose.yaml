@@ -143,6 +143,7 @@ services:
     volumes:
       - ./ops/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - ${ALERTMANAGER_WEBHOOK_URL_FILE:-/etc/ticketty/alertmanager-webhook-url}:/run/secrets/alertmanager_webhook_url:ro
+      - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
       - ticketty-alertmanager:/alertmanager
     ports:
       - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
@@ -187,7 +188,7 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
       TELEGRAM_PAIRING_CODE: ${TELEGRAM_PAIRING_CODE:-}
-      TELEGRAM_ALERT_WEBHOOK_TOKEN: ${TELEGRAM_ALERT_WEBHOOK_TOKEN:?TELEGRAM_ALERT_WEBHOOK_TOKEN is required}
+      TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/telegram_alert_webhook_token
       PROMETHEUS_URL: http://prometheus:9090
       ALERTMANAGER_URL: http://alertmanager:9093
       TELEGRAM_PORT: 8090
@@ -203,6 +204,7 @@ services:
       - "8090"
     volumes:
       - ticketty-telegram:/var/lib/ticketty/telegram
+      - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
     read_only: true
     tmpfs:
       - /tmp
