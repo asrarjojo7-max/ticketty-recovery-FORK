@@ -108,8 +108,7 @@ describe('AccountingService', () => {
       },
     };
     const transaction = jest.fn(
-      (callback: (client: typeof tx) => unknown) =>
-        Promise.resolve(callback(tx)),
+      (callback: (client: typeof tx) => unknown) => Promise.resolve(callback(tx)),
     );
     const service = new AccountingService({
       $transaction: transaction,
@@ -199,5 +198,54 @@ describe('AccountingService', () => {
         organizationId: 'org-1',
       },
     });
+  });
+
+  it('marks a failed event only while the caller still owns its lease', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findFirst = jest.fn().mockResolvedValue({ attempts: 2 });
+    const service = new AccountingService({
+      accountingEvent: { findFirst, updateMany },
+    } as unknown as PrismaService);
+
+    const marked = await service.markEventFailed(
+      user,
+      'event-1',
+      new Error('worker failed'),
+    );
+
+    expect(marked).toBe(true);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'event-1',
+        organizationId: 'org-1',
+        status: 'PENDING',
+        lockedBy: 'finance-1',
+      },
+      select: { attempts: true },
+    });
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'event-1',
+          organizationId: 'org-1',
+          status: 'PENDING',
+          lockedBy: 'finance-1',
+        },
+      }),
+    );
+  });
+
+  it('does not overwrite an event whose lease moved to another worker', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const updateMany = jest.fn();
+    const service = new AccountingService({
+      accountingEvent: { findFirst, updateMany },
+    } as unknown as PrismaService);
+
+    await expect(
+      service.markEventFailed(user, 'event-1', new Error('stale worker')),
+    ).resolves.toBe(false);
+
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });

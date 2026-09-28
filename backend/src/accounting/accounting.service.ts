@@ -346,34 +346,43 @@ export class AccountingService {
       const result = await this.processEvent(user, claimed.id);
       return { processed: true as const, result };
     } catch (error) {
+      await this.markEventFailed(user, claimed.id, error);
       const message =
         error instanceof Error ? error.message.slice(0, 500) : 'Unknown error';
-      await this.prisma.accountingEvent.update({
-        where: { id: claimed.id },
-        data: {
-          status: 'FAILED',
-          lastError: message,
-          lockedAt: null,
-          lockedBy: null,
-          availableAt: new Date(
-            Date.now() + Math.min(claimed.attempts, 5) * 60_000,
-          ),
-        },
-      });
-      return { processed: false as const, eventId: claimed.id, error: message };
+      return {
+        processed: false as const,
+        eventId: claimed.id,
+        error: message,
+      };
     }
   }
 
-  async markEventFailed(user: AuthUser, id: string, error: unknown) {
+  async markEventFailed(
+    user: AuthUser,
+    id: string,
+    error: unknown,
+  ): Promise<boolean> {
     const organizationId = requireOrgId(user);
     const event = await this.prisma.accountingEvent.findFirst({
-      where: { id, organizationId },
+      where: {
+        id,
+        organizationId,
+        status: 'PENDING',
+        lockedBy: user.sub,
+      },
+      select: { attempts: true },
     });
-    if (!event) return;
+    if (!event) return false;
+
     const message =
       error instanceof Error ? error.message.slice(0, 500) : 'Unknown error';
-    await this.prisma.accountingEvent.update({
-      where: { id },
+    const updated = await this.prisma.accountingEvent.updateMany({
+      where: {
+        id,
+        organizationId,
+        status: 'PENDING',
+        lockedBy: user.sub,
+      },
       data: {
         status: 'FAILED',
         lastError: message,
@@ -384,6 +393,7 @@ export class AccountingService {
         ),
       },
     });
+    return updated.count === 1;
   }
 
   async processEvent(user: AuthUser, id: string) {
@@ -472,7 +482,9 @@ export class AccountingService {
     if (entryDate < period.startsAt || entryDate > period.endsAt) {
       throw new BadRequestException('تاريخ القيد خارج الفترة المالية');
     }
-    if (accounts.length !== new Set(dto.lines.map((line) => line.accountId)).size) {
+    if (
+      accounts.length !== new Set(dto.lines.map((line) => line.accountId)).size
+    ) {
       throw new NotFoundException('أحد الحسابات غير موجود أو غير نشط');
     }
 
