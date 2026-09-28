@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { intentFromText, normalizeArabic } from './core.mjs';
+import { extractBearerToken, intentFromText, normalizeArabic } from './core.mjs';
 
 test('normalizes common Arabic punctuation and whitespace', () => {
   assert.equal(normalizeArabic('  حالة النظام؟  '), 'حالة النظام');
@@ -16,4 +16,14 @@ test('understands natural Arabic status questions', () => {
 
 test('does not guess unknown requests', () => {
   assert.equal(intentFromText('احذف كل البيانات'), null);
+});
+
+test('extracts only a bearer authorization token', () => {
+  assert.equal(
+    extractBearerToken('Bearer secret-value'),
+    'secret-value',
+  );
+  assert.equal(extractBearerToken('Basic secret-value'), null);
+  assert.equal(extractBearerToken('Bearer '), null);
+  assert.equal(extractBearerToken(undefined), null);
 });
