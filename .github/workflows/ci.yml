@@ -255,6 +255,8 @@ jobs:
           bash -n ops/deployment/ticketty
           bash -n ops/deployment/bootstrap.sh
           bash -n ops/deployment/cloudflare.sh
+          bash -n ops/deployment/profile.sh
+          bash -n install.sh
           python3 -m py_compile ops/deployment/ops-server.py
           python3 ops/deployment/remote-ops.test.py
       - name: Validate Compose configuration
