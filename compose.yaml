@@ -180,7 +180,50 @@ services:
     volumes:
       - ./ops/monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
 
+  telegram-assistant:
+    build:
+      context: ./ops/telegram-assistant
+    restart: unless-stopped
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+      TELEGRAM_PAIRING_CODE: ${TELEGRAM_PAIRING_CODE:-}
+      TELEGRAM_ALERT_WEBHOOK_TOKEN: ${TELEGRAM_ALERT_WEBHOOK_TOKEN:?TELEGRAM_ALERT_WEBHOOK_TOKEN is required}
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERTMANAGER_URL: http://alertmanager:9093
+      TELEGRAM_PORT: 8090
+      TELEGRAM_STATE_FILE: /var/lib/ticketty/telegram/state.json
+      TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      TELEGRAM_REQUEST_TIMEOUT_MS: ${TELEGRAM_REQUEST_TIMEOUT_MS:-15000}
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      alertmanager:
+        condition: service_healthy
+    expose:
+      - "8090"
+    volumes:
+      - ticketty-telegram:/var/lib/ticketty/telegram
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8090/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
 volumes:
   ticketty-postgres:
   ticketty-prometheus:
   ticketty-alertmanager:
+  ticketty-telegram:
