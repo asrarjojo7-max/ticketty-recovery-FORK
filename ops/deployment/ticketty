@@ -170,7 +170,7 @@ cmd_install(){
   phase CLOUDFLARE cloudflare
   phase COMPOSE compose_validate
   phase DEPLOY stack_up
-  phase PUBLIC_HEALTH public_health || warn "الدومين العام يحتاج وقتًا إضافيًا أو مراجعة DNS."
+  if public_health; then ok "الدومين العام"; else warn "الدومين لم يستجب بعد؛ يمكن إعادة الفحص من ticketty doctor."; fi
   phase OPS ops_service
   setv DEPLOYMENT_STATUS READY
   step "اكتمل التثبيت"
@@ -180,7 +180,7 @@ cmd_update(){ load; local p t; p="$(plan_json)"; if [[ "$JSON_OUTPUT" -eq 1 ]]; 
 status_json(){
   load
   local r d s o
-  r="$(current_release)"
+  r="$(current_release 2>/dev/null || true)"
   d="$(get APP_HOSTNAME 2>/dev/null || true)"
   s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo UNKNOWN)"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
@@ -188,8 +188,20 @@ status_json(){
 }
 cmd_status(){
   load
-  status_json
-  [[ "$JSON_OUTPUT" -eq 1 ]] && return
+  local r d s o
+  r="$(current_release 2>/dev/null || echo 'غير معروف')"
+  d="$(get APP_HOSTNAME 2>/dev/null || echo 'غير مضبوط')"
+  s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'غير معروف')"
+  o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
+  if [[ "$JSON_OUTPUT" -eq 1 ]]; then
+    jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o"       '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o}'
+    return
+  fi
+  step "TICKETTY — حالة السيرفر"
+  printf '  الإصدار: %s\n' "$r"
+  printf '  الدومين: %s\n' "$d"
+  printf '  حالة النشر: %s\n' "$s"
+  printf '  Remote Ops: %s\n\n' "$o"
   docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps || true
 }
 cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
