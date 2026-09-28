@@ -87,8 +87,6 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
 
   const mutationError =
     openMutation.error ?? departMutation.error ?? completeMutation.error;
-  const anyActionPending =
-    openMutation.isPending || departMutation.isPending || completeMutation.isPending;
 
   return (
     <div>
