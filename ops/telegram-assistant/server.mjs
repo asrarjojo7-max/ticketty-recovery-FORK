@@ -1,12 +1,17 @@
 import { createServer } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createConnection } from 'node:net';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { extractBearerToken, intentFromText } from './core.mjs';
 
 const config = {
-  botToken: required('TELEGRAM_BOT_TOKEN'),
+  botTokenFile: process.env.TELEGRAM_BOT_TOKEN_FILE ?? '',
+  botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
   pairingCode: process.env.TELEGRAM_PAIRING_CODE ?? '',
+  opsSocket: process.env.TICKETTY_OPS_SOCKET ?? '/run/ticketty/ops.sock',
+  opsHmacFile: process.env.TICKETTY_OPS_HMAC_FILE ?? '',
+  remoteOpsEnabled: process.env.TICKETTY_REMOTE_OPS_ENABLED === 'true',
   prometheusUrl: process.env.PROMETHEUS_URL ?? 'http://prometheus:9090',
   alertmanagerUrl:
     process.env.ALERTMANAGER_URL ?? 'http://alertmanager:9093',
@@ -28,6 +33,14 @@ const config = {
 const MAX_ALERT_BODY_BYTES = 512 * 1024;
 const MAX_TELEGRAM_MESSAGE = 3900;
 const state = await loadState();
+
+if (!config.botToken) {
+  config.botToken = config.botTokenFile
+    ? (await readFile(config.botTokenFile, 'utf8')).trim()
+    : '';
+}
+if (!config.botToken) throw new Error('TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN_FILE is required');
+
 const alertWebhookToken = (await readFile(config.alertWebhookTokenFile, 'utf8')).trim();
 if (!alertWebhookToken) throw new Error('Telegram alert webhook token file is empty');
 
@@ -124,6 +137,112 @@ function pair(chatId, userId) {
     pairedAt: new Date().toISOString(),
   });
   return true;
+}
+
+
+async function remoteOps(operation, payload, actor) {
+  if (!config.remoteOpsEnabled || !config.opsHmacFile) {
+    throw new Error('Remote operations are not enabled');
+  }
+
+  const secret = (await readFile(config.opsHmacFile, 'utf8')).trim();
+  if (!secret) throw new Error('Remote operations secret is empty');
+
+  const message = {
+    timestamp: Math.floor(Date.now() / 1000),
+    nonce: randomUUID(),
+    operation,
+    actor,
+    payload: payload ?? {},
+    request_id: randomUUID(),
+  };
+  const canonical = JSON.stringify({
+    timestamp: message.timestamp,
+    nonce: message.nonce,
+    operation: message.operation,
+    actor: message.actor,
+    payload: message.payload,
+  });
+  message.signature = createHmac('sha256', secret)
+    .update(canonical)
+    .digest('hex');
+
+  return await new Promise((resolve, reject) => {
+    const socket = createConnection(config.opsSocket);
+    let data = '';
+
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error('Remote operations timeout'));
+    }, config.requestTimeoutMs);
+
+    socket.on('connect', () => {
+      socket.write(JSON.stringify(message) + '\n');
+    });
+    socket.on('data', (chunk) => {
+      data += chunk.toString('utf8');
+      const index = data.indexOf('\n');
+      if (index === -1) return;
+      clearTimeout(timer);
+      socket.end();
+      try {
+        const response = JSON.parse(data.slice(0, index));
+        if (!response.ok) reject(new Error(response.error ?? 'Remote operation failed'));
+        else resolve(response.result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    socket.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    socket.on('close', () => clearTimeout(timer));
+  });
+}
+
+function operatorActor(message) {
+  return {
+    telegram_user_id: String(message?.from?.id ?? ''),
+    telegram_chat_id: String(message?.chat?.id ?? ''),
+  };
+}
+
+function updatePlanMessage(plan) {
+  const body = [
+    '📦 يوجد إصدار جديد من Ticketty',
+    '',
+    'الإصدار الحالي: ' + (plan.current ?? 'غير معروف'),
+    'الإصدار الجديد: ' + (plan.latest ?? 'غير معروف'),
+    '',
+    plan.name ? 'اسم الإصدار: ' + plan.name : '',
+    plan.published_at
+      ? 'تاريخ الإصدار: ' +
+        new Date(plan.published_at).toLocaleString('ar-SA', {
+          timeZone: 'Africa/Khartoum',
+        })
+      : '',
+    '',
+    plan.body
+      ? plan.body.slice(0, 1200)
+      : 'تم إعداد خطة التحديث على السيرفر.',
+    '',
+    'الخطة مؤقتة وصالحة لمدة 10 دقائق.',
+    '',
+    'اختر الإجراء:',
+  ].filter(Boolean).join('\n');
+
+  return {
+    text: body,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '✅ تنفيذ التحديث', callback_data: 'deploy:execute:' + plan.plan_id },
+          { text: '❌ إلغاء', callback_data: 'deploy:cancel:' + plan.plan_id },
+        ],
+      ],
+    },
+  };
 }
 
 async function telegram(method, body) {
@@ -636,6 +755,91 @@ function helpMessage() {
   ].join('\n');
 }
 
+async function handleCallbackQuery(query) {
+  const message = query?.message;
+  const chatId = String(message?.chat?.id ?? '');
+  const userId = String(query?.from?.id ?? '');
+
+  if (!chatId || !userId) return;
+
+  if (!isAuthorized(chatId, userId)) {
+    await telegram('answerCallbackQuery', {
+      callback_query_id: query.id,
+      text: 'هذا الحساب غير مصرح له.',
+      show_alert: true,
+    });
+    return;
+  }
+
+  const data = typeof query.data === 'string' ? query.data : '';
+  const parts = data.split(':');
+  if (parts.length !== 3 || parts[0] !== 'deploy') {
+    await telegram('answerCallbackQuery', {
+      callback_query_id: query.id,
+      text: 'طلب غير صالح.',
+      show_alert: true,
+    });
+    return;
+  }
+
+  const action = parts[1];
+  const planId = parts[2];
+  const actor = operatorActor(message);
+
+  try {
+    if (action === 'cancel') {
+      await remoteOps('CANCEL_PLAN', { plan_id: planId }, actor);
+      await telegram('answerCallbackQuery', {
+        callback_query_id: query.id,
+        text: 'تم إلغاء خطة التحديث.',
+      });
+      await sendMessage(chatId, '❌ تم إلغاء خطة التحديث. لن يتم تنفيذ أي تغيير.');
+      return;
+    }
+
+    if (action === 'execute') {
+      const result = await remoteOps(
+        'EXECUTE_UPDATE',
+        { plan_id: planId },
+        actor,
+      );
+      await telegram('answerCallbackQuery', {
+        callback_query_id: query.id,
+        text: 'بدأ تنفيذ التحديث.',
+      });
+      await sendMessage(
+        chatId,
+        [
+          '🟠 بدأ تحديث Ticketty',
+          '',
+          'الإصدار: ' + (result.ref ?? 'غير معروف'),
+          'معرّف العملية: ' + planId,
+          '',
+          'جاري تنفيذ النسخة الاحتياطية والتحديث والفحوص.',
+        ].join('\n'),
+      );
+      return;
+    }
+
+    await telegram('answerCallbackQuery', {
+      callback_query_id: query.id,
+      text: 'الإجراء غير معروف.',
+      show_alert: true,
+    });
+  } catch (error) {
+    console.error('Telegram callback operation failed', error);
+    await telegram('answerCallbackQuery', {
+      callback_query_id: query.id,
+      text: 'تعذر تنفيذ العملية.',
+      show_alert: true,
+    });
+    await sendMessage(
+      chatId,
+      '🔴 تعذر تنفيذ الطلب الآن. راجع حالة النظام أو أعد المحاولة.',
+    );
+  }
+}
+
 async function handleMessage(message) {
   const chatId = String(message.chat?.id ?? '');
   const userId = String(message.from?.id ?? '');
@@ -681,6 +885,22 @@ async function handleMessage(message) {
     return;
   }
 
+  if (textValue === '/update' || textValue === '/deploy') {
+    try {
+      const plan = await remoteOps('PLAN_UPDATE', {}, operatorActor(message));
+      if (!plan.update) {
+        await sendMessage(chatId, '🟢 لا يوجد إصدار أحدث منشور حاليًا.');
+        return;
+      }
+      const rendered = updatePlanMessage(plan);
+      await sendMessage(chatId, rendered.text, rendered.reply_markup);
+    } catch (error) {
+      console.error('Telegram update plan failed', error);
+      await sendMessage(chatId, 'تعذر تجهيز خطة التحديث الآن. راجع حالة السيرفر وحاول مرة أخرى.');
+    }
+    return;
+  }
+
   const intent = intentFromText(textValue);
 
   try {
@@ -696,6 +916,18 @@ async function handleMessage(message) {
       await sendMessage(chatId, await alertsStatus());
     } else if (intent === 'summary') {
       await sendMessage(chatId, await operationalSummary());
+    } else if (intent === 'update') {
+      const plan = await remoteOps(
+        'PLAN_UPDATE',
+        {},
+        operatorActor(message),
+      );
+      if (!plan.update) {
+        await sendMessage(chatId, '🟢 لا يوجد إصدار أحدث منشور حاليًا.');
+      } else {
+        const rendered = updatePlanMessage(plan);
+        await sendMessage(chatId, rendered.text, rendered.reply_markup);
+      }
     } else {
       await sendMessage(
         chatId,
@@ -726,12 +958,16 @@ async function telegramPollingLoop() {
       const updates = await telegram('getUpdates', {
         offset: state.updateOffset,
         timeout: config.pollTimeoutSeconds,
-        allowed_updates: ['message'],
+        allowed_updates: ['message', 'callback_query'],
       });
 
       for (const update of updates) {
         try {
-          await handleMessage(update.message);
+          if (update.message) {
+            await handleMessage(update.message);
+          } else if (update.callback_query) {
+            await handleCallbackQuery(update.callback_query);
+          }
         } catch (error) {
           console.error('Telegram message handling failed', error);
         }
@@ -748,6 +984,16 @@ async function telegramPollingLoop() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendMessage(chatId, text, replyMarkup) {
+  const body = {
+    chat_id: chatId,
+    text: text.slice(0, MAX_TELEGRAM_MESSAGE),
+    disable_web_page_preview: true,
+  };
+  if (replyMarkup) body.reply_markup = replyMarkup;
+  return telegram('sendMessage', body);
 }
 
 async function deliverAlertGroup(payload) {
