@@ -50,6 +50,7 @@ Telegram ليس Shell.
 - `PLAN_UPDATE`
 - `CANCEL_PLAN`
 - `EXECUTE_UPDATE`
+- `OPERATION_STATUS`
 
 كل طلب داخلي:
 
