@@ -846,12 +846,10 @@ async function handleCallbackQuery(query) {
   }
 }
 
-async function sendStatusOverview(chatId) {
+async function sendStatusOverview(chatId, actor) {
   const [runtime, deployment] = await Promise.all([
     systemStatus(),
-    remoteOps('STATUS', {}, { telegram_user_id: 'system-command', telegram_chat_id: chatId }).catch(
-      () => null,
-    ),
+    remoteOps('STATUS', {}, actor).catch(() => null),
   ]);
 
   if (!deployment) {
@@ -914,7 +912,7 @@ async function handleMessage(message) {
   if (!isAuthorized(chatId, userId)) return;
 
   if (textValue === '/status') {
-    await sendStatusOverview(chatId);
+    await sendStatusOverview(chatId, operatorActor(message));
     return;
   }
 
@@ -940,7 +938,7 @@ async function handleMessage(message) {
     if (intent === 'help') {
       await sendMessage(chatId, helpMessage());
     } else if (intent === 'status') {
-      await sendMessage(chatId, await systemStatus());
+      await sendStatusOverview(chatId, operatorActor(message));
     } else if (intent === 'accounting') {
       await sendMessage(chatId, await accountingStatus());
     } else if (intent === 'backup') {
