@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { intentFromText } from './core.mjs';
 
 const config = {
   botToken: required('TELEGRAM_BOT_TOKEN'),
@@ -615,74 +616,6 @@ async function operationalSummary() {
 function formatNumber(value) {
   if (value == null) return 'غير معروف';
   return new Intl.NumberFormat('ar').format(Math.round(value));
-}
-
-function normalizeArabic(input) {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/@\\w+/g, '')
-    .replace(/[؟?!.،,:;؛]/g, ' ')
-    .replace(/\\s+/g, ' ')
-    .trim();
-}
-
-function intentFromText(input) {
-  const text = normalizeArabic(input);
-
-  if (
-    text === '/help' ||
-    text.includes('مساعدة') ||
-    text.includes('ماذا تستطيع')
-  ) {
-    return 'help';
-  }
-
-  if (
-    text.includes('حالة النظام') ||
-    text.includes('النظام شغال') ||
-    text.includes('النظام يعمل') ||
-    text === 'النظام'
-  ) {
-    return 'status';
-  }
-
-  if (
-    text.includes('المحاسبة') ||
-    text.includes('المحاسبي') ||
-    text.includes('العمليات المعلقة') ||
-    text.includes('كم عملية معلقة')
-  ) {
-    return 'accounting';
-  }
-
-  if (
-    text.includes('النسخ الاحتياطي') ||
-    text.includes('نسخة احتياطية') ||
-    text.includes('النسخة الاحتياطية')
-  ) {
-    return 'backup';
-  }
-
-  if (
-    text.includes('المشاكل') ||
-    text.includes('التنبيهات') ||
-    text.includes('الإنذارات') ||
-    text.includes('في مشكلة') ||
-    text.includes('مشاكل')
-  ) {
-    return 'alerts';
-  }
-
-  if (
-    text.includes('ملخص اليوم') ||
-    text.includes('ملخص') ||
-    text.includes('ماذا حدث اليوم')
-  ) {
-    return 'summary';
-  }
-
-  return null;
 }
 
 function helpMessage() {
