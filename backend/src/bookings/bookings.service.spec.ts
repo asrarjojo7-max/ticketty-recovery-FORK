@@ -41,8 +41,8 @@ describe('BookingsService seat eligibility', () => {
     tripSeat: { updateMany: updateSeats },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction: jest.fn((fn: (tx: PrismaService) => unknown) =>
-    Promise.resolve(fn(prisma)),
-  ),
+      Promise.resolve(fn(prisma)),
+    ),
   } as unknown as PrismaService;
   const audit = { log: auditLog } as unknown as AuditService;
   const service = new BookingsService(prisma, audit);

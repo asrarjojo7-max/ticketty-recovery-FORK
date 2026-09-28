@@ -120,4 +120,43 @@ describe('SettlementsService integrity', () => {
     ).rejects.toBeInstanceOf(ConflictException);
     expect(updateSettlement).not.toHaveBeenCalled();
   });
+
+  it('rebuilds an open settlement with existing and newly earned commissions', async () => {
+    findAgent.mockResolvedValue({ id: 'agent-1' });
+    findSettlement.mockResolvedValue({
+      id: 'settlement-1',
+      status: 'OPEN',
+      fromDate: new Date('2026-08-01T00:00:00.000Z'),
+      toDate: new Date('2026-08-10T23:59:59.999Z'),
+    });
+    updateSettlement.mockResolvedValue({
+      id: 'settlement-1',
+      netAmount: new Prisma.Decimal(180),
+    });
+    commissionResults.push(
+      {
+        id: 'commission-existing',
+        amount: new Prisma.Decimal(20),
+        ticket: { fare: new Prisma.Decimal(100) },
+      },
+      {
+        id: 'commission-new',
+        amount: new Prisma.Decimal(10),
+        ticket: { fare: new Prisma.Decimal(90) },
+      },
+    );
+
+    await service.generate(user, {
+      agentId: 'agent-1',
+      from: '2026-08-01',
+      to: '2026-08-10',
+    });
+
+    expect(commissionQueries[0]?.where?.settlementLine).toBeUndefined();
+    expect(commissionQueries[0]?.where?.OR).toEqual([
+      { settlementLine: { is: null } },
+      { settlementLine: { is: { settlementId: 'settlement-1' } } },
+    ]);
+    expect(updateSettlement).toHaveBeenCalled();
+  });
 });
