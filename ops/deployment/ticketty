@@ -274,4 +274,16 @@ cmd_setup_cf(){
 usage(){ printf '%s\n' 'ticketty | install | resume | update | status | doctor | setup-cloudflare'; }
 menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) الحالة\n  5) فحص النظام\n  6) Cloudflare\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_resume;;3) root;lock;cmd_update;;4) cmd_status;;5) cmd_doctor;;6) cmd_setup_cf;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
 main(){ local command=menu; while (($#)); do case "$1" in install|resume|update|status|doctor|setup-cloudflare) command="$1"; shift;; --non-interactive) NON_INTERACTIVE=1; shift;; --json) JSON_OUTPUT=1; shift;; --dry-run|--plan) DRY_RUN=1; shift;; --confirm) CONFIRMED=1; shift;; --ref) REF="$2"; shift 2;; -h|--help) usage; return;; *) die "وسيط غير معروف: $1";; esac; done; case "$command" in menu) menu;;install) cmd_install;;resume) cmd_resume;;update) [[ -n "$REF" ]] && { root;lock;update_ref "$REF"; } || { root;lock;cmd_update; };;status) cmd_status;;doctor) cmd_doctor;;setup-cloudflare) cmd_setup_cf;;esac; }
+
+if [[ "${1:-}" == "profile-export" ]]; then
+  shift
+  load
+  exec "$INSTALL_ROOT/ops/deployment/profile.sh" export "${1:-}"
+fi
+if [[ "${1:-}" == "profile-import" ]]; then
+  shift
+  [[ -n "${1:-}" ]] || die "ملف profile مطلوب."
+  load
+  exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"
+fi
 main "$@"
