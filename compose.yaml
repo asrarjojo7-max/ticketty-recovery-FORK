@@ -229,7 +229,7 @@ services:
       - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
       - ${TELEGRAM_BOT_TOKEN_FILE:-/etc/ticketty/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
       - ${TICKETTY_OPS_HMAC_FILE:-/etc/ticketty/ticketty-ops-hmac}:/run/secrets/ticketty_ops_hmac:ro
-      - /run/ticketty:/run/ticketty
+      - /run/ticketty:/run/ticketty:ro
     read_only: true
     tmpfs:
       - /tmp
