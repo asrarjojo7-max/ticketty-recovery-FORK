@@ -753,9 +753,11 @@ function helpMessage() {
     '• هل توجد مشاكل؟',
     '• هل أخذ النظام نسخة احتياطية؟',
     '• ماذا حدث اليوم؟',
+    '• هل يوجد تحديث؟',
     '',
-    'حاليًا أنا للمراقبة والاستعلام فقط.',
-    'لن أنفذ أي إجراء حساس من تلقاء نفسي.',
+    'يمكنني أيضًا تجهيز تحديث منشور على GitHub قبل التنفيذ.',
+    'التحديث لا يبدأ إلا بعد تأكيد صريح منك.',
+
   ].join('\n');
 }
 
@@ -844,6 +846,33 @@ async function handleCallbackQuery(query) {
   }
 }
 
+async function sendStatusOverview(chatId) {
+  const [runtime, deployment] = await Promise.all([
+    systemStatus(),
+    remoteOps('STATUS', {}, { telegram_user_id: 'system-command', telegram_chat_id: chatId }).catch(
+      () => null,
+    ),
+  ]);
+
+  if (!deployment) {
+    await sendMessage(chatId, runtime);
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    [
+      runtime,
+      '',
+      '🚀 النشر',
+      'الإصدار الحالي: ' + (deployment.release ?? 'غير معروف'),
+      'حالة النشر: ' + (deployment.status ?? 'غير معروفة'),
+      'الدومين: ' + (deployment.domain ?? 'غير مضبوط'),
+      'Remote Ops: ' + (deployment.remote_ops ?? 'غير معروف'),
+    ].join('\n'),
+  );
+}
+
 async function handleMessage(message) {
   const chatId = String(message.chat?.id ?? '');
   const userId = String(message.from?.id ?? '');
@@ -885,7 +914,7 @@ async function handleMessage(message) {
   if (!isAuthorized(chatId, userId)) return;
 
   if (textValue === '/status') {
-    await sendMessage(chatId, await systemStatus());
+    await sendStatusOverview(chatId);
     return;
   }
 
