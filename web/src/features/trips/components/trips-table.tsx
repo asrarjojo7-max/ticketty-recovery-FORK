@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/table";
 import { EditTripForm } from "./edit-trip-form";
 import { formatTripDate, tripStatusLabels } from "../formatters";
-import { useCancelTrip, useUpdateTrip } from "../hooks/use-trips";
+import { useCancelTrip, useCompleteTrip, useOpenTrip } from "../hooks/use-trips";
+import { useDepartTrip } from "@/features/manifests";
 import type { Trip, TripStatus } from "../types";
 
 interface TripsTableProps {
@@ -37,15 +38,19 @@ const badgeVariants: Record<TripStatus, "secondary" | "success" | "warning" | "i
   CANCELLED: "destructive",
 };
 
-function nextAction(status: TripStatus): { label: string; status: TripStatus; icon: typeof Play } | null {
-  if (status === "SCHEDULED") return { label: "فتح الحجز", status: "OPEN", icon: Play };
-  if (status === "OPEN" || status === "FULL") return { label: "بدء الرحلة", status: "DEPARTED", icon: Play };
-  if (status === "DEPARTED") return { label: "إكمال", status: "COMPLETED", icon: CheckCircle2 };
+function nextAction(
+  status: TripStatus,
+): { label: string; kind: "open" | "depart" | "complete"; icon: typeof Play } | null {
+  if (status === "SCHEDULED") return { label: "فتح الحجز", kind: "open", icon: Play };
+  if (status === "OPEN" || status === "FULL") return { label: "بدء الرحلة", kind: "depart", icon: Play };
+  if (status === "DEPARTED") return { label: "إكمال", kind: "complete", icon: CheckCircle2 };
   return null;
 }
 
 export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: TripsTableProps) {
-  const updateMutation = useUpdateTrip();
+  const openMutation = useOpenTrip();
+  const departMutation = useDepartTrip();
+  const completeMutation = useCompleteTrip();
   const cancelMutation = useCancelTrip();
   const [tripToCancel, setTripToCancel] = useState<Trip | null>(null);
   const [tripToEdit, setTripToEdit] = useState<Trip | null>(null);
@@ -74,19 +79,42 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
     return <EmptyState icon={<Bus className="h-10 w-10" />} title="لا توجد رحلات" description="أضف أول رحلة أو غيّر عوامل التصفية." />;
   }
 
+  function runNextAction(tripId: string, action: NonNullable<ReturnType<typeof nextAction>>) {
+    if (action.kind === "open") openMutation.mutate(tripId);
+    if (action.kind === "depart") departMutation.mutate(tripId);
+    if (action.kind === "complete") completeMutation.mutate(tripId);
+  }
+
+  const mutationError =
+    openMutation.error ?? departMutation.error ?? completeMutation.error;
+
   return (
     <div>
-      {updateMutation.isError ? (
+      {mutationError ? (
         <div className="m-4 flex items-center justify-between rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          <span>{updateMutation.error instanceof Error ? updateMutation.error.message : "تعذر تحديث الرحلة"}</span>
-          <Button type="button" size="sm" variant="ghost" onClick={() => updateMutation.reset()}>إغلاق</Button>
+          <span>{mutationError instanceof Error ? mutationError.message : "تعذر تغيير حالة الرحلة"}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              openMutation.reset();
+              departMutation.reset();
+              completeMutation.reset();
+            }}
+          >
+            إغلاق
+          </Button>
         </div>
       ) : null}
       <div className="space-y-3 p-3 md:hidden">
         {trips.map((trip) => {
           const action = nextAction(trip.status);
           const ActionIcon = action?.icon;
-          const isUpdating = updateMutation.isPending && updateMutation.variables?.id === trip.id;
+          const isUpdating =
+            (openMutation.isPending && openMutation.variables === trip.id) ||
+            (departMutation.isPending && departMutation.variables === trip.id) ||
+            (completeMutation.isPending && completeMutation.variables === trip.id);
           return (
             <article key={trip.id} className="rounded-2xl border border-border bg-card p-4 shadow-card">
               <div className="flex items-start justify-between gap-3">
@@ -124,7 +152,7 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
                       type="button"
                       className="col-span-2"
                       disabled={isUpdating}
-                      onClick={() => updateMutation.mutate({ id: trip.id, input: { status: action.status } })}
+                      onClick={() => runNextAction(trip.id, action)}
                     >
                       {isUpdating ? <Loader2 className="animate-spin" /> : <ActionIcon />}
                       {action.label}
@@ -163,7 +191,10 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
           {trips.map((trip) => {
             const action = nextAction(trip.status);
             const ActionIcon = action?.icon;
-            const isUpdating = updateMutation.isPending && updateMutation.variables?.id === trip.id;
+            const isUpdating =
+              (openMutation.isPending && openMutation.variables === trip.id) ||
+              (departMutation.isPending && departMutation.variables === trip.id) ||
+              (completeMutation.isPending && completeMutation.variables === trip.id);
             return (
               <TableRow key={trip.id}>
                 <TableCell>
@@ -186,7 +217,7 @@ export function TripsTable({ trips, isLoading, isError, canManage, onRetry }: Tr
                         variant="outline"
                         size="sm"
                         disabled={isUpdating}
-                        onClick={() => updateMutation.mutate({ id: trip.id, input: { status: action.status } })}
+                        onClick={() => runNextAction(trip.id, action)}
                       >
                         {isUpdating ? <Loader2 className="animate-spin" /> : <ActionIcon />}
                         {action.label}

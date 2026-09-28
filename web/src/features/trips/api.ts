@@ -64,3 +64,11 @@ export function cancelTrip(id: string, reason: string): Promise<{ trip: Trip; af
 export function updateTrip(id: string, input: UpdateTripInput): Promise<Trip> {
   return apiClient<Trip>(`/trips/${id}`, { method: "PATCH", body: input });
 }
+
+export function openTrip(id: string): Promise<Trip> {
+  return apiClient<Trip>(`/trips/${id}/open`, { method: "POST" });
+}
+
+export function completeTrip(id: string): Promise<Trip> {
+  return apiClient<Trip>(`/trips/${id}/complete`, { method: "POST" });
+}

@@ -42,6 +42,7 @@ describe('AccountingService', () => {
 
   it('rejects closing a period with draft entries', async () => {
     const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
       fiscalPeriod: {
         findFirst: jest
           .fn()
@@ -60,6 +61,7 @@ describe('AccountingService', () => {
     await expect(service.closePeriod(user, 'period-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
     expect(tx.fiscalPeriod.update).not.toHaveBeenCalled();
   });
 

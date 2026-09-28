@@ -20,6 +20,12 @@ export class ManifestsController {
     return this.manifestsService.generate(user, dto);
   }
 
+  @Post('trip/:tripId/depart')
+  @Permissions('manifests.write')
+  departTrip(@CurrentUser() user: AuthUser, @Param('tripId') tripId: string) {
+    return this.manifestsService.departTrip(user, tripId);
+  }
+
   @Get('trip/:tripId')
   @Permissions('manifests.read')
   findByTrip(@CurrentUser() user: AuthUser, @Param('tripId') tripId: string) {
