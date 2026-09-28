@@ -410,46 +410,241 @@ export class TripsService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateTripDto) {
-    if (dto.status === TripStatus.CANCELLED) {
-      throw new BadRequestException(
-        'استخدم مسار إلغاء الرحلة لضمان معالجة الحجوزات والمبالغ',
-      );
-    }
-    await this.ensureExists(user, id);
-    const { price, driverId, ...data } = dto;
-    const driver = driverId
-      ? await this.prisma.driver.findFirst({
-          where: { id: driverId, ...tenantScope(user) },
-        })
-      : null;
-    if (driverId && !driver) throw new NotFoundException('السائق غير موجود');
-    if (
-      driver &&
-      (driver.status !== 'ACTIVE' || driver.licenseExpiry <= new Date())
-    ) {
-      throw new ConflictException('لا يمكن تعيين سائق غير نشط أو منتهي الرخصة');
-    }
+    const organizationId = requireOrgId(user);
+    const { price, driverId, status: requestedStatus, ...data } = dto;
 
     return this.prisma.$transaction(async (tx) => {
-      if (price !== undefined) {
-        // تحديث سعر المقاعد المتاحة فقط (غير المحجوزة/المقفلة مؤقتاً)
-        await tx.tripSeat.updateMany({
-          where: { tripId: id, status: 'AVAILABLE' },
-          data: { price: new Prisma.Decimal(price) },
-        });
+      await lockTripTransaction(tx, organizationId, id);
+
+      const existing = await tx.trip.findFirst({
+        where: { id, ...tenantScope(user) },
+      });
+      if (!existing) throw new NotFoundException('الرحلة غير موجودة');
+
+      if (requestedStatus !== undefined && requestedStatus !== existing.status) {
+        throw new ConflictException(
+          'تغيير حالة الرحلة يجب أن يتم عبر إجراء الحالة المخصص',
+        );
       }
-      return tx.trip.update({
+      if (
+        existing.status === TripStatus.DEPARTED ||
+        existing.status === TripStatus.COMPLETED ||
+        existing.status === TripStatus.CANCELLED
+      ) {
+        throw new ConflictException(
+          'لا يمكن تعديل رحلة غادرت أو اكتملت أو أُلغيت',
+        );
+      }
+
+      const driver = driverId
+        ? await tx.driver.findFirst({
+            where: { id: driverId, ...tenantScope(user) },
+          })
+        : null;
+      if (driverId && !driver) {
+        throw new NotFoundException('السائق غير موجود');
+      }
+      if (
+        driver &&
+        (driver.status !== 'ACTIVE' || driver.licenseExpiry <= new Date())
+      ) {
+        throw new ConflictException(
+          'لا يمكن تعيين سائق غير نشط أو منتهي الرخصة',
+        );
+      }
+
+      const departureAt = data.departureAt
+        ? new Date(data.departureAt)
+        : existing.departureAt;
+      const arrivalAt =
+        data.arrivalAt !== undefined
+          ? data.arrivalAt
+            ? new Date(data.arrivalAt)
+            : null
+          : existing.arrivalAt;
+
+      if (arrivalAt && arrivalAt <= departureAt) {
+        throw new BadRequestException(
+          'موعد الوصول يجب أن يكون بعد موعد الانطلاق',
+        );
+      }
+
+      const activeStatuses = [
+        TripStatus.SCHEDULED,
+        TripStatus.OPEN,
+        TripStatus.FULL,
+        TripStatus.DEPARTED,
+      ];
+      const scheduleChanged =
+        data.departureAt !== undefined || data.arrivalAt !== undefined;
+
+      if (scheduleChanged) {
+        const overlappingBusTrip = arrivalAt
+          ? await tx.trip.findFirst({
+              where: {
+                organizationId,
+                id: { not: id },
+                busId: existing.busId,
+                status: { in: activeStatuses },
+                OR: [
+                  {
+                    departureAt: { lt: arrivalAt },
+                    arrivalAt: { gt: departureAt },
+                  },
+                  {
+                    departureAt: { gte: departureAt, lt: arrivalAt },
+                    arrivalAt: null,
+                  },
+                ],
+              },
+              select: { departureAt: true, arrivalAt: true },
+            })
+          : await tx.trip.findFirst({
+              where: {
+                organizationId,
+                id: { not: id },
+                busId: existing.busId,
+                status: { in: activeStatuses },
+                OR: [
+                  { departureAt: { gte: departureAt } },
+                  {
+                    departureAt: { lt: departureAt },
+                    OR: [
+                      { arrivalAt: null },
+                      { arrivalAt: { gt: departureAt } },
+                    ],
+                  },
+                ],
+              },
+              select: { departureAt: true, arrivalAt: true },
+            });
+        if (overlappingBusTrip) {
+          throw new ConflictException(
+            'الحافلة مشغولة برحلة أخرى في هذه الفترة',
+          );
+        }
+      }
+
+      const effectiveDriverId =
+        driverId !== undefined ? driver?.id ?? null : existing.driverId;
+      if (effectiveDriverId && (scheduleChanged || driverId !== undefined)) {
+        const overlappingDriverTrip = arrivalAt
+          ? await tx.trip.findFirst({
+              where: {
+                organizationId,
+                id: { not: id },
+                driverId: effectiveDriverId,
+                status: { in: activeStatuses },
+                OR: [
+                  {
+                    departureAt: { lt: arrivalAt },
+                    arrivalAt: { gt: departureAt },
+                  },
+                  {
+                    departureAt: { gte: departureAt, lt: arrivalAt },
+                    arrivalAt: null,
+                  },
+                ],
+              },
+              select: { departureAt: true, arrivalAt: true },
+            })
+          : await tx.trip.findFirst({
+              where: {
+                organizationId,
+                id: { not: id },
+                driverId: effectiveDriverId,
+                status: { in: activeStatuses },
+                OR: [
+                  { departureAt: { gte: departureAt } },
+                  {
+                    departureAt: { lt: departureAt },
+                    OR: [
+                      { arrivalAt: null },
+                      { arrivalAt: { gt: departureAt } },
+                    ],
+                  },
+                ],
+              },
+              select: { departureAt: true, arrivalAt: true },
+            });
+        if (overlappingDriverTrip) {
+          throw new ConflictException(
+            'السائق مشغول برحلة أخرى في هذه الفترة',
+          );
+        }
+      }
+
+      try {
+        if (price !== undefined) {
+          // تحديث سعر المقاعد المتاحة فقط (غير المحجوزة/المقفلة مؤقتاً)
+          await tx.tripSeat.updateMany({
+            where: { tripId: id, status: 'AVAILABLE' },
+            data: { price: new Prisma.Decimal(price) },
+          });
+        }
+        return await tx.trip.update({
+          where: { id },
+          data: {
+            ...data,
+            driverId: driverId !== undefined ? driver?.id ?? null : undefined,
+            driverName:
+              driverId !== undefined
+                ? driver?.name ?? data.driverName ?? null
+                : data.driverName,
+            driverPhone:
+              driverId !== undefined
+                ? driver?.phone ?? data.driverPhone ?? null
+                : data.driverPhone,
+            departureAt: data.departureAt
+              ? new Date(data.departureAt)
+              : undefined,
+            arrivalAt:
+              data.arrivalAt !== undefined
+                ? data.arrivalAt
+                  ? new Date(data.arrivalAt)
+                  : null
+                : undefined,
+          },
+          include: {
+            route: true,
+            bus: { include: { seatTemplate: true } },
+            driver: true,
+            tripSeats: { orderBy: [{ row: 'asc' }, { column: 'asc' }] },
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          message.includes('23P01') ||
+          message.includes('trips_bus_schedule_no_overlap_excl') ||
+          message.includes('trips_driver_schedule_no_overlap_excl')
+        ) {
+          throw new ConflictException(
+            'يوجد تعارض زمني في جدولة الحافلة أو السائق',
+          );
+        }
+        throw error;
+      }
+    });
+  }
+
+  async open(user: AuthUser, id: string) {
+    const organizationId = requireOrgId(user);
+    const result = await this.prisma.$transaction(async (tx) => {
+      await lockTripTransaction(tx, organizationId, id);
+      const trip = await tx.trip.findFirst({
+        where: { id, ...tenantScope(user) },
+      });
+      if (!trip) throw new NotFoundException('الرحلة غير موجودة');
+      if (trip.status === TripStatus.OPEN) return { trip, changed: false };
+      if (trip.status !== TripStatus.SCHEDULED) {
+        throw new ConflictException(
+          'لا يمكن فتح الحجز لرحلة ليست في الحالة المجدولة',
+        );
+      }
+      const opened = await tx.trip.update({
         where: { id },
-        data: {
-          ...data,
-          driverId,
-          driverName: driver?.name ?? data.driverName,
-          driverPhone: driver?.phone ?? data.driverPhone,
-          departureAt: data.departureAt
-            ? new Date(data.departureAt)
-            : undefined,
-          arrivalAt: data.arrivalAt ? new Date(data.arrivalAt) : undefined,
-        },
+        data: { status: TripStatus.OPEN },
         include: {
           route: true,
           bus: { include: { seatTemplate: true } },
@@ -457,8 +652,46 @@ export class TripsService {
           tripSeats: { orderBy: [{ row: 'asc' }, { column: 'asc' }] },
         },
       });
+      return { trip: opened, changed: true };
     });
+    if (result.changed) {
+      await this.audit.log(user, 'TRIP_OPENED_FOR_BOOKING', 'Trip', id);
+    }
+    return result.trip;
   }
+
+  async complete(user: AuthUser, id: string) {
+    const organizationId = requireOrgId(user);
+    const result = await this.prisma.$transaction(async (tx) => {
+      await lockTripTransaction(tx, organizationId, id);
+      const trip = await tx.trip.findFirst({
+        where: { id, ...tenantScope(user) },
+      });
+      if (!trip) throw new NotFoundException('الرحلة غير موجودة');
+      if (trip.status === TripStatus.COMPLETED) return { trip, changed: false };
+      if (trip.status !== TripStatus.DEPARTED) {
+        throw new ConflictException(
+          'لا يمكن إكمال الرحلة قبل أن تصبح في حالة غادرت',
+        );
+      }
+      const completed = await tx.trip.update({
+        where: { id },
+        data: { status: TripStatus.COMPLETED },
+        include: {
+          route: true,
+          bus: { include: { seatTemplate: true } },
+          driver: true,
+          tripSeats: { orderBy: [{ row: 'asc' }, { column: 'asc' }] },
+        },
+      });
+      return { trip: completed, changed: true };
+    });
+    if (result.changed) {
+      await this.audit.log(user, 'TRIP_COMPLETED', 'Trip', id);
+    }
+    return result.trip;
+  }
+
 
   async cancel(
     user: AuthUser,
@@ -507,6 +740,9 @@ export class TripsService {
       if (!trip) throw new NotFoundException('الرحلة غير موجودة');
       if (trip.status === TripStatus.CANCELLED) {
         throw new ConflictException('الرحلة ملغاة بالفعل');
+      }
+      if (trip.status === TripStatus.DEPARTED) {
+        throw new ConflictException('لا يمكن إلغاء رحلة غادرت بالفعل');
       }
       if (trip.status === TripStatus.COMPLETED) {
         throw new ConflictException('لا يمكن إلغاء رحلة مكتملة');
