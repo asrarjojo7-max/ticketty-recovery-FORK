@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { intentFromText } from './core.mjs';
+import { extractBearerToken, intentFromText } from './core.mjs';
 
 const config = {
   botToken: required('TELEGRAM_BOT_TOKEN'),
@@ -834,7 +834,7 @@ const server = createServer(async (request, response) => {
       if (
         !sameSecret(
           alertWebhookToken,
-          url.searchParams.get('token'),
+          extractBearerToken(request.headers.authorization),
         )
       ) {
         response.writeHead(401);
