@@ -472,10 +472,7 @@ export class AccountingService {
     if (entryDate < period.startsAt || entryDate > period.endsAt) {
       throw new BadRequestException('تاريخ القيد خارج الفترة المالية');
     }
-    if (
-      accounts.length !==
-      new Set(dto.lines.map((line) => line.accountId)).size
-    ) {
+    if (accounts.length !== new Set(dto.lines.map((line) => line.accountId)).size) {
       throw new NotFoundException('أحد الحسابات غير موجود أو غير نشط');
     }
 
@@ -539,11 +536,7 @@ export class AccountingService {
       throw new ConflictException('لا يمكن ترحيل قيد غير مسودة');
     }
 
-    await lockFiscalPeriodTransaction(
-      tx,
-      organizationId,
-      entry.fiscalPeriodId,
-    );
+    await lockFiscalPeriodTransaction(tx, organizationId, entry.fiscalPeriodId);
     const period = await tx.fiscalPeriod.findFirst({
       where: { id: entry.fiscalPeriodId, organizationId },
     });
@@ -604,11 +597,7 @@ export class AccountingService {
       if (existingReversal) {
         throw new ConflictException('تم عكس القيد مسبقاً');
       }
-      await lockFiscalPeriodTransaction(
-        tx,
-        organizationId,
-        dto.fiscalPeriodId,
-      );
+      await lockFiscalPeriodTransaction(tx, organizationId, dto.fiscalPeriodId);
       const period = await tx.fiscalPeriod.findFirst({
         where: { id: dto.fiscalPeriodId, organizationId },
       });
