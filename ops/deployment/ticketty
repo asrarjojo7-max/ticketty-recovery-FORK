@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
-INSTALL_ROOT="\x24{TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
+INSTALL_ROOT="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
 ETC_ROOT="/etc/ticketty"
 STATE_DIR="/var/lib/ticketty/deployment"
 STATE_FILE="$STATE_DIR/state.env"
@@ -12,7 +12,7 @@ OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
 TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
-BACKUP_ROOT="\x24{BACKUP_DIR:-/var/lib/ticketty/backups}"
+BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
 DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
 ok(){ printf '  \033[32m✓\033[0m %s\n' "$*"; }
@@ -24,7 +24,7 @@ root(){ [[ "$(id -u)" -eq 0 ]] || die "شغّل باستخدام sudo/root."; }
 dirs(){ install -d -m 0700 "$STATE_DIR" "$STATE_DIR/logs" "$ETC_ROOT/secrets"; install -d -m 0750 /run/ticketty /run/lock; }
 get(){ local key="$1"; [[ -f "$STATE_FILE" ]] || return 1; awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE"; }
 setv(){ local key="$1" val="$2" tmp; dirs; tmp="$(mktemp "$STATE_DIR/state.XXXXXX")"; [[ -f "$STATE_FILE" ]] && awk -F= -v k="$key" '$1!=k{print}' "$STATE_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$val" >> "$tmp"; chmod 600 "$tmp"; mv "$tmp" "$STATE_FILE"; }
-phase(){ local name="$1"; shift; [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]] && { ok "$name — مكتمل سابقًا"; return; }; setv "PHASE_$name" RUNNING; if "$@"; then setv "PHASE_$name" DONE; setv "PHASE_\x24{name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; ok "$name"; else setv "PHASE_$name" FAILED; die "$name فشل. استخدم sudo ticketty resume."; fi; }
+phase(){ local name="$1"; shift; [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]] && { ok "$name — مكتمل سابقًا"; return; }; setv "PHASE_$name" RUNNING; if "$@"; then setv "PHASE_$name" DONE; setv "PHASE_${name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; ok "$name"; else setv "PHASE_$name" FAILED; die "$name فشل. استخدم sudo ticketty resume."; fi; }
 lock(){ dirs; exec 9>"$LOCK_FILE"; flock -n 9 || die "هناك عملية نشر أخرى تعمل."; }
 load(){ local v; v="$(get PROJECT_DIR 2>/dev/null || true)"; [[ -n "$v" ]] && INSTALL_ROOT="$v"; v="$(get REPOSITORY 2>/dev/null || true)"; if [[ -n "$v" ]]; then REPOSITORY="$v"; else REPOSITORY="$DEFAULT_REPO"; fi; }
 packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "المتطلبات موجودة"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "التوزيعة غير مدعومة للتثبيت التلقائي."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "تثبيت المتطلبات تلقائيًا؟ [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
@@ -78,8 +78,8 @@ RCLONE_MONTHLY_REMOTE=
 BACKUP_RETENTION_DAYS=0
 EOF
 chmod 600 "$f"; printf '%s\n' "$pair" > "$STATE_DIR/pairing-code"; chmod 600 "$STATE_DIR/pairing-code"; ok "Environment + secrets"; }
-domain(){ local d; d="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$d" ]] && return; if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="\x24{TICKETTY_DOMAIN:-}"; else read -r -p "الدومين (مثال app.example.com): " d; fi; [[ -n "$d" ]] || die "الدومين مطلوب."; sed -i "s#^WEB_ORIGIN=.*#WEB_ORIGIN=https://$d#;s#^APP_ORIGIN=.*#APP_ORIGIN=https://$d#;s#^CLOUDFLARE_HOSTNAME=.*#CLOUDFLARE_HOSTNAME=$d#" "$ETC_ROOT/ticketty.env"; setv APP_HOSTNAME "$d"; ok "الدومين $d"; }
-telegram(){ if [[ ! -s "$TELEGRAM_TOKEN_FILE" ]]; then local t; if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="\x24{TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token من BotFather: " t; printf '\n'; fi; [[ -n "$t" ]] || die "Telegram Bot Token مطلوب."; printf '%s\n' "$t" > "$TELEGRAM_TOKEN_FILE"; chmod 600 "$TELEGRAM_TOKEN_FILE"; fi; secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32; getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"; chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"; ok "Telegram"; }
+domain(){ local d; d="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$d" ]] && return; if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="${TICKETTY_DOMAIN:-}"; else read -r -p "الدومين (مثال app.example.com): " d; fi; [[ -n "$d" ]] || die "الدومين مطلوب."; sed -i "s#^WEB_ORIGIN=.*#WEB_ORIGIN=https://$d#;s#^APP_ORIGIN=.*#APP_ORIGIN=https://$d#;s#^CLOUDFLARE_HOSTNAME=.*#CLOUDFLARE_HOSTNAME=$d#" "$ETC_ROOT/ticketty.env"; setv APP_HOSTNAME "$d"; ok "الدومين $d"; }
+telegram(){ if [[ ! -s "$TELEGRAM_TOKEN_FILE" ]]; then local t; if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="${TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token من BotFather: " t; printf '\n'; fi; [[ -n "$t" ]] || die "Telegram Bot Token مطلوب."; printf '%s\n' "$t" > "$TELEGRAM_TOKEN_FILE"; chmod 600 "$TELEGRAM_TOKEN_FILE"; fi; secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32; getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"; chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"; ok "Telegram"; }
 cloudflare(){ [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && { ok "Cloudflare Tunnel token موجود"; return; }; [[ "$NON_INTERACTIVE" -eq 1 ]] && return; printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'; local m t; read -r -p "اختر [1]: " m; [[ -n "$m" ]] || m=1; case "$m" in 1) read -r -s -p "Tunnel Token: " t; printf '\n'; [[ -n "$t" ]] || die "Tunnel Token مطلوب."; printf '%s\n' "$t" > "$CLOUDFLARE_TOKEN_FILE"; chmod 600 "$CLOUDFLARE_TOKEN_FILE";; 2) "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE";; 3) warn "Cloudflare مؤجل.";; *) die "خيار غير صالح.";; esac; }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build; ok "الخدمات"; }
