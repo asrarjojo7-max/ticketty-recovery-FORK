@@ -208,6 +208,67 @@ function operatorActor(message) {
   };
 }
 
+function isPrivateChat(message) {
+  return message?.chat?.type === 'private';
+}
+
+function deploymentStatusMessage(result) {
+  const operations = Array.isArray(result?.remote_operations)
+    ? result.remote_operations
+    : [];
+
+  if (!operations.length) {
+    return [
+      '🚀 حالة النشر',
+      '',
+      'لا توجد عملية نشر مسجلة حاليًا.',
+      'يمكنك كتابة: هل يوجد تحديث؟',
+    ].join('\n');
+  }
+
+  const latest = [...operations]
+    .sort((a, b) => Number(b.started_at ?? 0) - Number(a.started_at ?? 0))[0];
+
+  const status = latest.status;
+  const statusText =
+    status === 'running'
+      ? '🟠 جارٍ التنفيذ'
+      : status === 'success'
+        ? '🟢 اكتمل بنجاح'
+        : status === 'failed'
+          ? '🔴 فشل'
+          : status === 'executing'
+            ? '🟠 جارٍ التنفيذ'
+            : status === 'cancelled'
+              ? '⚪ أُلغي'
+              : status ?? 'غير معروفة';
+
+  return [
+    '🚀 حالة آخر عملية نشر',
+    '',
+    'الإصدار: ' + (latest.ref ?? 'غير معروف'),
+    'الحالة: ' + statusText,
+    'معرّف العملية: ' + (latest.plan_id ?? 'غير معروف'),
+    latest.started_at
+      ? 'بدأت: ' +
+        new Date(Number(latest.started_at) * 1000).toLocaleString('ar-SA', {
+          timeZone: 'Africa/Khartoum',
+        })
+      : '',
+    latest.finished_at
+      ? 'انتهت: ' +
+        new Date(Number(latest.finished_at) * 1000).toLocaleString('ar-SA', {
+          timeZone: 'Africa/Khartoum',
+        })
+      : '',
+    latest.status === 'failed'
+      ? 'راجع سجل النشر من السيرفر أو استخدم: حالة النظام'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 function updatePlanMessage(plan) {
   const body = [
     '📦 يوجد إصدار جديد من Ticketty',
@@ -884,6 +945,7 @@ async function handleMessage(message) {
     const candidateCode = parts[1] ?? '';
 
     if (
+      isPrivateChat(message) &&
       config.pairingCode &&
       state.operators.length === 0 &&
       sameSecret(config.pairingCode, candidateCode)
@@ -947,6 +1009,13 @@ async function handleMessage(message) {
       await sendMessage(chatId, await alertsStatus());
     } else if (intent === 'summary') {
       await sendMessage(chatId, await operationalSummary());
+    } else if (intent === 'deployment_status') {
+      const result = await remoteOps(
+        'STATUS',
+        {},
+        operatorActor(message),
+      );
+      await sendMessage(chatId, deploymentStatusMessage(result));
     } else if (intent === 'update') {
       const plan = await remoteOps(
         'PLAN_UPDATE',
