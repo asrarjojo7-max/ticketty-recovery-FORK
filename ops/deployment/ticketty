@@ -175,6 +175,7 @@ telegram(){
     printf '%s\n' "$t" > "$TELEGRAM_TOKEN_FILE"; chmod 600 "$TELEGRAM_TOKEN_FILE"
   fi
   secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32
+  secret_file "$OPS_HMAC_FILE" 32
   getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
   local gid; gid="$(getent group "$OPS_GROUP" | cut -d: -f3)"
   if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
@@ -206,7 +207,10 @@ cmd_install(){
   phase PREFLIGHT resources
   phase PACKAGES packages
   phase CHECKOUT checkout
-  setv PROJECT_DIR "$INSTALL_ROOT"; setv REPOSITORY "$REPOSITORY"
+  setv PROJECT_DIR "$INSTALL_ROOT"
+  setv REPOSITORY "$REPOSITORY"
+  [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "${TICKETTY_SERVER_ID:-$(hostname -s)}"
+  [[ -n "$(get DEPLOYMENT_ID 2>/dev/null || true)" ]] || setv DEPLOYMENT_ID "DEP-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 3)"
   phase ENV write_env
   ensure_env
   configure_alertmanager_receiver
@@ -271,7 +275,7 @@ cmd_setup_cf(){
     public_health || warn "Cloudflare يعمل لكن الدومين العام لم يستجب بعد؛ استخدم ticketty doctor."
   fi
 }
-usage(){ printf '%s\n' 'ticketty | install | resume | update | status | doctor | setup-cloudflare'; }
+usage(){ printf '%s\n' 'ticketty | install | resume | update | status | doctor | setup-cloudflare | profile-export | profile-import FILE'; }
 menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) الحالة\n  5) فحص النظام\n  6) Cloudflare\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_resume;;3) root;lock;cmd_update;;4) cmd_status;;5) cmd_doctor;;6) cmd_setup_cf;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
 main(){ local command=menu; while (($#)); do case "$1" in install|resume|update|status|doctor|setup-cloudflare) command="$1"; shift;; --non-interactive) NON_INTERACTIVE=1; shift;; --json) JSON_OUTPUT=1; shift;; --dry-run|--plan) DRY_RUN=1; shift;; --confirm) CONFIRMED=1; shift;; --ref) REF="$2"; shift 2;; -h|--help) usage; return;; *) die "وسيط غير معروف: $1";; esac; done; case "$command" in menu) menu;;install) cmd_install;;resume) cmd_resume;;update) [[ -n "$REF" ]] && { root;lock;update_ref "$REF"; } || { root;lock;cmd_update; };;status) cmd_status;;doctor) cmd_doctor;;setup-cloudflare) cmd_setup_cf;;esac; }
 
