@@ -151,7 +151,10 @@ describe('accounting lifecycle under tenant RLS', () => {
   });
 
   it('posts an approved expense through a configured accounting policy once', async () => {
-    const result = await runtime.withTenantContext(organizationId, async () => {
+    // إنشاء المصروف + الحدث يجب أن يلتزم ثم يبدأ worker/manual processing
+    // في معاملة مستقلة؛ هذا يحاكي outbox lifecycle الحقيقي ويمنع الاختبار
+    // من معاملة واحدة تخفي مشاكل رؤية/claim الطابور.
+    const setup = await runtime.withTenantContext(organizationId, async () => {
       const [cash, expenseAccount, journal] = await Promise.all([
         runtime.account.findFirstOrThrow({
           where: { organizationId, code: '1000' },
@@ -185,21 +188,33 @@ describe('accounting lifecycle under tenant RLS', () => {
           },
         },
       });
-      const processed = await accounting.processNextEvent(user);
-      if (!processed.processed) {
-        throw new Error(
-          `Expected queued event processing: ${processed.error ?? 'no event was claimed'}`,
-        );
-      }
-      const replay = await accounting.processEvent(user, event.id);
       return {
-        first: processed.result.journalEntry,
-        replay: replay.journalEntry,
         expenseAccountId: expenseAccount.id,
         cashId: cash.id,
         eventId: event.id,
       };
     });
+
+    const processed = await runtime.withTenantContext(
+      organizationId,
+      () => accounting.processNextEvent(user),
+    );
+    if (!processed.processed) {
+      throw new Error(
+        `Expected queued event processing: ${processed.error ?? 'no event was claimed'}`,
+      );
+    }
+
+    const replay = await runtime.withTenantContext(organizationId, () =>
+      accounting.processEvent(user, setup.eventId),
+    );
+    const result = {
+      first: processed.result.journalEntry,
+      replay: replay.journalEntry,
+      expenseAccountId: setup.expenseAccountId,
+      cashId: setup.cashId,
+      eventId: setup.eventId,
+    };
 
     expect(result.first.id).toBe(result.replay.id);
     expect(result.first.status).toBe('POSTED');
