@@ -269,6 +269,70 @@ function deploymentStatusMessage(result) {
     .join('\n');
 }
 
+async function monitorDeployment(chatId, actor, planId) {
+  const maxChecks = 360;
+  for (let attempt = 0; attempt < maxChecks; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    try {
+      const result = await remoteOps(
+        'OPERATION_STATUS',
+        { plan_id: planId },
+        actor,
+      );
+
+      if (result.status === 'success') {
+        await sendMessage(
+          chatId,
+          [
+            '🟢 اكتمل تحديث Ticketty',
+            '',
+            'الإصدار: ' + (result.ref ?? 'غير معروف'),
+            'الحالة: تم التحديث بنجاح ✅',
+            'معرّف العملية: ' + planId,
+            '',
+            'اكتب: حالة النظام',
+            'للتأكد من حالة الخدمات.',
+          ].join('\n'),
+        );
+        return;
+      }
+
+      if (result.status === 'failed') {
+        await sendMessage(
+          chatId,
+          [
+            '🔴 فشل تحديث Ticketty',
+            '',
+            'الإصدار المطلوب: ' + (result.ref ?? 'غير معروف'),
+            'لم يتم اعتماد التحديث.',
+            'معرّف العملية: ' + planId,
+            '',
+            'استخدم «حالة التحديث» لمراجعة آخر حالة، ثم راجع سجل النشر من السيرفر.',
+          ].join('\n'),
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('Deployment status polling failed', error);
+      // Keep polling. A transient control-plane or Telegram issue must not
+      // change the actual deployment state.
+    }
+  }
+
+  await sendMessage(
+    chatId,
+    [
+      '🟠 التحديث ما زال قيد التنفيذ.',
+      '',
+      'معرّف العملية: ' + planId,
+      'لم أصل إلى النتيجة النهائية بعد.',
+      '',
+      'اكتب: حالة التحديث',
+    ].join('\n'),
+  );
+}
+
 function updatePlanMessage(plan) {
   const body = [
     '📦 يوجد إصدار جديد من Ticketty',
@@ -883,8 +947,11 @@ async function handleCallbackQuery(query) {
           'معرّف العملية: ' + planId,
           '',
           'جاري تنفيذ النسخة الاحتياطية والتحديث والفحوص.',
+          '',
+          'سأخبرك تلقائيًا عند اكتمال العملية أو فشلها.',
         ].join('\n'),
       );
+      void monitorDeployment(chatId, actor, planId);
       return;
     }
 
