@@ -60,20 +60,27 @@ openssl rand -hex 24
 openssl rand -hex 32
 ```
 
-Use the first value as `TELEGRAM_PAIRING_CODE` and the second as
-`TELEGRAM_ALERT_WEBHOOK_TOKEN`. Store both only in the production
-environment file or secret store.
+Use the first value as `TELEGRAM_PAIRING_CODE`. Store it only in the
+production environment file or secret store.
+
+Use the second value as the contents of
+`/etc/ticketty/telegram-alert-webhook-token`, owned by the deployment
+operator and readable only by the Alertmanager and Telegram assistant
+containers.
 
 Create a Telegram bot with BotFather and put its token in
 `TELEGRAM_BOT_TOKEN`.
 
-For the Alertmanager webhook file, the Compose service name is reachable only
-inside the private network. The file must contain exactly one URL, including
-the same alert webhook token:
+For the Alertmanager webhook URL file, the Compose service name is reachable
+only inside the private network. The file should contain:
 
 ```text
-http://telegram-assistant:8090/alerts?token=REPLACE_WITH_TELEGRAM_ALERT_WEBHOOK_TOKEN
+http://telegram-assistant:8090/alerts
 ```
+
+Alertmanager authenticates the request with a Bearer token read from
+`/etc/ticketty/telegram-alert-webhook-token`; the token is not placed in the
+URL.
 
 Because this file is also used by the existing Alertmanager deployment
 mechanism, never commit its contents. On the VPS it should remain protected
