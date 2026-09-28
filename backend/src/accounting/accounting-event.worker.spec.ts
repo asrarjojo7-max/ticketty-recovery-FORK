@@ -44,17 +44,17 @@ describe('AccountingEventWorker', () => {
       'event-1',
     );
     expect(
-      (metrics.accountingEventsProcessedTotal as { inc: unknown }).inc,
+      (metrics.accountingEventsProcessedTotal as unknown as { inc: unknown }).inc,
     ).toHaveBeenCalled();
     expect(
-      (metrics.accountingWorkerLastSuccess as { set: jest.Mock }).set,
+      (metrics.accountingWorkerLastSuccess as unknown as { set: jest.Mock }).set,
     ).toHaveBeenCalled();
     expect(
-      (metrics.accountingWorkerConsecutiveFailures as { set: jest.Mock }).set,
+      (metrics.accountingWorkerConsecutiveFailures as unknown as { set: jest.Mock }).set,
     ).toHaveBeenCalledWith(0);
     expect(queueDepth).toHaveBeenCalledTimes(1);
     expect(
-      (metrics.accountingQueueDepth as unknown as { set: jest.Mock }).set,
+      (metrics.accountingQueueDepth as unknown as unknown as { set: jest.Mock }).set,
     ).toHaveBeenCalledWith({ status: 'PENDING' }, 2);
   });
 
@@ -101,16 +101,16 @@ describe('AccountingEventWorker', () => {
       expect.any(Error),
     );
     expect(
-      (metrics.accountingEventsFailedTotal as { inc: jest.Mock }).inc,
+      (metrics.accountingEventsFailedTotal as unknown as { inc: jest.Mock }).inc,
     ).toHaveBeenCalled();
     expect(
-      (metrics.accountingWorkerConsecutiveFailures as { inc: jest.Mock }).inc,
+      (metrics.accountingWorkerConsecutiveFailures as unknown as { inc: jest.Mock }).inc,
     ).toHaveBeenCalled();
     expect(
-      (metrics.accountingWorkerLastSuccess as { set: jest.Mock }).set,
+      (metrics.accountingWorkerLastSuccess as unknown as { set: jest.Mock }).set,
     ).not.toHaveBeenCalled();
     expect(
-      (metrics.accountingWorkerConsecutiveFailures as { set: jest.Mock }).set,
+      (metrics.accountingWorkerConsecutiveFailures as unknown as { set: jest.Mock }).set,
     ).not.toHaveBeenCalledWith(0);
   });
 });
