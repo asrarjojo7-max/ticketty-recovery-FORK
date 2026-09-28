@@ -14,6 +14,16 @@ load_value(){
   fi
 }
 
+
+set_state(){
+  local key="$1" value="$2" tmp
+  install -d -m 0700 "$STATE_DIR"
+  tmp="$(mktemp "$STATE_DIR/state.XXXXXX")"
+  [[ -f "$STATE_DIR/state.env" ]] && awk -F= -v k="$key" '$1!=k{print}' "$STATE_DIR/state.env" > "$tmp" || true
+  printf "%s=%s\n" "$key" "$value" >> "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$STATE_DIR/state.env"
+}
 export_profile(){
   local output="${1:-$PROFILE_DIR/ticketty-profile.json}"
   [[ -f "$ETC_ROOT/ticketty.env" ]] || die "ملف بيئة Ticketty غير موجود."
@@ -46,6 +56,11 @@ import_profile(){
   jq -e '.schema_version == 1 and .secrets_included == false' "$input" >/dev/null || die "profile غير صالح أو يحتوي على أسرار."
   install -d -m 0700 "$PROFILE_DIR"
   install -m 0600 "$input" "$PROFILE_DIR/profile.json"
+  local value
+  value="$(load_value install_root)"; [[ -n "$value" ]] && set_state PROJECT_DIR "$value"
+  value="$(load_value repository)"; [[ -n "$value" ]] && set_state REPOSITORY "$value"
+  value="$(load_value domain)"; [[ -n "$value" ]] && set_state APP_HOSTNAME "$value"
+  value="$(load_value server_id)"; [[ -n "$value" ]] && set_state SERVER_ID "$value"
   echo "تم استيراد profile. لم يتم استيراد أي سر."
 }
 
