@@ -14,7 +14,7 @@
 -- ─── 0) الفحص يعمل داخل معاملة قابلة للتراجع ───────────────────────────
 -- (لا يكتب شيئاً؛ read-only كلياً ما عدا فحوص DO التي تتراجع ذاتياً)
 
-DO $$ BEGIN
+DO $ticketty_invariants$ BEGIN
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- القسم 1 — عزل المستأجرين (composite tenant FKs + unique composites)
@@ -361,7 +361,19 @@ IF NOT EXISTS (
   RAISE EXCEPTION 'INVARIANT FAIL [trip-exclusion]: trips scheduling exclusion constraint missing';
 END IF;
 
-END $$;
+-- 5.5 الفترات المالية داخل المنظمة يجب أن تكون غير متداخلة.
+--     وجود أكثر من فترة OPEN تغطي نفس تاريخ الحدث يجعل اختيار الفترة
+--     المحاسبية غامضاً. PostgreSQL هو الحكم النهائي، ويجب أن يبقى القيد.
+IF NOT EXISTS (
+  SELECT 1 FROM pg_constraint
+  WHERE contype='x'
+    AND conrelid='public.fiscal_periods'::regclass
+    AND conname='fiscal_periods_no_overlap_excl'
+) THEN
+  RAISE EXCEPTION 'INVARIANT FAIL [fiscal-period-exclusion]: fiscal period overlap exclusion constraint missing';
+END IF;
+
+END $ticketty_invariants$;
 
 -- نجاح كل ما سبق = القيود حية. النتيجة الإيجابية للاستهلاك الآلي:
 SELECT 'ALL DATABASE INVARIANTS OK' AS result,

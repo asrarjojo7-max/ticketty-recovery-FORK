@@ -14,7 +14,10 @@ import {
 } from '../common/idempotency';
 import { paginationArgs } from '../common/dto/pagination-query.dto';
 import { requireOrgId } from '../common/org';
-import { lockFiscalPeriodTransaction } from '../common/transaction-locks';
+import {
+  lockFiscalPeriodCatalogTransaction,
+  lockFiscalPeriodTransaction,
+} from '../common/transaction-locks';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ConfigureAccountingPolicyDto,
@@ -45,12 +48,31 @@ export class AccountingService {
   }
 
   async createPeriod(user: AuthUser, dto: CreateFiscalPeriodDto) {
+    const organizationId = requireOrgId(user);
     const startsAt = new Date(dto.startsAt);
     const endsAt = new Date(dto.endsAt);
     if (startsAt > endsAt)
       throw new BadRequestException('فترة مالية غير صالحة');
-    return this.prisma.fiscalPeriod.create({
-      data: { ...dto, startsAt, endsAt, organizationId: requireOrgId(user) },
+
+    return this.prisma.$transaction(async (tx) => {
+      await lockFiscalPeriodCatalogTransaction(tx, organizationId);
+      const overlapping = await tx.fiscalPeriod.findFirst({
+        where: {
+          organizationId,
+          startsAt: { lte: endsAt },
+          endsAt: { gte: startsAt },
+        },
+        select: { id: true },
+      });
+      if (overlapping) {
+        throw new ConflictException(
+          'تتداخل الفترة المالية الجديدة مع فترة مالية موجودة',
+        );
+      }
+
+      return tx.fiscalPeriod.create({
+        data: { ...dto, startsAt, endsAt, organizationId },
+      });
     });
   }
 
