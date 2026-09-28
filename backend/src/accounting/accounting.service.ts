@@ -346,7 +346,7 @@ export class AccountingService {
       const result = await this.processEvent(user, claimed.id);
       return { processed: true as const, result };
     } catch (error) {
-      const failed = await this.markEventFailed(user, claimed.id, error);
+      await this.markEventFailed(user, claimed.id, error);
       const message =
         error instanceof Error ? error.message.slice(0, 500) : 'Unknown error';
       return {
@@ -482,7 +482,9 @@ export class AccountingService {
     if (entryDate < period.startsAt || entryDate > period.endsAt) {
       throw new BadRequestException('تاريخ القيد خارج الفترة المالية');
     }
-    if (accounts.length !== new Set(dto.lines.map((line) => line.accountId)).size) {
+    if (
+      accounts.length !== new Set(dto.lines.map((line) => line.accountId)).size
+    ) {
       throw new NotFoundException('أحد الحسابات غير موجود أو غير نشط');
     }
 
