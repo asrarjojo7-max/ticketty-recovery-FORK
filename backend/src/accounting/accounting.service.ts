@@ -165,7 +165,7 @@ export class AccountingService {
         dto.eventType,
         dto.sourceId,
       );
-      const draft = await this.createEntry(user, {
+      const draft = await this.createEntryInTransaction(tx, user, {
         journalId: policy.journalId,
         fiscalPeriodId: dto.fiscalPeriodId,
         entryNumber: dto.entryNumber,
@@ -192,7 +192,7 @@ export class AccountingService {
           },
         ],
       });
-      const posted = await this.postEntry(user, draft.id);
+      const posted = await this.postEntryInTransaction(tx, user, draft.id);
       await completeIdempotentOperation(
         tx,
         operation.record.id,
@@ -422,7 +422,6 @@ export class AccountingService {
   }
 
   async createEntry(user: AuthUser, dto: CreateJournalEntryDto) {
-    const organizationId = requireOrgId(user);
     const debits = dto.lines.reduce(
       (total, line) => total.plus(line.debit),
       new Prisma.Decimal(0),
@@ -438,62 +437,71 @@ export class AccountingService {
       throw new BadRequestException('كل سطر يجب أن يكون مديناً أو دائناً فقط');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      await lockFiscalPeriodTransaction(tx, organizationId, dto.fiscalPeriodId);
-      const [journal, period, accounts] = await Promise.all([
-        tx.journal.findFirst({ where: { id: dto.journalId, organizationId } }),
-        tx.fiscalPeriod.findFirst({
-          where: { id: dto.fiscalPeriodId, organizationId },
-        }),
-        tx.account.findMany({
-          where: {
-            id: { in: [...new Set(dto.lines.map((line) => line.accountId))] },
-            organizationId,
-            active: true,
-          },
-          select: { id: true },
-        }),
-      ]);
-      if (!journal) throw new NotFoundException('دفتر اليومية غير موجود');
-      if (!period) throw new NotFoundException('الفترة المالية غير موجودة');
-      if (period.status !== 'OPEN') {
-        throw new ConflictException('الفترة المالية مغلقة');
-      }
-      const entryDate = new Date(dto.entryDate);
-      if (entryDate < period.startsAt || entryDate > period.endsAt) {
-        throw new BadRequestException('تاريخ القيد خارج الفترة المالية');
-      }
-      if (
-        accounts.length !==
-        new Set(dto.lines.map((line) => line.accountId)).size
-      ) {
-        throw new NotFoundException('أحد الحسابات غير موجود أو غير نشط');
-      }
+    return this.prisma.$transaction((tx) =>
+      this.createEntryInTransaction(tx, user, dto),
+    );
+  }
 
-      return tx.journalEntry.create({
-        data: {
+  private async createEntryInTransaction(
+    tx: Prisma.TransactionClient,
+    user: AuthUser,
+    dto: CreateJournalEntryDto,
+  ) {
+    const organizationId = requireOrgId(user);
+    await lockFiscalPeriodTransaction(tx, organizationId, dto.fiscalPeriodId);
+    const [journal, period, accounts] = await Promise.all([
+      tx.journal.findFirst({ where: { id: dto.journalId, organizationId } }),
+      tx.fiscalPeriod.findFirst({
+        where: { id: dto.fiscalPeriodId, organizationId },
+      }),
+      tx.account.findMany({
+        where: {
+          id: { in: [...new Set(dto.lines.map((line) => line.accountId))] },
           organizationId,
-          journalId: dto.journalId,
-          fiscalPeriodId: dto.fiscalPeriodId,
-          entryNumber: dto.entryNumber,
-          entryDate,
-          sourceType: dto.sourceType,
-          sourceId: dto.sourceId,
-          currency: dto.currency,
-          description: dto.description,
-          lines: {
-            create: dto.lines.map((line, index) => ({
-              lineNumber: index + 1,
-              accountId: line.accountId,
-              debit: new Prisma.Decimal(line.debit),
-              credit: new Prisma.Decimal(line.credit),
-              currency: dto.currency,
-              description: line.description,
-            })),
-          },
+          active: true,
         },
-        include: { lines: true, journal: true, fiscalPeriod: true },
-      });
+        select: { id: true },
+      }),
+    ]);
+    if (!journal) throw new NotFoundException('دفتر اليومية غير موجود');
+    if (!period) throw new NotFoundException('الفترة المالية غير موجودة');
+    if (period.status !== 'OPEN') {
+      throw new ConflictException('الفترة المالية مغلقة');
+    }
+    const entryDate = new Date(dto.entryDate);
+    if (entryDate < period.startsAt || entryDate > period.endsAt) {
+      throw new BadRequestException('تاريخ القيد خارج الفترة المالية');
+    }
+    if (
+      accounts.length !==
+      new Set(dto.lines.map((line) => line.accountId)).size
+    ) {
+      throw new NotFoundException('أحد الحسابات غير موجود أو غير نشط');
+    }
+
+    return tx.journalEntry.create({
+      data: {
+        organizationId,
+        journalId: dto.journalId,
+        fiscalPeriodId: dto.fiscalPeriodId,
+        entryNumber: dto.entryNumber,
+        entryDate,
+        sourceType: dto.sourceType,
+        sourceId: dto.sourceId,
+        currency: dto.currency,
+        description: dto.description,
+        lines: {
+          create: dto.lines.map((line, index) => ({
+            lineNumber: index + 1,
+            accountId: line.accountId,
+            debit: new Prisma.Decimal(line.debit),
+            credit: new Prisma.Decimal(line.credit),
+            currency: dto.currency,
+            description: line.description,
+          })),
+        },
+      },
+      include: { lines: true, journal: true, fiscalPeriod: true },
     });
   }
 
@@ -513,18 +521,44 @@ export class AccountingService {
     const organizationId = requireOrgId(user);
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${organizationId}:journal-entry:${id}`}))`;
-      const entry = await tx.journalEntry.findFirst({
-        where: { id, organizationId },
-      });
-      if (!entry) throw new NotFoundException('القيد غير موجود');
-      if (entry.status !== 'DRAFT') {
-        throw new ConflictException('لا يمكن ترحيل قيد غير مسودة');
-      }
-      return tx.journalEntry.update({
-        where: { id },
-        data: { status: 'POSTED', postedById: user.sub, postedAt: new Date() },
-        include: { lines: true, journal: true, fiscalPeriod: true },
-      });
+      return this.postEntryInTransaction(tx, user, id);
+    });
+  }
+
+  private async postEntryInTransaction(
+    tx: Prisma.TransactionClient,
+    user: AuthUser,
+    id: string,
+  ) {
+    const organizationId = requireOrgId(user);
+    const entry = await tx.journalEntry.findFirst({
+      where: { id, organizationId },
+    });
+    if (!entry) throw new NotFoundException('القيد غير موجود');
+    if (entry.status !== 'DRAFT') {
+      throw new ConflictException('لا يمكن ترحيل قيد غير مسودة');
+    }
+
+    await lockFiscalPeriodTransaction(
+      tx,
+      organizationId,
+      entry.fiscalPeriodId,
+    );
+    const period = await tx.fiscalPeriod.findFirst({
+      where: { id: entry.fiscalPeriodId, organizationId },
+    });
+    if (!period) throw new NotFoundException('الفترة المالية غير موجودة');
+    if (period.status !== 'OPEN') {
+      throw new ConflictException('لا يمكن ترحيل قيد في فترة مالية مغلقة');
+    }
+    if (entry.entryDate < period.startsAt || entry.entryDate > period.endsAt) {
+      throw new BadRequestException('تاريخ القيد خارج الفترة المالية');
+    }
+
+    return tx.journalEntry.update({
+      where: { id },
+      data: { status: 'POSTED', postedById: user.sub, postedAt: new Date() },
+      include: { lines: true, journal: true, fiscalPeriod: true },
     });
   }
 
@@ -570,6 +604,11 @@ export class AccountingService {
       if (existingReversal) {
         throw new ConflictException('تم عكس القيد مسبقاً');
       }
+      await lockFiscalPeriodTransaction(
+        tx,
+        organizationId,
+        dto.fiscalPeriodId,
+      );
       const period = await tx.fiscalPeriod.findFirst({
         where: { id: dto.fiscalPeriodId, organizationId },
       });
