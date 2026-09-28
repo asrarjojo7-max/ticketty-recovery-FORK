@@ -36,8 +36,8 @@ export async function lockTicketNumberSequence(
       hashtext(${`${organizationId}:${year}`})
     )
   `;
-
 }
+
 /**
  * Serializes every transaction that can create/post/close entries in the same
  * fiscal period. createEntry() and closePeriod() both take this lock before
