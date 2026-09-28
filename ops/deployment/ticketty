@@ -228,6 +228,7 @@ cmd_install(){
   phase CHECKOUT checkout
   setv PROJECT_DIR "$INSTALL_ROOT"
   setv REPOSITORY "$REPOSITORY"
+  setv BOOTSTRAP_BASE "master"
   [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "${TICKETTY_SERVER_ID:-$(hostname -s)}"
   [[ -n "$(get DEPLOYMENT_ID 2>/dev/null || true)" ]] || setv DEPLOYMENT_ID "DEP-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 3)"
   phase ENV write_env
@@ -253,7 +254,28 @@ cmd_install(){
   fi
 }
 cmd_resume(){ cmd_install; }
-cmd_update(){ load; local p t; p="$(plan_json)"; if [[ "$JSON_OUTPUT" -eq 1 ]]; then printf '%s\n' "$p"; return; fi; [[ "$(printf '%s' "$p" | jq -r '.update // false')" == true ]] || { ok "لا يوجد Release أحدث."; return; }; t="$(printf '%s' "$p" | jq -r '.latest')"; if [[ "$CONFIRMED" -eq 0 ]]; then read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; update_ref "$t"; }
+cmd_migrate(){
+  root
+  lock
+  dirs
+  load
+  [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]] || die "Ticketty غير مهيأ."
+  step "TICKETTY — ترحيل قاعدة البيانات"
+  prebackup
+  docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build migrate
+  setv LAST_MIGRATION_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ok "اكتمل تشغيل migration والتحققات المدمجة في خدمة migrate"
+}
+cmd_update(){
+  load
+  local p t
+  p="$(plan_json)"
+  if [[ "$JSON_OUTPUT" -eq 1 || "$DRY_RUN" -eq 1 ]]; then printf '%s\n' "$p"; return; fi
+  [[ "$(printf '%s' "$p" | jq -r '.update // false')" == true ]] || { ok "لا يوجد Release أحدث."; return; }
+  t="$(printf '%s' "$p" | jq -r '.latest')"
+  [[ "$CONFIRMED" -eq 1 ]] || { read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; }
+  update_ref "$t"
+}
 status_json(){
   load
   local r d s o
@@ -294,9 +316,9 @@ cmd_setup_cf(){
     public_health || warn "Cloudflare يعمل لكن الدومين العام لم يستجب بعد؛ استخدم ticketty doctor."
   fi
 }
-usage(){ printf '%s\n' 'ticketty | install | resume | update | status | doctor | setup-cloudflare | profile-export | profile-import FILE'; }
-menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) الحالة\n  5) فحص النظام\n  6) Cloudflare\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_resume;;3) root;lock;cmd_update;;4) cmd_status;;5) cmd_doctor;;6) cmd_setup_cf;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
-main(){ local command=menu; while (($#)); do case "$1" in install|resume|update|status|doctor|setup-cloudflare) command="$1"; shift;; --non-interactive) NON_INTERACTIVE=1; shift;; --json) JSON_OUTPUT=1; shift;; --dry-run|--plan) DRY_RUN=1; shift;; --confirm) CONFIRMED=1; shift;; --ref) REF="$2"; shift 2;; -h|--help) usage; return;; *) die "وسيط غير معروف: $1";; esac; done; case "$command" in menu) menu;;install) cmd_install;;resume) cmd_resume;;update) [[ -n "$REF" ]] && { root;lock;update_ref "$REF"; } || { root;lock;cmd_update; };;status) cmd_status;;doctor) cmd_doctor;;setup-cloudflare) cmd_setup_cf;;esac; }
+usage(){ printf '%s\n' 'ticketty | install | resume | update | migrate | status | doctor | gate TAG | setup-cloudflare | profile-export | profile-import FILE | transfer-export | transfer-import FILE'; }
+menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) ترحيل قاعدة البيانات\n  5) الحالة\n  6) فحص النظام\n  7) Cloudflare\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_resume;;3) root;lock;cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
+main(){ local command=menu; while (($#)); do case "$1" in install|resume|update|migrate|status|doctor|setup-cloudflare|gate|profile-export|profile-import|transfer-export|transfer-import) command="$1"; shift;; --non-interactive) NON_INTERACTIVE=1; shift;; --json) JSON_OUTPUT=1; shift;; --dry-run|--plan) DRY_RUN=1; shift;; --confirm) CONFIRMED=1; shift;; --ref) REF="$2"; shift 2;; -h|--help) usage; return;; *) die "وسيط غير معروف: $1";; esac; done; case "$command" in menu) menu;;install) cmd_install;;resume) cmd_resume;;update) [[ -n "$REF" ]] && { root;lock;update_ref "$REF"; } || { root;lock;cmd_update; };;status) cmd_status;;doctor) cmd_doctor;;setup-cloudflare) cmd_setup_cf;;esac; }
 
 if [[ "${1:-}" == "profile-export" ]]; then
   shift
