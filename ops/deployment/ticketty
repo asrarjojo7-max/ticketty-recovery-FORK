@@ -45,7 +45,36 @@ packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do comman
 resources(){ local ram free; ram="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"; free="$(df -Pk / | awk 'NR==2{print $4}')"; (( ram >= 2097152 )) || warn "RAM أقل من 2 GiB."; [[ "$free" -ge 20971520 ]] || die "المساحة الحرة أقل من 20 GiB."; ok "الموارد"; }
 checkout(){ [[ -d "$INSTALL_ROOT/.git" ]] && { ok "المستودع موجود"; return; }; mkdir -p "$(dirname "$INSTALL_ROOT")"; git clone "$REPOSITORY" "$INSTALL_ROOT"; ok "تم جلب المستودع"; }
 clean(){ git -C "$INSTALL_ROOT" diff --quiet || die "توجد تغييرات محلية غير محفوظة."; git -C "$INSTALL_ROOT" diff --cached --quiet || die "توجد تغييرات staged."; }
+env_set(){
+  local key="$1" value="$2" file="$ETC_ROOT/ticketty.env"
+  if grep -q "^$key=" "$file"; then
+    sed -i "s#^$key=.*#$key=$value#" "$file"
+  else
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+  fi
+}
 secret_file(){ local f="$1" n="$2"; [[ -s "$f" ]] || { openssl rand -base64 "$n" | tr -d '\n' > "$f"; chmod 600 "$f"; }; }
+ensure_env(){
+  local f="$ETC_ROOT/ticketty.env"
+  [[ -f "$f" ]] || return
+  local pair
+  pair="$(grep '^TELEGRAM_PAIRING_CODE=' "$f" | cut -d= -f2- || true)"
+  if [[ -z "$pair" ]]; then
+    pair="$(openssl rand -hex 24)"
+    env_set TELEGRAM_PAIRING_CODE "$pair"
+  fi
+  env_set TELEGRAM_BOT_TOKEN_FILE "$TELEGRAM_TOKEN_FILE"
+  env_set TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE "$TELEGRAM_ALERT_TOKEN_FILE"
+  env_set CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE"
+  env_set TICKETTY_OPS_SOCKET "$OPS_SOCKET"
+  env_set TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE"
+  env_set TICKETTY_REMOTE_OPS_ENABLED true
+  env_set TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}"
+  env_set TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}"
+  env_set TICKETTY_INSTALL_ROOT "$INSTALL_ROOT"
+  env_set BACKUP_DIR "$BACKUP_ROOT"
+  chmod 600 "$f"
+}
 write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "بيئة الإنتاج موجودة"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
 POSTGRES_DB=ticketty
 POSTGRES_USER=ticketty_admin
@@ -125,7 +154,27 @@ latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROO
 plan_json(){ local cur latest; cur="$(current_release)"; latest="$(latest_json | jq -r '.tag_name // empty')"; [[ -n "$latest" ]] || { jq -n --arg c "$cur" '{ok:true,update:false,current:$c,reason:"no-release"}'; return; }; if [[ "$cur" == "$latest" ]]; then jq -n --arg c "$cur" --arg l "$latest" '{ok:true,update:false,current:$c,latest:$l}'; else latest_json | jq --arg c "$cur" '{ok:true,update:true,current:$c,latest:.tag_name,url:.html_url,name:(.name//.tag_name),published_at:.published_at,body:(.body//"")}'; fi; }
 prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }
 update_ref(){ local target="$1" old; [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Release tag غير صالح."; ensure_checkout; clean; [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: $target"; return; }; prebackup; old="$(git -C "$INSTALL_ROOT" rev-parse HEAD)"; git -C "$INSTALL_ROOT" fetch --tags --force origin; git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release غير موجود."; git -C "$INSTALL_ROOT" checkout --detach "$target"; if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build migrate; then git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل migration؛ لم يتم عكسه تلقائيًا."; fi; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || { git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل تشغيل الإصدار الجديد."; }; health || { git -C "$INSTALL_ROOT" checkout --detach "$old"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build || true; die "فشل health check."; }; setv RELEASE_REF "$target"; setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"; setv DEPLOYMENT_STATUS READY; setv LAST_UPDATE_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; ok "تم نشر $target"; }
-cmd_install(){ root; lock; dirs; load; step "TICKETTY — التثبيت الذكي"; phase PREFLIGHT resources; phase PACKAGES packages; phase CHECKOUT checkout; setv PROJECT_DIR "$INSTALL_ROOT"; setv REPOSITORY "$REPOSITORY"; phase ENV write_env; ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"; phase DOMAIN domain; phase TELEGRAM telegram; phase CLOUDFLARE cloudflare; phase COMPOSE compose_validate; phase DEPLOY stack_up; public_health || warn "الدومين العام يحتاج وقتًا إضافيًا أو مراجعة DNS."; phase OPS ops_service; setv DEPLOYMENT_STATUS READY; step "اكتمل التثبيت"; }
+cmd_install(){
+  root; lock; dirs; load
+  step "TICKETTY — التثبيت الذكي"
+  [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]] && warn "تم العثور على تثبيت سابق؛ لن نعيد إنشاء البيانات أو الأسرار الموجودة."
+  phase PREFLIGHT resources
+  phase PACKAGES packages
+  phase CHECKOUT checkout
+  setv PROJECT_DIR "$INSTALL_ROOT"; setv REPOSITORY "$REPOSITORY"
+  phase ENV write_env
+  ensure_env
+  ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"
+  phase DOMAIN domain
+  phase TELEGRAM telegram
+  phase CLOUDFLARE cloudflare
+  phase COMPOSE compose_validate
+  phase DEPLOY stack_up
+  phase PUBLIC_HEALTH public_health || warn "الدومين العام يحتاج وقتًا إضافيًا أو مراجعة DNS."
+  phase OPS ops_service
+  setv DEPLOYMENT_STATUS READY
+  step "اكتمل التثبيت"
+}
 cmd_resume(){ cmd_install; }
 cmd_update(){ load; local p t; p="$(plan_json)"; if [[ "$JSON_OUTPUT" -eq 1 ]]; then printf '%s\n' "$p"; return; fi; [[ "$(printf '%s' "$p" | jq -r '.update // false')" == true ]] || { ok "لا يوجد Release أحدث."; return; }; t="$(printf '%s' "$p" | jq -r '.latest')"; if [[ "$CONFIRMED" -eq 0 ]]; then read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; update_ref "$t"; }
 status_json(){
