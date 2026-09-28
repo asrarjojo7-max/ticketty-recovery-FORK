@@ -66,4 +66,11 @@ function intentFromText(input) {
   return null;
 }
 
-export { intentFromText, normalizeArabic };
+function extractBearerToken(authorization) {
+  if (typeof authorization !== 'string') return null;
+  if (!authorization.startsWith('Bearer ')) return null;
+  const token = authorization.slice('Bearer '.length).trim();
+  return token || null;
+}
+
+export { extractBearerToken, intentFromText, normalizeArabic };
