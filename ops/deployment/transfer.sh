@@ -43,9 +43,10 @@ import_bundle(){
   local input="${1:-}"
   [[ -f "$input" ]] || die "ملف النقل غير موجود."
   tar -tzf "$input" >/dev/null || die "ملف النقل تالف."
+  if tar -tzf "$input" | awk 'index($0, "..") || substr($0,1,1)=="/" {bad=1} END{exit bad}'; then :; else die "ملف النقل يحتوي مسارًا غير آمن."; fi
   local temp; temp="$(mktemp -d)"
   trap "rm -rf \"$temp\"" EXIT
-  tar -xzf "$input" -C "$temp"
+  tar -xzf "$input" -C "$temp" --no-same-owner
   local p; p="$(find "$temp" -maxdepth 1 -name "ticketty-profile.json" -print -quit)"
   [[ -n "$p" ]] || die "ملف profile غير موجود داخل الحزمة."
   jq -e ".schema_version == 1 and .secrets_included == false" "$p" >/dev/null || die "profile غير آمن."
