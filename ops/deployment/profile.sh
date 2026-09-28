@@ -61,6 +61,14 @@ import_profile(){
   value="$(load_value repository)"; [[ -n "$value" ]] && set_state REPOSITORY "$value"
   value="$(load_value domain)"; [[ -n "$value" ]] && set_state APP_HOSTNAME "$value"
   value="$(load_value server_id)"; [[ -n "$value" ]] && set_state SERVER_ID "$value"
+  value="$(load_value release_channel)"; [[ -n "$value" ]] && set_state RELEASE_CHANNEL "$value"
+  value="$(load_value backup_remote)"; [[ -n "$value" ]] && set_state BACKUP_REMOTE "$value"
+  value="$(load_value backup_weekly_remote)"; [[ -n "$value" ]] && set_state BACKUP_WEEKLY_REMOTE "$value"
+  value="$(load_value backup_monthly_remote)"; [[ -n "$value" ]] && set_state BACKUP_MONTHLY_REMOTE "$value"
+  value="$(load_value backend_port)"; [[ -n "$value" ]] && set_state BACKEND_PORT "$value"
+  value="$(load_value web_port)"; [[ -n "$value" ]] && set_state WEB_PORT "$value"
+  value="$(load_value trust_proxy_hops)"; [[ -n "$value" ]] && set_state TRUST_PROXY_HOPS "$value"
+  value="$(load_value cloudflare_tunnel_id)"; [[ -n "$value" ]] && set_state CLOUDFLARE_TUNNEL_ID "$value"
   echo "تم استيراد profile. لم يتم استيراد أي سر."
 }
 
