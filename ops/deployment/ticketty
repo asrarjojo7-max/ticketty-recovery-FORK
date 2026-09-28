@@ -127,6 +127,12 @@ ensure_env(){
   value="$(get WEB_PORT 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set WEB_PORT "$value"
   value="$(get TRUST_PROXY_HOPS 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set TRUST_PROXY_HOPS "$value"
   value="$(get CLOUDFLARE_TUNNEL_ID 2>/dev/null || true)"; [[ -n "$value" ]] && env_set CLOUDFLARE_TUNNEL_ID "$value"
+  value="$(get APP_HOSTNAME 2>/dev/null || true)"
+  if [[ -n "$value" ]]; then
+    env_set WEB_ORIGIN "https://$value"
+    env_set APP_ORIGIN "https://$value"
+    env_set CLOUDFLARE_HOSTNAME "$value"
+  fi
   chmod 600 "$f"
 }
 write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "بيئة الإنتاج موجودة"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
