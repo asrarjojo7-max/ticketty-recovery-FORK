@@ -23,6 +23,10 @@ EOF
 
   STATE_DIR="$state"
   STATE_FILE="$state/state.env"
+  die(){
+    printf '%s\n' "$*" >&2
+    exit 1
+  }
   get(){
     local key="$1"
     awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE" 2>/dev/null
@@ -91,7 +95,7 @@ EOF
   }
 
   set +e
-  update_ref v2026.10.01 >/dev/null 2>&1
+  ( update_ref v2026.10.01 >/dev/null 2>&1 )
   rc=$?
   set -e
   [[ "$rc" -ne 0 ]] || { echo "update unexpectedly succeeded with failed stack_up" >&2; return 1; }
