@@ -43,10 +43,10 @@ cpu_millicores(){
 discover(){
   local host_mem host_cpu limit effective disk docker_mem docker_cpu cpu_milli
   host_mem="$(mem_kib)"; host_cpu="$(cpu_count)"; limit="$(cgroup_limit_kib)"
-  [[ "$host_mem" =~ ^[0-9]+$ && "$host_cpu" =~ ^[0-9]+$ ]] || die "تعذر قراءة موارد النظام."
-  (( host_mem > 0 && host_cpu > 0 )) || die "قيم الموارد غير صالحة."
+  [[ "$host_mem" =~ ^[0-9]+$ && "$host_cpu" =~ ^[0-9]+$ ]] || die "Unable to read system resources."
+  (( host_mem > 0 && host_cpu > 0 )) || die "Resource values are invalid."
   effective="$host_mem"; (( limit > 0 && limit < effective )) && effective="$limit"
-  cpu_milli="$(cpu_millicores)" || die "تعذر قراءة حصة المعالج."
+  cpu_milli="$(cpu_millicores)" || die "Unable to determine CPU quota."
   disk="$(disk_kib /var/lib/docker)"; [[ "$disk" =~ ^[0-9]+$ ]] || disk="$(disk_kib /)"
   docker_mem="unknown"; docker_cpu="unknown"
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
@@ -57,8 +57,8 @@ discover(){
 }
 plan(){
   local mem="$1" cpu_milli="$2" disk="$3" tier workers monitoring status
-  for x in "$mem" "$cpu_milli" "$disk"; do [[ "$x" =~ ^[0-9]+$ ]] || die "مدخلات الموارد يجب أن تكون أعدادًا صحيحة."; done
-  (( mem > 0 && cpu_milli > 0 && disk >= 0 )) || die "موارد غير صالحة."
+  for x in "$mem" "$cpu_milli" "$disk"; do [[ "$x" =~ ^[0-9]+$ ]] || die "Resource inputs must be integers."; done
+  (( mem > 0 && cpu_milli > 0 && disk >= 0 )) || die "Invalid resource values."
   if (( mem < 1536*1024 || disk < 5*1024*1024 )); then tier=constrained; workers=1; monitoring=minimal; status=blocked
   elif (( mem < 4096*1024 || cpu_milli < 2000 )); then tier=minimal; workers=1; monitoring=local; status=review
   elif (( mem < 8192*1024 || cpu_milli < 4000 )); then tier=standard; workers=1; monitoring=standard; status=ready
@@ -67,6 +67,6 @@ plan(){
 }
 case "${1:-}" in
   discover) discover;;
-  plan) [[ $# == 4 ]] || die "usage: resource-profile.sh plan <memory-kib> <cpu-millicores> <disk-kib>"; plan "$2" "$3" "$4";;
-  *) die "usage: resource-profile.sh {discover|plan <memory-kib> <cpu-millicores> <disk-kib>}";;
+  plan) [[ $# == 4 ]] || die "Usage: resource-profile.sh plan <memory-kib> <cpu-millicores> <disk-kib>"; plan "$2" "$3" "$4";;
+  *) die "Usage: resource-profile.sh {discover|plan <memory-kib> <cpu-millicores> <disk-kib>}";;
 esac
