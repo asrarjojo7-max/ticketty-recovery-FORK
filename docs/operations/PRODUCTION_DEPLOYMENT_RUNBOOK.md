@@ -101,7 +101,7 @@ sudo ticketty transfer-import /secure/ticketty-transfer.tar.gz
 sudo ticketty install
 ```
 
-الـbundle لا يحتوي الأسرار ولا قاعدة البيانات. أدخل Telegram/Cloudflare secrets بشكل منفصل أو استخدم مسار إدارة الأسرار المعتمد.
+الـbundle لا يحتوي الأسرار ولا قاعدة البيانات. يتحقق `transfer-import` من checksum، ويطبق profile غير السري تلقائيًا ويحفظ release المصدر دون نسخ هوية الخادم. أدخل Telegram/Cloudflare secrets بشكل منفصل أو استخدم مسار إدارة الأسرار المعتمد.
 
 بعد استعادة database على السيرفر الجديد، شغّل migrations والتحقق قبل فتح المرور العام.
 
