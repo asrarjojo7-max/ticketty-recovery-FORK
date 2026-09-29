@@ -9,13 +9,13 @@
 على خادم Linux جديد، نفّذ **هذا الأمر الوحيد**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/asrarjojo7-max/ticketty-recovery-FORK/master/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh | sudo bash
 ```
 
 بعد ذلك يبدأ معالج Ticketty تلقائيًا ويقوم بفحص الخادم ثم يمر بمراحل التثبيت المطلوبة.
 
-> **ملاحظة:** أمر الـInstaller الحالي يعتمد على مستودع التطوير المعتمد في هذا الخط:
-> `asrarjojo7-max/ticketty-recovery-FORK`.
+> **ملاحظة:** أمر الـInstaller الحالي يعتمد على المستودع الرسمي للمشروع:
+> `mogahedadamy/ticketty-recovery`.
 > يمكن تغيير المصدر باستخدام `TICKETTY_REPOSITORY_URL` عند الحاجة.
 >
 > **للإنتاج:** يفضّل وجود GitHub Release منشور قبل التثبيت الإنتاجي. إذا لم يوجد Release بعد، فلن يتجاوز Ticketty بوابة الإصدار تلقائيًا؛ سيطلب منك المعالج صراحةً اختيار تشغيل `master` للتطوير.
