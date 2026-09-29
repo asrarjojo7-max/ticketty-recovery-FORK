@@ -25,7 +25,7 @@ EOF
   STATE_FILE="$state/state.env"
   die(){
     printf '%s\n' "$*" >&2
-    return 1
+    exit 1
   }
   get(){
     local key="$1"
