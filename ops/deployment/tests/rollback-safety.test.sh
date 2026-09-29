@@ -17,13 +17,19 @@ RELEASE_REF=v2026.10.01
 LAST_UPDATE_MIGRATION_APPLIED=yes
 DEPLOYMENT_STATUS=RECOVERY_REQUIRED
 EOF
+
+  # Exercise rollback_ref directly so this test is independent of root-only CLI setup.
+  eval "$(awk '/^rollback_ref\(\)/,/^verify_final\(\)/ {if ($0 !~ /^verify_final\(\)/) print}' "$TICKETTY")"
+
+  STATE_DIR="$state"
+  STATE_FILE="$state/state.env"
+  get(){
+    local key="$1"
+    awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE" 2>/dev/null
+  }
+
   set +e
-  output="$(
-    TICKETTY_INSTALL_ROOT="$TMP/root-block" \
-    TICKETTY_ETC_ROOT="$etc" \
-    TICKETTY_DEPLOYMENT_STATE_DIR="$state" \
-    "$TICKETTY" rollback --non-interactive --confirm 2>&1
-  )"
+  output="$(rollback_ref 2>&1)"
   rc=$?
   set -e
   [[ "$rc" -ne 0 ]] || { echo "rollback unexpectedly allowed after migration" >&2; echo "$output" >&2; return 1; }
