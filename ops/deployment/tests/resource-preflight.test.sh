@@ -51,7 +51,7 @@ first_at="$(jq -r '.accepted.accepted_at' "$STATE/resource-plan.json")"
 
 out="$(MOCK_PROFILE=standard NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0)"
 grep -q '^RESOURCE_PROFILE=standard$' <<<"$out"
-grep -q 'خطة الموارد المعتمدة محفوظة' <<<"$out"
+grep -q 'Accepted resource profile is already stored' <<<"$out"
 [[ "$(jq -r '.accepted.accepted_at' "$STATE/resource-plan.json")" == "$first_at" ]]
 
 if MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0 >/dev/null 2>&1; then
