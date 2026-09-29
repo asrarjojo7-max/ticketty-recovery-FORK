@@ -365,7 +365,31 @@ cloudflare(){
   fi
 }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
+prepare_monitoring_bind_mounts(){
+  local ops_dir="$INSTALL_ROOT/ops"
+  local monitoring_dir="$ops_dir/monitoring"
+  local file
+
+  [[ -d "$ops_dir" ]] || die "Monitoring source directory is missing: $ops_dir"
+  [[ -d "$monitoring_dir" ]] || die "Monitoring source directory is missing: $monitoring_dir"
+
+  # These files are intentionally non-secret configuration. Prometheus,
+  # Alertmanager and blackbox-exporter run as non-root users, so bind-mounted
+  # configs must be readable by the container user. Secrets remain under
+  # /etc/ticketty/secrets and are never relaxed here.
+  chmod 0755 "$ops_dir" "$monitoring_dir"
+  for file in \
+    "$monitoring_dir/prometheus.yml" \
+    "$monitoring_dir/alertmanager.yml" \
+    "$monitoring_dir/blackbox.yml" \
+    "$ops_dir/alert-rules.yml"; do
+    [[ -f "$file" ]] || die "Monitoring configuration is missing: $file"
+    chmod 0644 "$file"
+  done
+}
+
 stack_up(){
+  prepare_monitoring_bind_mounts
   local -a compose_cmd=("docker" "compose" "-f" "$INSTALL_ROOT/compose.yaml" "--env-file" "$INSTALL_ROOT/.env")
   if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
     compose_cmd+=(--profile cloudflare-local)
