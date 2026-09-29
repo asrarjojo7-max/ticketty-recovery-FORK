@@ -153,6 +153,10 @@ ensure_env(){
     pair="$(openssl rand -hex 24)"
     env_set_missing TELEGRAM_PAIRING_CODE "$pair" "$f"
   fi
+  if [[ ! -s "$STATE_DIR/pairing-code" ]]; then
+    printf "%s\n" "$pair" > "$STATE_DIR/pairing-code"
+    chmod 600 "$STATE_DIR/pairing-code"
+  fi
   env_set_missing TELEGRAM_BOT_TOKEN_FILE "$TELEGRAM_TOKEN_FILE" "$f"
   env_set_missing TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE "$TELEGRAM_ALERT_TOKEN_FILE" "$f"
   env_set_missing CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE" "$f"
