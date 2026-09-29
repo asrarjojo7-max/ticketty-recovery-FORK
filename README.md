@@ -9,10 +9,10 @@
 على خادم Linux جديد، نفّذ **هذا الأمر الوحيد**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh | sudo bash
+curl -fL --connect-timeout 10 --max-time 120 https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh -o /tmp/ticketty-install.sh && sudo bash /tmp/ticketty-install.sh
 ```
 
-بعد ذلك يبدأ معالج Ticketty تلقائيًا ويقوم بفحص الخادم ثم يمر بمراحل التثبيت المطلوبة.
+بعد ذلك يبدأ معالج Ticketty تلقائيًا ويقوم بفحص الخادم ثم يمر بمراحل التثبيت المطلوبة. يعرض الـBootstrap حالة التحميل ومراحل التثبيت بدل أن ينتظر بصمت.
 
 > **ملاحظة:** أمر الـInstaller الحالي يعتمد على المستودع الرسمي للمشروع:
 > `mogahedadamy/ticketty-recovery`.
