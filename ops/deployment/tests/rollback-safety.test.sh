@@ -73,6 +73,7 @@ EOF
   current_release(){ printf '%s\n' 'v2026.09.01'; }
   stack_up(){ return 1; }
   health(){ return 0; }
+  docker(){ return 0; }
   git(){
     printf '%s\n' "$*" >> "$git_log"
     case "$*" in
