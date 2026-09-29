@@ -75,7 +75,7 @@ EOF
 
 assert_progress_ui_is_present(){
   grep -Fq 'Building Docker images (live output)...' "$TICKETTY"
-  grep -Fq 'printf "\\n=== [%3d%%] [%d/%d] %s ===\\n"' "$TICKETTY"
+  grep -Fq 'printf "\n=== [%3d%%] [%d/%d] %s ===\n"' "$TICKETTY"
 }
 
 assert_build_failure_is_reported
