@@ -6,6 +6,9 @@ TICKETTY="$ROOT/ticketty"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# stack_up is extracted from the production CLI, so provide its error reporter.
+err(){ printf 'ERROR: %s\n' "$*" >&2; }
+
 extract_stack_up(){
   awk '/^stack_up\(\)/,/^ops_service\(\)/ {if ($0 !~ /^ops_service\(\)/) print}' "$TICKETTY"
 }
@@ -30,6 +33,7 @@ EOF
   PATH="$bin:$PATH"
   INSTALL_ROOT="$TMP/install-build"
   CLOUDFLARE_TOKEN_FILE="$TMP/no-cloudflare-token"
+  CLOUDFLARED_DIR="$TMP/no-cloudflared"
 
   set +e
   output="$(stack_up 2>&1)"
@@ -75,7 +79,7 @@ EOF
 
 assert_progress_ui_is_present(){
   grep -Fq 'Building Docker images (live output)...' "$TICKETTY"
-  grep -Fq 'printf "\\n=== [%3d%%] [%d/%d] %s ===\\n"' "$TICKETTY"
+  grep -Fq 'printf "\n=== [%3d%%] [%d/%d] %s ===\n"' "$TICKETTY"
 }
 
 assert_build_failure_is_reported

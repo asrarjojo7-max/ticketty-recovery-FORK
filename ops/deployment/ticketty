@@ -162,6 +162,17 @@ EOF
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
 
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    printf "  Configuring the official Cloudflare package repository...\\n"
+    install -m 0755 -d /usr/share/keyrings
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+    chmod a+r /usr/share/keyrings/cloudflare-main.gpg
+    printf "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main\\n" > /etc/apt/sources.list.d/cloudflared.list
+    apt-get update
+    apt-get install -y cloudflared
+  fi
+  command -v cloudflared >/dev/null 2>&1 || die "cloudflared is not available after installation."
+
   systemctl enable --now docker
   docker info >/dev/null 2>&1 || die "Docker daemon is not healthy after installation. Check: systemctl status docker"
   docker compose version >/dev/null 2>&1 || die "Docker Compose plugin is not available."
