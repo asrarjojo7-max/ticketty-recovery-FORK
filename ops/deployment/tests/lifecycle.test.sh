@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+trap 'rc=$?; echo "lifecycle test failed: line $LINENO: $BASH_COMMAND (rc=$rc)" >&2' ERR
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TICKETTY="$ROOT/ticketty"
