@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 STATE_DIR="${TICKETTY_DEPLOYMENT_STATE_DIR:-/var/lib/ticketty/deployment}"
-ETC_ROOT="/etc/ticketty"
+ETC_ROOT="${TICKETTY_ETC_ROOT:-/etc/ticketty}"
 PROFILE_DIR="$STATE_DIR"
 
 die(){ echo "ERROR: $*" >&2; exit 1; }
@@ -41,7 +41,8 @@ export_profile(){
   backend="$(grep "^BACKEND_PORT=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || echo 3001)"
   web="$(grep "^WEB_PORT=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || echo 3000)"
   proxy="$(grep "^TRUST_PROXY_HOPS=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || echo 1)"
-  server="$(grep "^SERVER_ID=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || hostname -s)"
+  server="$(grep "^SERVER_ID=" "$STATE_DIR/state.env" 2>/dev/null | cut -d= -f2- || true)"
+  [[ -n "$server" ]] || server="$(hostname -s)"
   jq -n --arg repo "$repo" --arg root "$root" --arg domain "$domain" --arg tunnel "$tunnel" \
     --arg channel "$channel" --arg backup "$backup" --arg weekly "$weekly" --arg monthly "$monthly" \
     --arg server "$server" --arg backend "$backend" --arg web "$web" --arg proxy "$proxy" \
