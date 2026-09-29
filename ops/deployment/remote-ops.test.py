@@ -52,6 +52,7 @@ with tempfile.TemporaryDirectory() as temp:
     state=tmp/"state"
     fake=tmp/"ticketty"
     marker=tmp/"executed"
+    rollback_marker=tmp/"rollback-executed"
     secret="integration-test-secret-please-ignore"
     secret_path.write_text(secret,encoding="utf-8")
     fake.write_text("""#!/usr/bin/env bash
@@ -63,8 +64,17 @@ if [[ "$1" == "update" && "$2" == "--plan" ]]; then
   printf '{"ok":true,"update":true,"current":"v-old","latest":"v-new","name":"Test release"}\n'
   exit 0
 fi
+if [[ "$1" == "rollback" && "$2" == "--plan" && "$3" == "--json" ]]; then
+  printf '{"ok":true,"rollback":true,"release":"v-old","commit":"0123456789abcdef0123456789abcdef01234567","reason":"safe-no-migration"}\n'
+  exit 0
+fi
 if [[ "$1" == "update" ]]; then
   printf executed > "$MARKER"
+  sleep 0.2
+  exit 0
+fi
+if [[ "$1" == "rollback" ]]; then
+  printf rollback > "$ROLLBACK_MARKER"
   sleep 0.2
   exit 0
 fi
@@ -79,6 +89,7 @@ exit 2
         "TICKETTY_OPS_GROUP":"missing-test-group",
         "TICKETTY_BIN":str(fake),
         "MARKER":str(marker),
+        "ROLLBACK_MARKER":str(rollback_marker),
     })
     process=subprocess.Popen([sys.executable,str(SERVER)],env=env)
     try:
@@ -116,6 +127,29 @@ exit 2
 
         duplicate=call(str(sock),sign(secret,"EXECUTE_UPDATE",{"plan_id":plan2_id}))
         assert duplicate["ok"] is False
+
+        for _ in range(50):
+            operation_status=call(str(sock),sign(secret,"OPERATION_STATUS",{"plan_id":plan2_id}))
+            if operation_status["ok"] and operation_status["result"]["status"]=="success":
+                break
+            time.sleep(0.05)
+        assert operation_status["result"]["status"]=="success"
+
+        rollback_plan=call(str(sock),sign(secret,"PLAN_ROLLBACK"))
+        assert rollback_plan["ok"] is True
+        assert rollback_plan["result"]["rollback"] is True
+        rollback_id=rollback_plan["result"]["plan_id"]
+
+        started_rollback=call(str(sock),sign(secret,"EXECUTE_ROLLBACK",{"plan_id":rollback_id}))
+        assert started_rollback["ok"] is True
+        assert started_rollback["result"]["status"]=="running"
+        for _ in range(50):
+            if rollback_marker.exists(): break
+            time.sleep(0.05)
+        assert rollback_marker.exists(), "rollback command was not launched"
+
+        mismatch=call(str(sock),sign(secret,"EXECUTE_UPDATE",{"plan_id":rollback_id}))
+        assert mismatch["ok"] is False
     finally:
         process.terminate()
         process.wait(timeout=5)

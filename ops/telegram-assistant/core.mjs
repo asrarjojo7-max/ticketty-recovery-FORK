@@ -75,6 +75,16 @@ function intentFromText(input) {
   }
 
   if (
+    text.includes('ارجع للإصدار السابق') ||
+    text.includes('الرجوع للإصدار السابق') ||
+    text.includes('تراجع عن التحديث') ||
+    text.includes('rollback') ||
+    text === 'رجوع'
+  ) {
+    return 'rollback';
+  }
+
+  if (
     text.includes('هل يوجد تحديث') ||
     text.includes('في تحديث') ||
     text.includes('التحديث') ||
