@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HELPER="$ROOT/resource-preflight.sh"
 TMP="$(mktemp -d)"
+trap 'rc=$?; echo "resource-preflight.test.sh failed at line $LINENO: $BASH_COMMAND (rc=$rc)" >&2; exit "$rc"' ERR
 trap 'rm -rf "$TMP"' EXIT
 
 MOCK="$TMP/resource-profile.sh"
