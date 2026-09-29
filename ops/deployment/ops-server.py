@@ -118,6 +118,7 @@ def handle(m):
         result["remote_operations"]=[
             {
                 "plan_id": v.get("plan_id"),
+                "operation": v.get("operation"),
                 "ref": v.get("ref"),
                 "status": v.get("status"),
                 "started_at": v.get("started_at"),
