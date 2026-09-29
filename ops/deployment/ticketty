@@ -380,7 +380,7 @@ cmd_install(){
 cmd_resume(){ cmd_install; }
 cmd_migrate(){
   root
-  acquire_lock
+  lock
   dirs
   load
   [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]] || die "Ticketty غير مهيأ."
@@ -392,7 +392,7 @@ cmd_migrate(){
 }
 cmd_update(){
   root
-  acquire_lock
+  lock
   dirs
   load
   local p t
