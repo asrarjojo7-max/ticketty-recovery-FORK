@@ -64,8 +64,17 @@ if [[ "$1" == "update" && "$2" == "--plan" ]]; then
   printf '{"ok":true,"update":true,"current":"v-old","latest":"v-new","name":"Test release"}\n'
   exit 0
 fi
+if [[ "$1" == "rollback" && "$2" == "--plan" && "$3" == "--json" ]]; then
+  printf '{"ok":true,"rollback":true,"release":"v-old","commit":"0123456789abcdef0123456789abcdef01234567","reason":"safe-no-migration"}\n'
+  exit 0
+fi
 if [[ "$1" == "update" ]]; then
   printf executed > "$MARKER"
+  sleep 0.2
+  exit 0
+fi
+if [[ "$1" == "rollback" ]]; then
+  printf rollback > "$ROLLBACK_MARKER"
   sleep 0.2
   exit 0
 fi
