@@ -972,7 +972,7 @@ async function handleCallbackQuery(query) {
         callback_query_id: query.id,
         text: 'تم إلغاء خطة التحديث.',
       });
-      await sendMessage(chatId, '❌ تم إلغاء خطة التحديث. لن يتم تنفيذ أي تغيير.');
+      await sendMessage(chatId, '❌ تم إلغاء الخطة. لن يتم تنفيذ أي تغيير.');
       return;
     }
 
