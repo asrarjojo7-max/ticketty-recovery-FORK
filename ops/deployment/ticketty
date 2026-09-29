@@ -505,7 +505,7 @@ cmd_install(){
   phase CLOUDFLARE cloudflare
   phase COMPOSE compose_validate
   phase DEPLOY stack_up
-  if public_health; then ok "Public domain"; else warn "Domain لم يستجب بعد؛ يمكن إعادة Diagnostics من ticketty doctor."; fi
+  if public_health; then ok "Public domain"; else warn "Public domain is not responding yet; run ticketty doctor."; fi
   phase OPS ops_service
   phase VERIFY verify_final
   setv DEPLOYMENT_STATUS READY
