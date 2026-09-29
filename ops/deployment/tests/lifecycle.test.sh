@@ -29,7 +29,7 @@ server_id="$(TICKETTY_SERVER_ID=explicit-test server_identity)"
 test_env="$TMP/test.env"
 printf '%s\n' 'EXISTING=keep-me' > "$test_env"
 env_set_missing EXISTING changed "$test_env"
-env_set_missing NEW=value "$test_env"
+env_set_missing NEW value "$test_env"
 [[ "$(grep '^EXISTING=' "$test_env" | cut -d= -f2-)" == "keep-me" ]]
 [[ "$(grep '^NEW=' "$test_env" | cut -d= -f2-)" == "value" ]]
 
