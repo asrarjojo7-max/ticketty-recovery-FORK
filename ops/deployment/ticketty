@@ -523,7 +523,15 @@ cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] ||
 cmd_profile_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/profile.sh" export "${1:-}"; }
 cmd_profile_import(){ root; load; [[ -n "${1:-}" ]] || die "ملف profile مطلوب."; exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"; }
 cmd_transfer_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/transfer.sh" export "${1:-}"; }
-cmd_transfer_import(){ root; load; [[ -n "${1:-}" ]] || die "ملف النقل مطلوب."; exec "$INSTALL_ROOT/ops/deployment/transfer.sh" import "$1"; }
+cmd_transfer_import(){
+  root
+  load
+  [[ -n "${1:-}" ]] || die "ملف النقل مطلوب."
+  "$INSTALL_ROOT/ops/deployment/transfer.sh" import "$1"
+  [[ -f "$STATE_DIR/ticketty-profile.json" ]] || die "ملف profile لم يتم استخراجه من حزمة النقل."
+  "$INSTALL_ROOT/ops/deployment/profile.sh" import "$STATE_DIR/ticketty-profile.json"
+  ok "تم تطبيق إعدادات النقل غير السرية. لم يتم استيراد أي سر أو قاعدة بيانات."
+}
 cmd_setup_cf(){
   root; load
   "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
