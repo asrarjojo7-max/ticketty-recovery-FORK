@@ -53,7 +53,7 @@ phase(){
     warn "[$idx/${#PHASES[@]}] $label - verification failed; retrying."
     setv "PHASE_$name" PENDING
   fi
-  printf "\n  \033[36m●\033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
+  printf "\n  \033[36m \033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
   setv "PHASE_$name" RUNNING
   if "$@"; then
     setv "PHASE_$name" DONE
@@ -99,7 +99,7 @@ env_set_missing(){
   local key="$1" value="$2" file="${3:-$ETC_ROOT/ticketty.env}"
   grep -q "^$key=" "$file" 2>/dev/null || printf "%s=%s\n" "$key" "$value" >> "$file"
 }
-packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "Prerequisites موجودة"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "تثبيت Prerequisites تلقائيًا؟ [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
+packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "Required packages are installed"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "Install required packages automatically? [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
 resources(){
   local server_id out profile decision accepted_server
   server_id="$(get SERVER_ID 2>/dev/null || true)"
@@ -236,9 +236,9 @@ domain(){
   local d
   d="$(get APP_HOSTNAME 2>/dev/null || true)"
   if [[ -z "$d" || "$d" == PLACEHOLDER ]]; then
-    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="${TICKETTY_DOMAIN:-}"; else read -r -p "Domain (مثال app.example.com): " d; fi
+    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="${TICKETTY_DOMAIN:-}"; else read -r -p "Domain (example: app.example.com): " d; fi
   fi
-  [[ "$d" =~ ^([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$ ]] || die "صيغة Domain غير صحيحة."
+  [[ "$d" =~ ^([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$ ]] || die "Invalid domain format."
   sed -i "s#^WEB_ORIGIN=.*#WEB_ORIGIN=https://$d#;s#^APP_ORIGIN=.*#APP_ORIGIN=https://$d#;s#^CLOUDFLARE_HOSTNAME=.*#CLOUDFLARE_HOSTNAME=$d#" "$ETC_ROOT/ticketty.env"
   setv APP_HOSTNAME "$d"
   ok "Domain: $d"
@@ -346,7 +346,7 @@ verify_phase(){
   esac
 }
 
-public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "Domain العام متصل عبر Cloudflare"; return 0; }; sleep 5; done; return 1; }
+public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "Public domain is reachable through Cloudflare"; return 0; }; sleep 5; done; return 1; }
 
 current_release(){ get RELEASE_REF 2>/dev/null || git -C "$INSTALL_ROOT" describe --tags --exact-match HEAD 2>/dev/null || git -C "$INSTALL_ROOT" rev-parse --short=12 HEAD; }
 latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; }
@@ -471,7 +471,7 @@ cmd_install(){
       printf '  New release: %s\n' "$update_target"
       if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
         read -r -p "Apply the new release now? [Y/n]: " answer
-        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "تم إلغاء التحديث. شغّل sudo ticketty update Configure later."
+        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "Update cancelled. Run sudo ticketty update later."
       fi
       update_ref "$update_target"
     else
@@ -587,9 +587,9 @@ status_json(){
 cmd_status(){
   load
   local r d s o p m
-  r="$(current_release 2>/dev/null || echo 'غير معروف')"
-  d="$(get APP_HOSTNAME 2>/dev/null || echo 'غير مضبوط')"
-  s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'غير معروف')"
+  r="$(current_release 2>/dev/null || echo 'unknown')"
+  d="$(get APP_HOSTNAME 2>/dev/null || echo 'not configured')"
+  s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'unknown')"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
   p="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
   m="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
@@ -619,7 +619,7 @@ cmd_reconfigure_resources(){
   RESOURCE_RECONFIGURE=1
   resources
 }
-cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] || die "Release tag مطلوب."; "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$gate_ref"; }
+cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] || die "Release tag is required."; "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$gate_ref"; }
 cmd_profile_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/profile.sh" export "${1:-}"; }
 cmd_profile_import(){ root; load; [[ -n "${1:-}" ]] || die "Profile file is required."; exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"; }
 cmd_transfer_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/transfer.sh" export "${1:-}"; }
@@ -628,7 +628,7 @@ cmd_transfer_import(){
   load
   [[ -n "${1:-}" ]] || die "Transfer bundle is required."
   "$INSTALL_ROOT/ops/deployment/transfer.sh" import "$1"
-  [[ -f "$STATE_DIR/ticketty-profile.json" ]] || die "ملف profile لم يتم استخراجه من حزمة النقل."
+  [[ -f "$STATE_DIR/ticketty-profile.json" ]] || die "Profile file was not extracted from the transfer bundle."
   "$INSTALL_ROOT/ops/deployment/profile.sh" import "$STATE_DIR/ticketty-profile.json"
   ok "Non-secret transfer settings applied. No secrets or database were imported."
 }
@@ -637,11 +637,11 @@ cmd_setup_cf(){
   "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
     docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d cloudflared
-    public_health || warn "Cloudflare يعمل لكن Domain العام لم يستجب بعد؛ استخدم ticketty doctor."
+    public_health || warn "Cloudflare is running but the public domain is not responding yet; run ticketty doctor."
   fi
 }
 usage(){ printf '%s\\n' 'ticketty | install | resume | update | rollback | migrate | status | doctor | reconfigure-resources | gate TAG | setup-cloudflare | profile-export | profile-import FILE | transfer-export | transfer-import'; }
-menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) ترحيل قاعدة البيانات\n  5) الحالة\n  6) Diagnostics التشخيصي\n  7) Cloudflare\n  8) إعادة تقييم موارد الخادم\n  9) rollback إلى آخر إصدار مسجل\n  0) خروج\n\n'; read -r -p "Choose: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;8) cmd_reconfigure_resources;;9) cmd_rollback;;0) return;;*) warn "Invalid selection";; esac; done; }
+menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) Install system\n  2) Resume installation\n  3) Update system\n  4) Run database migration\n  5) Show status\n  6) Run diagnostics\n  7) Cloudflare\n  8) Reconfigure server resources\n  9) Rollback to recorded previous release\n  0) Exit\n\n'; read -r -p "Choose: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;8) cmd_reconfigure_resources;;9) cmd_rollback;;0) return;;*) warn "Invalid selection";; esac; done; }
 main(){
   local command=menu
   while (($#)); do
