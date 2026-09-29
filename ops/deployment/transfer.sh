@@ -58,7 +58,30 @@ import_bundle(){
   manifest="$(find "$temp" -maxdepth 1 -name "transfer-manifest.txt" -print -quit)"
   [[ -n "$manifest" ]] || die "manifest النقل غير موجود داخل الحزمة."
   jq -e ".schema_version == 1 and .secrets_included == false" "$p" >/dev/null || die "profile غير آمن."
-  grep -q '^secrets_included=false
+  grep -qx "secrets_included=false" "$manifest" || die "manifest يشير إلى أسرار غير مسموحة."
+  grep -qx "database_included=false" "$manifest" || die "manifest يشير إلى قاعدة بيانات غير مسموحة."
+  release="$(grep "^release=" "$manifest" | cut -d= -f2- || true)"
+  commit="$(grep "^commit=" "$manifest" | cut -d= -f2- || true)"
+  if [[ -n "$release" ]]; then
+    [[ "$release" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "إصدار النقل غير صالح."
+  fi
+  if [[ -n "$commit" ]]; then
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "commit النقل غير صالح."
+  fi
+  mkdir -p "$STATE"
+  chmod 700 "$STATE"
+  install -m 0600 "$p" "$profile"
+  if [[ -n "$release" ]]; then
+    local state_file="$STATE/state.env" tmp_state
+    tmp_state="$(mktemp "$STATE/state.XXXXXX")"
+    [[ -f "$state_file" ]] && awk -F= '$1!="TRANSFER_SOURCE_RELEASE" && $1!="TRANSFER_SOURCE_COMMIT"{print}' "$state_file" > "$tmp_state" || true
+    printf "TRANSFER_SOURCE_RELEASE=%s\n" "$release" >> "$tmp_state"
+    [[ -n "$commit" ]] && printf "TRANSFER_SOURCE_COMMIT=%s\n" "$commit" >> "$tmp_state"
+    chmod 600 "$tmp_state"
+    mv "$tmp_state" "$state_file"
+  fi
+  echo "تم استيراد إعدادات النقل غير السرية."
+  echo "لم يتم استيراد أي secret أو بيانات قاعدة بيانات."
 }
 case "${1:-export}" in
   export) shift; export_bundle "${1:-}" ;;
