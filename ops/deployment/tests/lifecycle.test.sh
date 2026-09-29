@@ -82,3 +82,9 @@ grep -q 'repo="${TICKETTY_REPOSITORY_URL:-https://github.com/asrarjojo7-max/tick
 grep -q 'DEFAULT_REPO="https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git"' "$TICKETTY"
 grep -q 'env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-asrarjojo7-max/ticketty-recovery-FORK}"' "$TICKETTY"
 grep -q 'TICKETTY_GITHUB_REPOSITORY=asrarjojo7-max/ticketty-recovery-FORK' "$TICKETTY"
+
+# A completed installation must use the same installer command as a safe update entrypoint.
+grep -q 'previous_status="$(get DEPLOYMENT_STATUS 2>/dev/null || true)"' "$TICKETTY"
+grep -q 'previous_status" == READY && -z "$REF"' "$TICKETTY"
+grep -q 'update_plan="$(plan_json)"' "$TICKETTY"
+grep -q 'update_ref "$update_target"' "$TICKETTY"
