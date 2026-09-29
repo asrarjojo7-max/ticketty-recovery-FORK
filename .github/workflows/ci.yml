@@ -253,12 +253,8 @@ jobs:
       - name: Validate deployment scripts
         run: |
           bash -n ops/deployment/ticketty
-          # Production CLI must remain terminal-safe: no RTL/non-ASCII user-facing text.
-          if grep -RInP '[\\x{0600}-\\x{06FF}\\x{0750}-\\x{077F}\\x{08A0}-\\x{08FF}]' install.sh ops/deployment --include='*.sh'; then
-            echo "Arabic/RTL text detected in production CLI files." >&2
-            exit 1
-          fi
-          if grep -RInP '[^\\x00-\\x7F]' install.sh ops/deployment --include='*.sh'; then
+          # Production CLI must remain terminal-safe: ASCII-only user-facing text.
+          if LC_ALL=C grep -RInP '[^\x00-\x7F]' install.sh ops/deployment --include='*.sh'; then
             echo "Non-ASCII text detected in production CLI files." >&2
             exit 1
           fi
