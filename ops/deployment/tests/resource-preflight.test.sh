@@ -82,31 +82,3 @@ grep -q '^RESOURCE_PROFILE=minimal$' <<<"$out"
 [[ "$(jq -r '.accepted.server_id' "$STATE/resource-plan.json")" == "server-b" ]]
 
 echo "resource-preflight tests: PASS (7 scenarios)"
- <<<"$out"
-grep -q 'Accepted resource profile is already stored' <<<"$err"
-[[ "$(jq -r '.accepted.accepted_at' "$STATE/resource-plan.json")" == "$first_at" ]]
-
-if MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0 >/dev/null 2>&1; then
-  echo "resource profile changed silently on same server" >&2
-  exit 1
-fi
-
-if MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 1 >/dev/null 2>&1; then
-  echo "reconfigure accepted without explicit confirmation" >&2
-  exit 1
-fi
-
-out="$(MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=1 "$HELPER" "$MOCK" "$STATE" server-a 1)"
-grep -q '^RESOURCE_PROFILE=minimal$' <<<"$out"
-[[ "$(jq -r '.accepted.profile' "$STATE/resource-plan.json")" == "minimal" ]]
-
-if MOCK_PROFILE=constrained NON_INTERACTIVE=1 CONFIRMED=1 "$HELPER" "$MOCK" "$STATE" server-a 1 >/dev/null 2>&1; then
-  echo "constrained resource plan bypassed safety gate" >&2
-  exit 1
-fi
-
-out="$(MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=1 "$HELPER" "$MOCK" "$STATE" server-b 0)"
-grep -q '^RESOURCE_PROFILE=minimal$' <<<"$out"
-[[ "$(jq -r '.accepted.server_id' "$STATE/resource-plan.json")" == "server-b" ]]
-
-echo "resource-preflight tests: PASS (7 scenarios)"
