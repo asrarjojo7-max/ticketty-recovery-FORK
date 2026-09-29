@@ -27,15 +27,15 @@ decision="$(jq -er '.decision' <<<"$plan")"
 workers="$(jq -er '.recommended_workers' <<<"$plan")"
 monitoring="$(jq -er '.monitoring_profile' <<<"$plan")"
 
-printf '\n'
-printf '  الموارد المكتشفة فعليًا:\n'
-printf '    RAM الفعّالة: %s KiB\n' "$memory"
-printf '    CPU الفعّال: %s millicores\n' "$cpu"
-printf '    المساحة المتاحة لـDocker: %s KiB\n' "$disk"
-printf '  الخطة المقترحة: %s\n' "$profile"
-printf '  القرار: %s\n' "$decision"
-printf '  العمال المقترحون: %s (لم تثبت قابليتها بالتجارب الحملية بعد)\n' "$workers"
-printf '  المراقبة: %s\n' "$monitoring"
+printf '\n' >&2
+printf '  Resource discovery:\n' >&2
+printf '    Effective RAM: %s KiB\n' "$memory" >&2
+printf '    Effective CPU: %s millicores\n' "$cpu" >&2
+printf '    Available Docker disk: %s KiB\n' "$disk" >&2
+printf '  Recommended profile: %s\n' "$profile" >&2
+printf '  Decision: %s\n' "$decision" >&2
+printf '  Recommended workers: %s (load validation not available yet)\n' "$workers" >&2
+printf '  Monitoring: %s\n' "$monitoring" >&2
 
 case "$decision" in
   blocked)
@@ -70,20 +70,28 @@ emit_state(){
 
 if (( same_server == 1 && FORCE_RECONFIGURE != 1 )); then
   if [[ "$accepted_profile" == "$profile" ]]; then
-    ok_msg="خطة الموارد المعتمدة محفوظة ولم تتغير على هذا الخادم: $accepted_profile"
-    printf '  ✓ %s\n' "$ok_msg"
+    ok_msg="Accepted resource profile is already stored for this server: $accepted_profile"
+    printf '  ✓ %s\n' "$ok_msg" >&2
     emit_state
     exit 0
   fi
   warn_msg="الخادم نفسه أعطى خطة مختلفة عن الخطة المعتمدة ($accepted_profile → $profile). لن نغيرها بصمت."
-  printf '  ! %s\n' "$warn_msg"
+  printf '  ! %s\n' "$warn_msg" >&2
 fi
 
 if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
   [[ "$CONFIRMED" -eq 1 ]] || die "خطة الموارد تحتاج موافقة صريحة في التشغيل غير التفاعلي؛ استخدم --confirm."
 else
-  read -r -p "اعتماد خطة الموارد '$profile' على هذا الخادم؟ [y/N]: " answer
-  [[ "$answer" =~ ^[Yy]$ ]] || die "لم يتم اعتماد خطة الموارد."
+  prompt="Accept resource profile '$profile' on this server? [y/N]: "
+  if [[ -r /dev/tty ]]; then
+    read -r -p "$prompt" answer < /dev/tty
+  else
+    read -r -p "$prompt" answer
+  fi
+  case "$answer" in
+    y|Y|yes|YES) ;;
+    *) die "Resource profile was not accepted." ;;
+  esac
 fi
 
 accepted_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
