@@ -26,7 +26,7 @@ set_state(){
 }
 export_profile(){
   local output="${1:-$PROFILE_DIR/ticketty-profile.json}"
-  [[ -f "$ETC_ROOT/ticketty.env" ]] || die "ملف بيئة Ticketty غير موجود."
+  [[ -f "$ETC_ROOT/ticketty.env" ]] || die "Ticketty environment file is missing."
   install -d -m 0700 "$PROFILE_DIR"
   local repo root domain tunnel channel backup weekly monthly backend web proxy server
   repo="$(grep "^TICKETTY_GITHUB_REPOSITORY=" "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
@@ -48,13 +48,13 @@ export_profile(){
     --arg server "$server" --arg backend "$backend" --arg web "$web" --arg proxy "$proxy" \
     '{schema_version:1,secrets_included:false,server_id:$server,repository:$repo,install_root:$root,domain:$domain,cloudflare_tunnel_id:$tunnel,release_channel:$channel,backup_remote:$backup,backup_weekly_remote:$weekly,backup_monthly_remote:$monthly,backend_port:($backend|tonumber),web_port:($web|tonumber),trust_proxy_hops:($proxy|tonumber)}' > "$output"
   chmod 600 "$output"
-  echo "تم تصدير profile آمن: $output"
+  echo "Secure profile exported: $output"
 }
 
 import_profile(){
   local input="$1"
-  [[ -f "$input" ]] || die "ملف profile غير موجود."
-  jq -e '.schema_version == 1 and .secrets_included == false' "$input" >/dev/null || die "profile غير صالح أو يحتوي على أسرار."
+  [[ -f "$input" ]] || die "Profile file is missing."
+  jq -e '.schema_version == 1 and .secrets_included == false' "$input" >/dev/null || die "Profile is invalid or contains secrets."
   install -d -m 0700 "$PROFILE_DIR"
   install -m 0600 "$input" "$PROFILE_DIR/profile.json"
   local value
@@ -70,12 +70,12 @@ import_profile(){
   value="$(load_value web_port)"; [[ -n "$value" ]] && set_state WEB_PORT "$value"
   value="$(load_value trust_proxy_hops)"; [[ -n "$value" ]] && set_state TRUST_PROXY_HOPS "$value"
   value="$(load_value cloudflare_tunnel_id)"; [[ -n "$value" ]] && set_state CLOUDFLARE_TUNNEL_ID "$value"
-  echo "تم استيراد profile. لم يتم استيراد أي سر."
+  echo "Profile imported. No secrets were imported."
 }
 
 command="${1:-export}"
 case "$command" in
   export) export_profile "${2:-}" ;;
-  import) [[ -n "${2:-}" ]] || die "ملف profile مطلوب."; import_profile "$2" ;;
-  *) die "أمر profile غير معروف." ;;
+  import) [[ -n "${2:-}" ]] || die "Profile file is required."; import_profile "$2" ;;
+  *) die "Unknown profile command." ;;
 esac
