@@ -13,6 +13,7 @@ sudo ticketty update --plan
 sudo ticketty migrate
 sudo ticketty status
 sudo ticketty doctor
+sudo ticketty reconfigure-resources
 sudo ticketty gate <release-tag>
 sudo ticketty setup-cloudflare
 sudo ticketty profile-export
@@ -25,7 +26,7 @@ sudo ticketty transfer-import <bundle.tar.gz>
 - GitHub هو مصدر الكود فقط. لا يوجد `git push` من Installer ولا GitHub write credential على السيرفر.
 - حالة النشر والأسرار والبيانات تبقى على السيرفر أو في النسخ الاحتياطية المحمية.
 - كل مرحلة تسجل `PENDING/RUNNING/DONE/FAILED` في `/var/lib/ticketty/deployment/state.env`.
-- إعادة `ticketty resume` تعيد فقط المراحل غير المكتملة وتتحقق من الحالة الفعلية قبل المتابعة.
+- إعادة `ticketty resume` تعيد فقط المراحل غير المكتملة وتتحقق من الحالة الفعلية قبل المتابعة. الإعدادات الموجودة لا تُستبدل بصمت، وخطة الموارد المقبولة لا تتغير على الخادم نفسه إلا عبر `reconfigure-resources`.
 - التحديثات الإنتاجية مبنية على GitHub Releases/tags وليس على `master`.
 - قبل أي تحديث توجد نسخة PostgreSQL احتياطية محلية مع checksum.
 - تحديث Release الإنتاجي يمر عبر release-gate ويتطلب نجاح CI على نفس commit.
@@ -93,7 +94,7 @@ ticketty migrate
 التحقق
 ```
 
-الـtransfer bundle لا يحتوي أسرارًا ولا قاعدة البيانات. هوية السيرفر الجديد تُنشأ محليًا ولا تُنسخ من السيرفر القديم.
+الـtransfer bundle لا يحتوي أسرارًا ولا قاعدة البيانات، ويُتحقق من SHA-256 قبل الاستيراد. هوية السيرفر الجديد تُنشأ محليًا من machine-id ولا تُنسخ من السيرفر القديم، ويُحفظ release المصدر لاستخدامه عند أول تثبيت.
 ## ملاحظات أمان
 
 - لا تستخدم أسرارًا حقيقية من `.env.production.example`.

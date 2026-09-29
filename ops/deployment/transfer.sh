@@ -3,14 +3,14 @@ set -Eeuo pipefail
 umask 077
 ROOT="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
 STATE="${TICKETTY_DEPLOYMENT_STATE_DIR:-/var/lib/ticketty/deployment}"
-ETC="/etc/ticketty"
+ETC="${TICKETTY_ETC_ROOT:-/etc/ticketty}"
 die(){ echo "ERROR: $*" >&2; exit 1; }
 profile="$STATE/ticketty-profile.json"
 profile_script="$ROOT/ops/deployment/profile.sh"
-[[ -f "$ETC/ticketty.env" ]] || die "بيئة Ticketty غير موجودة."
 [[ -f "$profile_script" ]] || die "profile.sh غير موجود."
 
 export_bundle(){
+  [[ -f "$ETC/ticketty.env" ]] || die "بيئة Ticketty غير موجودة للتصدير."
   local output="${1:-$STATE/ticketty-transfer-$(date -u +%Y%m%dT%H%M%SZ).tar.gz}"
   mkdir -p "$(dirname "$output")"
   "$profile_script" export "$profile" >/dev/null
@@ -42,16 +42,44 @@ export_bundle(){
 import_bundle(){
   local input="${1:-}"
   [[ -f "$input" ]] || die "ملف النقل غير موجود."
+  [[ -f "$input.sha256" ]] || die "checksum ملف النقل غير موجود."
+  (
+    cd "$(dirname "$input")"
+    sha256sum --check "$(basename "$input").sha256" >/dev/null
+  ) || die "checksum ملف النقل غير مطابق."
   tar -tzf "$input" >/dev/null || die "ملف النقل تالف."
   if tar -tzf "$input" | awk 'index($0, "..") || substr($0,1,1)=="/" {bad=1} END{exit bad}'; then :; else die "ملف النقل يحتوي مسارًا غير آمن."; fi
   local temp; temp="$(mktemp -d)"
   trap "rm -rf \"$temp\"" EXIT
   tar -xzf "$input" -C "$temp" --no-same-owner
-  local p; p="$(find "$temp" -maxdepth 1 -name "ticketty-profile.json" -print -quit)"
+  local p manifest release commit
+  p="$(find "$temp" -maxdepth 1 -name "ticketty-profile.json" -print -quit)"
   [[ -n "$p" ]] || die "ملف profile غير موجود داخل الحزمة."
+  manifest="$(find "$temp" -maxdepth 1 -name "transfer-manifest.txt" -print -quit)"
+  [[ -n "$manifest" ]] || die "manifest النقل غير موجود داخل الحزمة."
   jq -e ".schema_version == 1 and .secrets_included == false" "$p" >/dev/null || die "profile غير آمن."
+  grep -qx "secrets_included=false" "$manifest" || die "manifest يشير إلى أسرار غير مسموحة."
+  grep -qx "database_included=false" "$manifest" || die "manifest يشير إلى قاعدة بيانات غير مسموحة."
+  release="$(grep "^release=" "$manifest" | cut -d= -f2- || true)"
+  commit="$(grep "^commit=" "$manifest" | cut -d= -f2- || true)"
+  if [[ -n "$release" ]]; then
+    [[ "$release" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "إصدار النقل غير صالح."
+  fi
+  if [[ -n "$commit" ]]; then
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "commit النقل غير صالح."
+  fi
   mkdir -p "$STATE"
+  chmod 700 "$STATE"
   install -m 0600 "$p" "$profile"
+  if [[ -n "$release" ]]; then
+    local state_file="$STATE/state.env" tmp_state
+    tmp_state="$(mktemp "$STATE/state.XXXXXX")"
+    [[ -f "$state_file" ]] && awk -F= '$1!="TRANSFER_SOURCE_RELEASE" && $1!="TRANSFER_SOURCE_COMMIT"{print}' "$state_file" > "$tmp_state" || true
+    printf "TRANSFER_SOURCE_RELEASE=%s\n" "$release" >> "$tmp_state"
+    [[ -n "$commit" ]] && printf "TRANSFER_SOURCE_COMMIT=%s\n" "$commit" >> "$tmp_state"
+    chmod 600 "$tmp_state"
+    mv "$tmp_state" "$state_file"
+  fi
   echo "تم استيراد إعدادات النقل غير السرية."
   echo "لم يتم استيراد أي secret أو بيانات قاعدة بيانات."
 }

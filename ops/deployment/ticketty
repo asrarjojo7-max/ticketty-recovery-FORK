@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 umask 077
 INSTALL_ROOT="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
-ETC_ROOT="/etc/ticketty"
-STATE_DIR="/var/lib/ticketty/deployment"
+ETC_ROOT="${TICKETTY_ETC_ROOT:-/etc/ticketty}"
+STATE_DIR="${TICKETTY_DEPLOYMENT_STATE_DIR:-/var/lib/ticketty/deployment}"
 STATE_FILE="$STATE_DIR/state.env"
-LOCK_FILE="/run/lock/ticketty-deploy.lock"
+LOCK_FILE="${TICKETTY_LOCK_FILE:-/run/lock/ticketty-deploy.lock}"
 OPS_GROUP="ticketty-ops"
 OPS_SOCKET="/run/ticketty/ops.sock"
 OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
@@ -78,6 +78,27 @@ load(){
     [[ "$p" =~ ^[0-9]+$ ]] && WEB_PORT="$p"
   fi
 }
+server_identity(){
+  local machine_id
+  if [[ -n "${TICKETTY_SERVER_ID:-}" ]]; then
+    printf "%s\n" "$TICKETTY_SERVER_ID"
+    return
+  fi
+  for file in /etc/machine-id /var/lib/dbus/machine-id; do
+    if [[ -r "$file" ]]; then
+      machine_id="$(tr -d "[:space:]" < "$file")"
+      if [[ "$machine_id" =~ ^[0-9a-fA-F]{32}$ ]]; then
+        printf "machine-%s\n" "$(printf "%s" "$machine_id" | sha256sum | cut -d" " -f1)"
+        return
+      fi
+    fi
+  done
+  hostname -s
+}
+env_set_missing(){
+  local key="$1" value="$2" file="${3:-$ETC_ROOT/ticketty.env}"
+  grep -q "^$key=" "$file" 2>/dev/null || printf "%s=%s\n" "$key" "$value" >> "$file"
+}
 packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "المتطلبات موجودة"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "التوزيعة غير مدعومة للتثبيت التلقائي."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "تثبيت المتطلبات تلقائيًا؟ [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
 resources(){
   local server_id out profile decision accepted_server
@@ -126,31 +147,43 @@ configure_alertmanager_receiver(){
 ensure_env(){
   local f="$ETC_ROOT/ticketty.env"
   [[ -f "$f" ]] || return
-  local pair
+  local pair value
   pair="$(grep '^TELEGRAM_PAIRING_CODE=' "$f" | cut -d= -f2- || true)"
   if [[ -z "$pair" ]]; then
     pair="$(openssl rand -hex 24)"
-    env_set TELEGRAM_PAIRING_CODE "$pair"
+    env_set_missing TELEGRAM_PAIRING_CODE "$pair" "$f"
   fi
-  env_set TELEGRAM_BOT_TOKEN_FILE "$TELEGRAM_TOKEN_FILE"
-  env_set TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE "$TELEGRAM_ALERT_TOKEN_FILE"
-  env_set CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE"
-  env_set TICKETTY_OPS_SOCKET "$OPS_SOCKET"
-  env_set TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE"
-  env_set TICKETTY_REMOTE_OPS_ENABLED true
-  env_set TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}"
-  env_set TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}"
-  env_set TICKETTY_INSTALL_ROOT "$INSTALL_ROOT"
-  env_set BACKUP_DIR "$BACKUP_ROOT"
-  local value
-  value="$(get RELEASE_CHANNEL 2>/dev/null || true)"; [[ -n "$value" ]] && env_set TICKETTY_RELEASE_CHANNEL "$value"
-  value="$(get BACKUP_REMOTE 2>/dev/null || true)"; [[ -n "$value" ]] && env_set RCLONE_REMOTE "$value"
-  value="$(get BACKUP_WEEKLY_REMOTE 2>/dev/null || true)"; [[ -n "$value" ]] && env_set RCLONE_WEEKLY_REMOTE "$value"
-  value="$(get BACKUP_MONTHLY_REMOTE 2>/dev/null || true)"; [[ -n "$value" ]] && env_set RCLONE_MONTHLY_REMOTE "$value"
-  value="$(get BACKEND_PORT 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set BACKEND_PORT "$value"
-  value="$(get WEB_PORT 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set WEB_PORT "$value"
-  value="$(get TRUST_PROXY_HOPS 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set TRUST_PROXY_HOPS "$value"
-  value="$(get CLOUDFLARE_TUNNEL_ID 2>/dev/null || true)"; [[ -n "$value" ]] && env_set CLOUDFLARE_TUNNEL_ID "$value"
+  if [[ ! -s "$STATE_DIR/pairing-code" ]]; then
+    printf "%s\n" "$pair" > "$STATE_DIR/pairing-code"
+    chmod 600 "$STATE_DIR/pairing-code"
+  fi
+  env_set_missing TELEGRAM_BOT_TOKEN_FILE "$TELEGRAM_TOKEN_FILE" "$f"
+  env_set_missing TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE "$TELEGRAM_ALERT_TOKEN_FILE" "$f"
+  env_set_missing CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE" "$f"
+  env_set_missing TICKETTY_OPS_SOCKET "$OPS_SOCKET" "$f"
+  env_set_missing TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE" "$f"
+  env_set_missing TICKETTY_REMOTE_OPS_ENABLED true "$f"
+  env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}" "$f"
+  env_set_missing TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}" "$f"
+  env_set_missing TICKETTY_INSTALL_ROOT "$INSTALL_ROOT" "$f"
+  env_set_missing BACKUP_DIR "$BACKUP_ROOT" "$f"
+
+  value="$(get RELEASE_CHANNEL 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing TICKETTY_RELEASE_CHANNEL "$value" "$f"
+  value="$(get BACKUP_REMOTE 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing RCLONE_REMOTE "$value" "$f"
+  value="$(get BACKUP_WEEKLY_REMOTE 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing RCLONE_WEEKLY_REMOTE "$value" "$f"
+  value="$(get BACKUP_MONTHLY_REMOTE 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing RCLONE_MONTHLY_REMOTE "$value" "$f"
+  value="$(get BACKEND_PORT 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] && env_set_missing BACKEND_PORT "$value" "$f"
+  value="$(get WEB_PORT 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] && env_set_missing WEB_PORT "$value" "$f"
+  value="$(get TRUST_PROXY_HOPS 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] && env_set_missing TRUST_PROXY_HOPS "$value" "$f"
+  value="$(get CLOUDFLARE_TUNNEL_ID 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing CLOUDFLARE_TUNNEL_ID "$value" "$f"
   chmod 600 "$f"
 }
 write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "بيئة الإنتاج موجودة"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
@@ -224,7 +257,51 @@ telegram(){
   if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
   ok "Telegram"; }
-cloudflare(){ [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && { ok "Cloudflare Tunnel token موجود"; return; }; [[ "$NON_INTERACTIVE" -eq 1 ]] && return; printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'; local m t; read -r -p "اختر [1]: " m; [[ -n "$m" ]] || m=1; case "$m" in 1) read -r -s -p "Tunnel Token: " t; printf '\n'; [[ -n "$t" ]] || die "Tunnel Token مطلوب."; printf '%s\n' "$t" > "$CLOUDFLARE_TOKEN_FILE"; chmod 600 "$CLOUDFLARE_TOKEN_FILE";; 2) "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE";; 3) warn "Cloudflare مؤجل.";; *) die "خيار غير صالح.";; esac; }
+cloudflare(){
+  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+    ok "Cloudflare Tunnel token موجود"
+    return
+  fi
+  if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]]; then
+    warn "Cloudflare مؤجل؛ لن نطلب الإعداد مرة أخرى أثناء الاستئناف."
+    return
+  fi
+  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+    setv CLOUDFLARE_STATUS DEFERRED
+    warn "Cloudflare مؤجل في التشغيل غير التفاعلي."
+    return
+  fi
+  printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'
+  local m t
+  read -r -p "اختر [1]: " m
+  [[ -n "$m" ]] || m=1
+  case "$m" in
+    1)
+      read -r -s -p "Tunnel Token: " t
+      printf '\n'
+      [[ -n "$t" ]] || die "Tunnel Token مطلوب."
+      printf "%s\n" "$t" > "$CLOUDFLARE_TOKEN_FILE"
+      chmod 600 "$CLOUDFLARE_TOKEN_FILE"
+      setv CLOUDFLARE_STATUS CONFIGURED
+      ;;
+    2)
+      "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
+      if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+        setv CLOUDFLARE_STATUS CONFIGURED
+      else
+        setv CLOUDFLARE_STATUS DEFERRED
+      fi
+      ;;
+    3)
+      setv CLOUDFLARE_STATUS DEFERRED
+      warn "Cloudflare مؤجل."
+      ;;
+    *)
+      die "خيار غير صالح."
+      ;;
+  esac
+}
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
@@ -260,7 +337,7 @@ verify_phase(){
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
     DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && ! grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
     TELEGRAM) [[ -s "$TELEGRAM_TOKEN_FILE" && -s "$TELEGRAM_ALERT_TOKEN_FILE" && -s "$OPS_HMAC_FILE" ]];;
-    CLOUDFLARE) [[ ! -s "$CLOUDFLARE_TOKEN_FILE" ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
+    CLOUDFLARE) [[ -s "$CLOUDFLARE_TOKEN_FILE" || "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
     COMPOSE) docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config --quiet >/dev/null 2>&1;;
     DEPLOY) health;;
     OPS) systemctl is-active --quiet ticketty-ops.service && [[ -S "$OPS_SOCKET" ]];;
@@ -277,6 +354,7 @@ plan_json(){ local cur latest; cur="$(current_release)"; latest="$(latest_json |
 select_initial_release(){
   local target
   target="$REF"
+  if [[ -z "$target" ]]; then target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"; fi
   if [[ -z "$target" ]]; then target="$(latest_json 2>/dev/null | jq -r ".tag_name // empty" || true)"; fi
   if [[ -n "$target" ]]; then
     "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
@@ -350,7 +428,7 @@ cmd_install(){
   phase CHECKOUT checkout
   setv PROJECT_DIR "$INSTALL_ROOT"
   setv REPOSITORY "$REPOSITORY"
-  [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "${TICKETTY_SERVER_ID:-$(hostname -s)}"
+  [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "$(server_identity)"
   phase PREFLIGHT resources
   [[ -n "$(get DEPLOYMENT_ID 2>/dev/null || true)" ]] || setv DEPLOYMENT_ID "DEP-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 3)"
   phase ENV write_env
@@ -450,7 +528,15 @@ cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] ||
 cmd_profile_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/profile.sh" export "${1:-}"; }
 cmd_profile_import(){ root; load; [[ -n "${1:-}" ]] || die "ملف profile مطلوب."; exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"; }
 cmd_transfer_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/transfer.sh" export "${1:-}"; }
-cmd_transfer_import(){ root; load; [[ -n "${1:-}" ]] || die "ملف النقل مطلوب."; exec "$INSTALL_ROOT/ops/deployment/transfer.sh" import "$1"; }
+cmd_transfer_import(){
+  root
+  load
+  [[ -n "${1:-}" ]] || die "ملف النقل مطلوب."
+  "$INSTALL_ROOT/ops/deployment/transfer.sh" import "$1"
+  [[ -f "$STATE_DIR/ticketty-profile.json" ]] || die "ملف profile لم يتم استخراجه من حزمة النقل."
+  "$INSTALL_ROOT/ops/deployment/profile.sh" import "$STATE_DIR/ticketty-profile.json"
+  ok "تم تطبيق إعدادات النقل غير السرية. لم يتم استيراد أي سر أو قاعدة بيانات."
+}
 cmd_setup_cf(){
   root; load
   "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
