@@ -134,7 +134,7 @@ packages(){
   fi
 
   if [[ "$docker_ready" -eq 0 ]]; then
-    if dpkg-query -W -f="${Status}\n" docker.io 2>/dev/null | grep -q "install ok installed"; then
+    if dpkg-query -W -f='${Status}\n' docker.io 2>/dev/null | grep -q "install ok installed"; then
       die "Docker is installed from the distribution package (docker.io) but is not healthy. Remove/migrate that package to Docker Engine from the official repository before continuing."
     fi
     local docker_os suite arch
