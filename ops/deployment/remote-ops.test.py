@@ -52,6 +52,7 @@ with tempfile.TemporaryDirectory() as temp:
     state=tmp/"state"
     fake=tmp/"ticketty"
     marker=tmp/"executed"
+    rollback_marker=tmp/"rollback-executed"
     secret="integration-test-secret-please-ignore"
     secret_path.write_text(secret,encoding="utf-8")
     fake.write_text("""#!/usr/bin/env bash
@@ -79,6 +80,7 @@ exit 2
         "TICKETTY_OPS_GROUP":"missing-test-group",
         "TICKETTY_BIN":str(fake),
         "MARKER":str(marker),
+        "ROLLBACK_MARKER":str(rollback_marker),
     })
     process=subprocess.Popen([sys.executable,str(SERVER)],env=env)
     try:
@@ -116,6 +118,22 @@ exit 2
 
         duplicate=call(str(sock),sign(secret,"EXECUTE_UPDATE",{"plan_id":plan2_id}))
         assert duplicate["ok"] is False
+
+        rollback_plan=call(str(sock),sign(secret,"PLAN_ROLLBACK"))
+        assert rollback_plan["ok"] is True
+        assert rollback_plan["result"]["rollback"] is True
+        rollback_id=rollback_plan["result"]["plan_id"]
+
+        started_rollback=call(str(sock),sign(secret,"EXECUTE_ROLLBACK",{"plan_id":rollback_id}))
+        assert started_rollback["ok"] is True
+        assert started_rollback["result"]["status"]=="running"
+        for _ in range(50):
+            if rollback_marker.exists(): break
+            time.sleep(0.05)
+        assert rollback_marker.exists(), "rollback command was not launched"
+
+        mismatch=call(str(sock),sign(secret,"EXECUTE_UPDATE",{"plan_id":rollback_id}))
+        assert mismatch["ok"] is False
     finally:
         process.terminate()
         process.wait(timeout=5)
