@@ -3,7 +3,11 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { extractBearerToken, intentFromText } from './core.mjs';
+import {
+  extractBearerToken,
+  extractStartPairingCode,
+  intentFromText,
+} from './core.mjs';
 
 const config = {
   botTokenFile: process.env.TELEGRAM_BOT_TOKEN_FILE ?? '',
@@ -1086,9 +1090,9 @@ async function handleMessage(message) {
 
   if (!chatId || !userId || !textValue) return;
 
-  if (textValue.startsWith('/start')) {
-    const parts = textValue.split(/\\s+/);
-    const candidateCode = parts[1] ?? '';
+  const candidateCode = extractStartPairingCode(textValue);
+
+  if (candidateCode !== null) {
 
     if (
       isPrivateChat(message) &&
