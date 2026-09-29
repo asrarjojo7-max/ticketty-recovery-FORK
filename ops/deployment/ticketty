@@ -12,6 +12,7 @@ OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
 TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
+CLOUDFLARED_DIR="$ETC_ROOT/cloudflared"
 BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
 DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
@@ -30,7 +31,8 @@ get(){ local key="$1"; [[ -f "$STATE_FILE" ]] || return 1; awk -F= -v k="$key" '
 setv(){ local key="$1" val="$2" tmp; dirs; tmp="$(mktemp "$STATE_DIR/state.XXXXXX")"; [[ -f "$STATE_FILE" ]] && awk -F= -v k="$key" '$1!=k{print}' "$STATE_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$val" >> "$tmp"; chmod 600 "$tmp"; mv "$tmp" "$STATE_FILE"; }
 phase(){
   local name="$1"; shift
-  local idx=0 item label
+  local idx=0 item label total start elapsed start_pct done_pct
+  total="${#PHASES[@]}"
   for item in "${PHASES[@]}"; do
     idx=$((idx+1))
     [[ "$item" == "$name" ]] && break
@@ -48,20 +50,31 @@ phase(){
     OPS) label="Remote Operations";;
     *) label="$name";;
   esac
+  start_pct=$(( (idx - 1) * 100 / total ))
+  done_pct=$(( idx * 100 / total ))
+
   if [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]]; then
-    if verify_phase "$name"; then ok "[$idx/${#PHASES[@]}] $label - verified"; return; fi
-    warn "[$idx/${#PHASES[@]}] $label - verification failed; retrying."
+    if verify_phase "$name"; then
+      ok "[$done_pct%] [$idx/$total] $label - verified"
+      return
+    fi
+    warn "[$start_pct%] [$idx/$total] $label - verification failed; retrying."
     setv "PHASE_$name" PENDING
   fi
-  printf "\n  \033[36m \033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
+
+  printf "\n=== [%3d%%] [%d/%d] %s ===\n" "$start_pct" "$idx" "$total" "$label"
   setv "PHASE_$name" RUNNING
+  start=$SECONDS
+
   if "$@"; then
+    elapsed=$((SECONDS - start))
     setv "PHASE_$name" DONE
     setv "PHASE_${name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    ok "$label - completed"
+    ok "[$done_pct%] [$idx/$total] $label - completed in ${elapsed}s"
   else
+    elapsed=$((SECONDS - start))
     setv "PHASE_$name" FAILED
-    die "$label failed. Run: sudo ticketty resume"
+    die "$label failed after ${elapsed}s. Run: sudo ticketty resume"
   fi
 }
 lock(){ dirs; exec 9>"$LOCK_FILE"; flock -n 9 || die "Another deployment operation is already running."; }
@@ -99,7 +112,74 @@ env_set_missing(){
   local key="$1" value="$2" file="${3:-$ETC_ROOT/ticketty.env}"
   grep -q "^$key=" "$file" 2>/dev/null || printf "%s=%s\n" "$key" "$value" >> "$file"
 }
-packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "Required packages are installed"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "Install required packages automatically? [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
+packages(){
+  local miss=0 x docker_ready=0
+  for x in git curl openssl jq flock; do
+    command -v "$x" >/dev/null 2>&1 || miss=1
+  done
+  . /etc/os-release
+  [[ "$ID" == ubuntu || "$ID" == debian ]] || die "Automatic installation supports Ubuntu and Debian only."
+
+  if [[ "$miss" -ne 0 ]]; then
+    if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
+      read -r -p "Install required system packages automatically? [Y/n]: " a
+      [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."
+    fi
+    printf "  Installing required system packages...\n"
+    apt-get update
+    apt-get install -y ca-certificates curl git openssl jq util-linux gnupg
+  fi
+
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    docker_ready=1
+  fi
+
+  if [[ "$docker_ready" -eq 0 ]]; then
+    if dpkg-query -W -f='${Status}\n' docker.io 2>/dev/null | grep -q "install ok installed"; then
+      die "Docker is installed from the distribution package (docker.io) but is not healthy. Remove/migrate that package to Docker Engine from the official repository before continuing."
+    fi
+    local docker_os suite arch
+    case "$ID" in
+      ubuntu) docker_os=ubuntu; suite="${UBUNTU_CODENAME:-$VERSION_CODENAME}" ;;
+      debian) docker_os=debian; suite="$VERSION_CODENAME" ;;
+    esac
+    arch="$(dpkg --print-architecture)"
+    [[ -n "$suite" ]] || die "Unable to determine the Docker repository suite."
+    printf "  Configuring the official Docker repository...\n"
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL "https://download.docker.com/linux/$docker_os/gpg" -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/$docker_os
+Suites: $suite
+Components: stable
+Architectures: $arch
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+    apt-get update
+    printf "  Installing Docker Engine, containerd, Buildx, and Compose...\n"
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  fi
+
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    printf "  Configuring the official Cloudflare package repository...\\n"
+    install -m 0755 -d /usr/share/keyrings
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+    chmod a+r /usr/share/keyrings/cloudflare-main.gpg
+    printf "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main\\n" > /etc/apt/sources.list.d/cloudflared.list
+    apt-get update
+    apt-get install -y cloudflared
+  fi
+  command -v cloudflared >/dev/null 2>&1 || die "cloudflared is not available after installation."
+
+  systemctl enable --now docker
+  docker info >/dev/null 2>&1 || die "Docker daemon is not healthy after installation. Check: systemctl status docker"
+  docker compose version >/dev/null 2>&1 || die "Docker Compose plugin is not available."
+  printf "  Running Docker runtime smoke test...\n"
+  docker run --rm hello-world
+  ok "Docker Engine, containerd, Buildx, and Compose are ready"
+}
 resources(){
   local server_id out profile decision accepted_server
   server_id="$(get SERVER_ID 2>/dev/null || true)"
@@ -258,6 +338,11 @@ telegram(){
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
   ok "Telegram"; }
 cloudflare(){
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+    ok "Cloudflare Tunnel configuration already exists"
+    return
+  fi
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
     setv CLOUDFLARE_STATUS CONFIGURED
     ok "Cloudflare Tunnel token already exists"
@@ -272,43 +357,34 @@ cloudflare(){
     warn "Cloudflare is deferred in non-interactive mode."
     return
   fi
-  printf '\nCloudflare\n  1) Use existing Tunnel\n  2) Create Tunnel + DNS automatically\n  3) Configure later\n'
-  local m t
-  read -r -p "Choose [1]: " m
-  [[ -n "$m" ]] || m=1
-  case "$m" in
-    1)
-      read -r -s -p "Tunnel Token: " t
-      printf '\n'
-      [[ -n "$t" ]] || die "Tunnel Token is required."
-      printf "%s\n" "$t" > "$CLOUDFLARE_TOKEN_FILE"
-      chmod 600 "$CLOUDFLARE_TOKEN_FILE"
-      setv CLOUDFLARE_STATUS CONFIGURED
-      ;;
-    2)
-      "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
-      if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
-        setv CLOUDFLARE_STATUS CONFIGURED
-      else
-        setv CLOUDFLARE_STATUS DEFERRED
-      fi
-      ;;
-    3)
-      setv CLOUDFLARE_STATUS DEFERRED
-      warn "Cloudflare deferred."
-      ;;
-    *)
-      die "Invalid option."
-      ;;
-  esac
+  "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" || -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+  else
+    setv CLOUDFLARE_STATUS DEFERRED
+  fi
 }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){
-  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
-    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d --build
-  else
-    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build
+  local -a compose_cmd=("docker" "compose" "-f" "$INSTALL_ROOT/compose.yaml" "--env-file" "$INSTALL_ROOT/.env")
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
+    compose_cmd+=(--profile cloudflare-local)
+  elif [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    compose_cmd+=(--profile cloudflare)
   fi
+
+  printf '  Building Docker images (live output)...\n'
+  if ! "${compose_cmd[@]}" --progress plain build; then
+    err "Docker image build failed. The service deployment was not completed."
+    return 1
+  fi
+
+  printf '  Starting services...\n'
+  if ! "${compose_cmd[@]}" up -d --no-build; then
+    err "Service startup failed. The deployment was not completed."
+    return 1
+  fi
+
   ok "Services started"
 }
 ops_service(){
@@ -337,7 +413,16 @@ verify_phase(){
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
     DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && ! grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
     TELEGRAM) [[ -s "$TELEGRAM_TOKEN_FILE" && -s "$TELEGRAM_ALERT_TOKEN_FILE" && -s "$OPS_HMAC_FILE" ]];;
-    CLOUDFLARE) [[ -s "$CLOUDFLARE_TOKEN_FILE" || "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
+    CLOUDFLARE)
+      if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]]; then
+        return 0
+      fi
+      if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
+        docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare-local ps --status running cloudflared-local 2>/dev/null | grep -q cloudflared-local
+        return
+      fi
+      [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared
+      ;;
     COMPOSE) docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config --quiet >/dev/null 2>&1;;
     DEPLOY) health;;
     OPS) systemctl is-active --quiet ticketty-ops.service && [[ -S "$OPS_SOCKET" ]];;
@@ -346,7 +431,7 @@ verify_phase(){
   esac
 }
 
-public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "Public domain is reachable through Cloudflare"; return 0; }; sleep 5; done; return 1; }
+public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" || -s "$CLOUDFLARED_DIR/config.yml" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "Public domain is reachable through Cloudflare"; return 0; }; sleep 5; done; return 1; }
 
 current_release(){ get RELEASE_REF 2>/dev/null || git -C "$INSTALL_ROOT" describe --tags --exact-match HEAD 2>/dev/null || git -C "$INSTALL_ROOT" rev-parse --short=12 HEAD; }
 latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; }

@@ -95,53 +95,84 @@ create_api_tunnel(){
 }
 
 wizard(){
-  need curl; need jq; need openssl
+  need curl; need jq; need openssl; need cloudflared
   [[ -n "$ENV_FILE" && -n "$TOKEN_FILE" ]] || die "--env and --token-file are required."
+
   if [[ -s "$TOKEN_FILE" ]]; then
-    echo "A Tunnel token is already stored."
-    local account zone id host
-    account="${CLOUDFLARE_ACCOUNT_ID:-}"
-    zone="${CLOUDFLARE_ZONE_ID:-}"
-    id="$(envv CLOUDFLARE_TUNNEL_ID)"
-    host="$(envv CLOUDFLARE_HOSTNAME)"
-    if [[ -n "$account" && -n "$zone" && -n "$id" && -n "$host" ]]; then
-      configure_tunnel "$account" "$zone" "$id" "$host"
-    else
-      echo "The existing Cloudflare Tunnel configuration will be used as-is."
-    fi
+    echo "A Cloudflare Tunnel token is already stored."
     return
   fi
 
   echo
-  echo "Cloudflare - choose a connection method:"
-  echo "  1) I already have a Tunnel"
-  echo "  2) Create a Tunnel + configure the domain automatically"
+  echo "Cloudflare setup"
+  echo "  1) Sign in with your browser and configure automatically"
+  echo "  2) Use an existing Tunnel token"
+  echo "  3) Configure later"
+  local mode
   read -r -p "Choose [1]: " mode
   mode="${mode:-1}"
 
   case "$mode" in
     1)
+      local host name login_home cert create_output id config_dir
+      host="$(envv CLOUDFLARE_HOSTNAME)"
+      [[ -n "$host" && "$host" != PLACEHOLDER ]] || die "A domain is required before Cloudflare setup."
+      config_dir="$(dirname "$TOKEN_FILE")/../cloudflared"
+      config_dir="$(readlink -m "$config_dir")"
+      install -d -m 0750 -o root -g 65532 "$config_dir"
+      login_home="$(mktemp -d /tmp/ticketty-cloudflared-login.XXXXXX)"
+      chmod 0700 "$login_home"
+
+      printf "\n  Step 1/3: Authorize Cloudflare in your browser.\n"
+      printf "  A login URL will appear below. Open it, sign in, and select: %s\n\n" "$host"
+      HOME="$login_home" cloudflared tunnel login
+      cert="$login_home/.cloudflared/cert.pem"
+      [[ -s "$cert" ]] || { rm -rf "$login_home"; die "Cloudflare authorization did not produce a certificate."; }
+
+      printf "\n  Step 2/3: Creating the Ticketty Tunnel...\n"
+      name="ticketty-$(hostname -s | tr -cd "A-Za-z0-9-" | cut -c1-24)"
+      create_output="$(HOME="$login_home" cloudflared tunnel --origincert "$cert" create --credentials-file "$config_dir/tunnel.json" "$name" 2>&1)" || { printf "%s\n" "$create_output" >&2; rm -rf "$login_home"; die "Unable to create Cloudflare Tunnel."; }
+      printf "%s\n" "$create_output"
+      id="$(printf "%s\n" "$create_output" | sed -nE "s/.*with id ([0-9a-f-]{36}).*/\1/p" | tail -1)"
+      [[ -n "$id" ]] || { rm -rf "$login_home"; die "Cloudflare did not return a Tunnel ID."; }
+
+      printf "\n  Step 3/3: Creating DNS route...\n"
+      HOME="$login_home" cloudflared tunnel --origincert "$cert" route dns "$id" "$host" || { rm -rf "$login_home"; die "Unable to create the Cloudflare DNS route."; }
+      mv "$config_dir/tunnel.json" "$config_dir/$id.json"
+      chmod 0640 "$config_dir/$id.json"
+      chown root:65532 "$config_dir/$id.json"
+      cat > "$config_dir/config.yml" <<EOF
+tunnel: $id
+credentials-file: /etc/cloudflared/$id.json
+ingress:
+  - hostname: $host
+    service: http://web:3000
+  - service: http_status:404
+EOF
+      chmod 0644 "$config_dir/config.yml"
+      rm -f "$cert"
+      rm -rf "$login_home"
+      setenv CLOUDFLARE_TUNNEL_ID "$id"
+      setenv CLOUDFLARE_CONFIG_DIR "$config_dir"
+      setenv CLOUDFLARE_HOSTNAME "$host"
+      echo "Cloudflare Tunnel and DNS are configured."
+      ;;
+    2)
       local token
-      read -r -s -p "Cloudflare Tunnel Token: " token; printf "\n"
+      read -r -s -p "Cloudflare Tunnel Token: " token
+      printf "\n"
       [[ -n "$token" ]] || die "Tunnel Token is required."
       printf "%s\n" "$token" > "$TOKEN_FILE"
       chmod 600 "$TOKEN_FILE"
+      echo "Cloudflare Tunnel token saved."
       ;;
-    2)
-      local api_token
-      read -r -s -p "Cloudflare API Token: " api_token; printf "\n"
-      [[ -n "$api_token" ]] || die "API Token is required."
-      export CLOUDFLARE_API_TOKEN="$api_token"
-      read -r -p "Cloudflare Account ID: " CLOUDFLARE_ACCOUNT_ID
-      read -r -p "Cloudflare Zone ID: " CLOUDFLARE_ZONE_ID
-      [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_ZONE_ID" ]] || die "Account ID and Zone ID are required."
-      create_api_tunnel
-      unset CLOUDFLARE_API_TOKEN
+    3)
+      setenv CLOUDFLARE_STATUS DEFERRED
+      echo "Cloudflare configuration deferred."
       ;;
     *) die "Invalid option." ;;
   esac
 }
-
 command="${1:-wizard}"
 shift || true
 while (($#)); do

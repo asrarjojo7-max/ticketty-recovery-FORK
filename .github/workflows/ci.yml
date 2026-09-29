@@ -272,6 +272,9 @@ jobs:
           bash ops/deployment/tests/resource-preflight.test.sh
           bash ops/deployment/tests/lifecycle.test.sh
           bash ops/deployment/tests/rollback-safety.test.sh
+          bash ops/deployment/tests/deployment-runtime.test.sh
+          bash ops/deployment/tests/prerequisites.test.sh
+          bash ops/deployment/tests/cloudflare-setup.test.sh
       - name: Validate Compose configuration
         run: |
           cat > .env.ci <<'EOF'
