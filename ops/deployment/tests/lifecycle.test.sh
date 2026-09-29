@@ -51,4 +51,23 @@ grep -q 'ops/deployment/profile.sh" import "\$STATE_DIR/ticketty-profile.json"' 
 grep -q 'setv CLOUDFLARE_STATUS DEFERRED' "$TICKETTY"
 grep -q 'CLOUDFLARE) \[\[ -s "\$CLOUDFLARE_TOKEN_FILE" || "\$(get CLOUDFLARE_STATUS' "$TICKETTY"
 
-echo "lifecycle tests: PASS (identity, env preservation, profile transfer, Cloudflare deferral)"
+# Transfer import is usable before ticketty.env exists on a fresh target.
+BUNDLE="$TMP/ticketty-transfer.tar.gz"
+printf "%s\n" \
+  "Ticketty Transfer Bundle" \
+  "schema_version=1" \
+  "server_id=machine-source-123" \
+  "release=v2026.10.01" \
+  "commit=0123456789abcdef0123456789abcdef01234567" \
+  "latest_migration=test" \
+  "secrets_included=false" \
+  "database_included=false" > "$STATE_ROOT/transfer-manifest.txt"
+tar -czf "$BUNDLE" -C "$STATE_ROOT" ticketty-profile.json transfer-manifest.txt
+sha256sum "$BUNDLE" > "$BUNDLE.sha256"
+IMPORT_STATE="$TMP/import-state"
+TICKETTY_ETC_ROOT="$TMP/fresh-etc" TICKETTY_DEPLOYMENT_STATE_DIR="$IMPORT_STATE" \
+  "$TRANSFER" import "$BUNDLE" >/dev/null
+[[ "$(grep "^TRANSFER_SOURCE_RELEASE=" "$IMPORT_STATE/state.env" | cut -d= -f2-)" == "v2026.10.01" ]]
+[[ "$(grep "^TRANSFER_SOURCE_COMMIT=" "$IMPORT_STATE/state.env" | cut -d= -f2-)" == "0123456789abcdef0123456789abcdef01234567" ]]
+
+echo "lifecycle tests: PASS (identity, env preservation, profile transfer, release preservation, Cloudflare deferral)"
