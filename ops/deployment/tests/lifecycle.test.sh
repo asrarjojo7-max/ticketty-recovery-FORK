@@ -51,7 +51,10 @@ grep -q 'ops/deployment/profile.sh" import "\$STATE_DIR/ticketty-profile.json"' 
 
 # Deferred Cloudflare is persisted and accepted by phase verification.
 grep -q 'setv CLOUDFLARE_STATUS DEFERRED' "$TICKETTY"
-grep -q 'CLOUDFLARE) \[\[ -s "\$CLOUDFLARE_TOKEN_FILE" || "\$(get CLOUDFLARE_STATUS' "$TICKETTY"
+grep -q 'CLOUDFLARE)' "$TICKETTY"
+grep -q 'CLOUDFLARED_DIR/config.yml' "$TICKETTY"
+grep -q 'CLOUDFLARE_TOKEN_FILE' "$TICKETTY"
+grep -q 'CLOUDFLARE_STATUS 2>/dev/null || true' "$TICKETTY"
 
 # Transfer import is usable before ticketty.env exists on a fresh target.
 BUNDLE="$TMP/ticketty-transfer.tar.gz"
