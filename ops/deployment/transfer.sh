@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 ROOT="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
 STATE="${TICKETTY_DEPLOYMENT_STATE_DIR:-/var/lib/ticketty/deployment}"
-ETC="/etc/ticketty"
+ETC="${TICKETTY_ETC_ROOT:-/etc/ticketty}"
 die(){ echo "ERROR: $*" >&2; exit 1; }
 profile="$STATE/ticketty-profile.json"
 profile_script="$ROOT/ops/deployment/profile.sh"
@@ -42,6 +42,11 @@ export_bundle(){
 import_bundle(){
   local input="${1:-}"
   [[ -f "$input" ]] || die "ملف النقل غير موجود."
+  [[ -f "$input.sha256" ]] || die "checksum ملف النقل غير موجود."
+  (
+    cd "$(dirname "$input")"
+    sha256sum --check "$(basename "$input").sha256" >/dev/null
+  ) || die "checksum ملف النقل غير مطابق."
   tar -tzf "$input" >/dev/null || die "ملف النقل تالف."
   if tar -tzf "$input" | awk 'index($0, "..") || substr($0,1,1)=="/" {bad=1} END{exit bad}'; then :; else die "ملف النقل يحتوي مسارًا غير آمن."; fi
   local temp; temp="$(mktemp -d)"
