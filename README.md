@@ -17,6 +17,8 @@ curl -fsSL https://raw.githubusercontent.com/asrarjojo7-max/ticketty-recovery-FO
 > **ملاحظة:** أمر الـInstaller الحالي يعتمد على مستودع التطوير المعتمد في هذا الخط:
 > `asrarjojo7-max/ticketty-recovery-FORK`.
 > يمكن تغيير المصدر باستخدام `TICKETTY_REPOSITORY_URL` عند الحاجة.
+>
+> **للإنتاج:** يفضّل وجود GitHub Release منشور قبل التثبيت الإنتاجي. إذا لم يوجد Release بعد، فلن يتجاوز Ticketty بوابة الإصدار تلقائيًا؛ سيطلب منك المعالج صراحةً اختيار تشغيل `master` للتطوير.
 
 ## ماذا يفعل الأمر؟
 
