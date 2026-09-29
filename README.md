@@ -9,7 +9,7 @@
 على خادم Linux جديد، نفّذ **هذا الأمر الوحيد**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh | sudo bash
+curl -fL --progress-bar https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh -o /tmp/ticketty-install.sh && sudo bash /tmp/ticketty-install.sh && rm -f /tmp/ticketty-install.sh
 ```
 
 بعد ذلك يبدأ معالج Ticketty تلقائيًا ويقوم بفحص الخادم ثم يمر بمراحل التثبيت المطلوبة.

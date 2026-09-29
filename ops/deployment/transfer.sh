@@ -7,10 +7,10 @@ ETC="${TICKETTY_ETC_ROOT:-/etc/ticketty}"
 die(){ echo "ERROR: $*" >&2; exit 1; }
 profile="$STATE/ticketty-profile.json"
 profile_script="$ROOT/ops/deployment/profile.sh"
-[[ -f "$profile_script" ]] || die "profile.sh غير موجود."
+[[ -f "$profile_script" ]] || die "profile.sh is missing."
 
 export_bundle(){
-  [[ -f "$ETC/ticketty.env" ]] || die "بيئة Ticketty غير موجودة للتصدير."
+  [[ -f "$ETC/ticketty.env" ]] || die "Ticketty environment is not available for export."
   local output="${1:-$STATE/ticketty-transfer-$(date -u +%Y%m%dT%H%M%SZ).tar.gz}"
   mkdir -p "$(dirname "$output")"
   "$profile_script" export "$profile" >/dev/null
@@ -41,32 +41,32 @@ export_bundle(){
 
 import_bundle(){
   local input="${1:-}"
-  [[ -f "$input" ]] || die "ملف النقل غير موجود."
-  [[ -f "$input.sha256" ]] || die "checksum ملف النقل غير موجود."
+  [[ -f "$input" ]] || die "Transfer bundle is missing."
+  [[ -f "$input.sha256" ]] || die "checksum Transfer bundle is missing."
   (
     cd "$(dirname "$input")"
     sha256sum --check "$(basename "$input").sha256" >/dev/null
-  ) || die "checksum ملف النقل غير مطابق."
-  tar -tzf "$input" >/dev/null || die "ملف النقل تالف."
-  if tar -tzf "$input" | awk 'index($0, "..") || substr($0,1,1)=="/" {bad=1} END{exit bad}'; then :; else die "ملف النقل يحتوي مسارًا غير آمن."; fi
+  ) || die "Transfer bundle checksum does not match."
+  tar -tzf "$input" >/dev/null || die "Transfer bundle is corrupted."
+  if tar -tzf "$input" | awk 'index($0, "..") || substr($0,1,1)=="/" {bad=1} END{exit bad}'; then :; else die "Transfer bundle contains an unsafe path."; fi
   local temp; temp="$(mktemp -d)"
   trap "rm -rf \"$temp\"" EXIT
   tar -xzf "$input" -C "$temp" --no-same-owner
   local p manifest release commit
   p="$(find "$temp" -maxdepth 1 -name "ticketty-profile.json" -print -quit)"
-  [[ -n "$p" ]] || die "ملف profile غير موجود داخل الحزمة."
+  [[ -n "$p" ]] || die "Profile file is missing from the bundle."
   manifest="$(find "$temp" -maxdepth 1 -name "transfer-manifest.txt" -print -quit)"
-  [[ -n "$manifest" ]] || die "manifest النقل غير موجود داخل الحزمة."
-  jq -e ".schema_version == 1 and .secrets_included == false" "$p" >/dev/null || die "profile غير آمن."
-  grep -qx "secrets_included=false" "$manifest" || die "manifest يشير إلى أسرار غير مسموحة."
-  grep -qx "database_included=false" "$manifest" || die "manifest يشير إلى قاعدة بيانات غير مسموحة."
+  [[ -n "$manifest" ]] || die "Transfer manifest is missing from the bundle."
+  jq -e ".schema_version == 1 and .secrets_included == false" "$p" >/dev/null || die "Profile is unsafe."
+  grep -qx "secrets_included=false" "$manifest" || die "Manifest indicates disallowed secrets."
+  grep -qx "database_included=false" "$manifest" || die "Manifest indicates a disallowed database."
   release="$(grep "^release=" "$manifest" | cut -d= -f2- || true)"
   commit="$(grep "^commit=" "$manifest" | cut -d= -f2- || true)"
   if [[ -n "$release" ]]; then
-    [[ "$release" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "إصدار النقل غير صالح."
+    [[ "$release" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Invalid transfer release."
   fi
   if [[ -n "$commit" ]]; then
-    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "commit النقل غير صالح."
+    [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "Invalid transfer commit."
   fi
   mkdir -p "$STATE"
   chmod 700 "$STATE"
@@ -80,11 +80,11 @@ import_bundle(){
     chmod 600 "$tmp_state"
     mv "$tmp_state" "$state_file"
   fi
-  echo "تم استيراد إعدادات النقل غير السرية."
-  echo "لم يتم استيراد أي secret أو بيانات قاعدة بيانات."
+  echo "Non-secret transfer settings imported."
+  echo "No secrets or database data were imported."
 }
 case "${1:-export}" in
   export) shift; export_bundle "${1:-}" ;;
   import) shift; import_bundle "${1:-}" ;;
-  *) die "الاستخدام: transfer.sh export [bundle] | import <bundle>" ;;
+  *) die "Usage: transfer.sh export [bundle] | import <bundle>" ;;
 esac

@@ -253,6 +253,11 @@ jobs:
       - name: Validate deployment scripts
         run: |
           bash -n ops/deployment/ticketty
+          # Production CLI must remain terminal-safe: ASCII-only user-facing text.
+          if LC_ALL=C grep -RInP '[^\x00-\x7F]' install.sh ops/deployment --include='*.sh'; then
+            echo "Non-ASCII text detected in production CLI files." >&2
+            exit 1
+          fi
           bash -n ops/deployment/bootstrap.sh
           bash -n ops/deployment/cloudflare.sh
           bash -n ops/deployment/profile.sh
