@@ -327,6 +327,11 @@ telegram(){
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
   ok "Telegram"; }
 cloudflare(){
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+    ok "Cloudflare Tunnel configuration already exists"
+    return
+  fi
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
     setv CLOUDFLARE_STATUS CONFIGURED
     ok "Cloudflare Tunnel token already exists"
@@ -341,35 +346,12 @@ cloudflare(){
     warn "Cloudflare is deferred in non-interactive mode."
     return
   fi
-  printf '\nCloudflare\n  1) Use existing Tunnel\n  2) Create Tunnel + DNS automatically\n  3) Configure later\n'
-  local m t
-  read -r -p "Choose [1]: " m
-  [[ -n "$m" ]] || m=1
-  case "$m" in
-    1)
-      read -r -s -p "Tunnel Token: " t
-      printf '\n'
-      [[ -n "$t" ]] || die "Tunnel Token is required."
-      printf "%s\n" "$t" > "$CLOUDFLARE_TOKEN_FILE"
-      chmod 600 "$CLOUDFLARE_TOKEN_FILE"
-      setv CLOUDFLARE_STATUS CONFIGURED
-      ;;
-    2)
-      "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
-      if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
-        setv CLOUDFLARE_STATUS CONFIGURED
-      else
-        setv CLOUDFLARE_STATUS DEFERRED
-      fi
-      ;;
-    3)
-      setv CLOUDFLARE_STATUS DEFERRED
-      warn "Cloudflare deferred."
-      ;;
-    *)
-      die "Invalid option."
-      ;;
-  esac
+  "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" || -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+  else
+    setv CLOUDFLARE_STATUS DEFERRED
+  fi
 }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){
