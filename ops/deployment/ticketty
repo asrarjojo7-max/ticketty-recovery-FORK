@@ -13,7 +13,7 @@ TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
 BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
-DEFAULT_REPO="https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git"
+DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
 RESOURCE_RECONFIGURE=0
 BACKEND_PORT=3001
@@ -163,7 +163,7 @@ ensure_env(){
   env_set_missing TICKETTY_OPS_SOCKET "$OPS_SOCKET" "$f"
   env_set_missing TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE" "$f"
   env_set_missing TICKETTY_REMOTE_OPS_ENABLED true "$f"
-  env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-asrarjojo7-max/ticketty-recovery-FORK}" "$f"
+  env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}" "$f"
   env_set_missing TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}" "$f"
   env_set_missing TICKETTY_INSTALL_ROOT "$INSTALL_ROOT" "$f"
   env_set_missing BACKUP_DIR "$BACKUP_ROOT" "$f"
@@ -219,7 +219,7 @@ TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE=$TELEGRAM_ALERT_TOKEN_FILE
 CLOUDFLARE_TUNNEL_TOKEN_FILE=$CLOUDFLARE_TOKEN_FILE
 CLOUDFLARE_HOSTNAME=PLACEHOLDER
 CLOUDFLARE_TUNNEL_IMAGE_TAG=2026.9.3
-TICKETTY_GITHUB_REPOSITORY=asrarjojo7-max/ticketty-recovery-FORK
+TICKETTY_GITHUB_REPOSITORY=mogahedadamy/ticketty-recovery
 TICKETTY_RELEASE_CHANNEL=stable
 TICKETTY_INSTALL_ROOT=$INSTALL_ROOT
 TICKETTY_OPS_SOCKET=$OPS_SOCKET
