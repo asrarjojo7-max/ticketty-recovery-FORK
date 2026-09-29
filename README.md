@@ -26,7 +26,7 @@ curl -fL --progress-bar https://raw.githubusercontent.com/mogahedadamy/ticketty-
 
 1. التحقق من صلاحيات root وتوفير أدوات النظام المطلوبة.
 2. اكتشاف ما إذا كان Ticketty مثبتًا بالفعل.
-3. تثبيت أو التحقق من Git وDocker وDocker Compose والأدوات اللازمة.
+3. تثبيت أو التحقق من Git وDocker Engine وcontainerd وBuildx وDocker Compose والأدوات اللازمة، باستخدام حزم Docker الرسمية على Ubuntu/Debian.
 4. جلب كود Ticketty والتحقق من حالة مستودع الخادم.
 5. فحص CPU وRAM والقرص وقيود cgroups والموارد المتاحة، ثم بناء خطة موارد مناسبة.
 6. إنشاء بيئة الإنتاج والأسرار مرة واحدة فقط عند الحاجة.
