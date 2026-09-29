@@ -47,6 +47,25 @@ command -v curl >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install
 
 لا تحتاج إلى إنشاء ملفات secrets يدويًا أو تشغيل migrations يدويًا أو تشغيل Docker Compose بنفسك.
 
+### إعداد Cloudflare بسهولة
+
+في خيار الإعداد التلقائي، لا يطلب Ticketty منك إنشاء API Token أو إدخال Account ID أو Zone ID.
+
+بدلًا من ذلك، يعرض المعالج رابط تسجيل دخول Cloudflare:
+
+```text
+Cloudflare setup
+  1) Sign in with your browser and configure automatically
+  2) Use an existing Tunnel token
+  3) Configure later
+
+Choose [1]:
+```
+
+عند اختيار الخيار الأول، يفتح Ticketty مسار المصادقة الرسمي لـ cloudflared. افتح الرابط الظاهر في الطرفية من أي جهاز، سجّل الدخول إلى Cloudflare، واختر الدومين. بعد اكتمال المصادقة، يقوم Ticketty تلقائيًا بإنشاء Tunnel، إنشاء DNS route للدومين، وإنشاء إعداد التشغيل على الخادم.
+
+لا تحتاج في هذا المسار إلى نسخ API Token أو Account ID أو Zone ID يدويًا.
+
 بعد اكتمال التثبيت، يعرض Ticketty رمز ربط Telegram على الخادم لاستخدامه في المحادثة الخاصة مع البوت.
 
 ## ماذا يحدث عند وجود نسخة قديمة؟
