@@ -22,13 +22,18 @@ fi
 mkdir -p "$(dirname "$ROOT")"
 if [[ -d "$ROOT/.git" ]]; then
   echo "Ticketty موجود بالفعل في $ROOT"
+  echo "تحديث أدوات الـbootstrap من المصدر..."
+  git -C "$ROOT" fetch --force "$REPO" master >/dev/null
+  git -C "$ROOT" show FETCH_HEAD:ops/deployment/ticketty > /usr/local/bin/ticketty
+  git -C "$ROOT" show FETCH_HEAD:ops/deployment/bootstrap.sh > /usr/local/bin/ticketty-bootstrap
 else
   [[ ! -e "$ROOT" ]] || { echo "المسار موجود لكنه ليس مستودع Git: $ROOT" >&2; exit 1; }
   git clone "$REPO" "$ROOT"
+  install -m 0755 "$ROOT/ops/deployment/ticketty" /usr/local/bin/ticketty
+  install -m 0755 "$ROOT/ops/deployment/bootstrap.sh" /usr/local/bin/ticketty-bootstrap
 fi
 
-install -m 0755 "$ROOT/ops/deployment/ticketty" /usr/local/bin/ticketty
-install -m 0755 "$ROOT/ops/deployment/bootstrap.sh" /usr/local/bin/ticketty-bootstrap
+chmod 0755 /usr/local/bin/ticketty /usr/local/bin/ticketty-bootstrap
 
 echo
 echo "Ticketty bootstrap جاهز."
