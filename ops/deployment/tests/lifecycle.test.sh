@@ -80,5 +80,5 @@ echo "lifecycle tests: PASS (identity, env preservation, profile transfer, relea
 grep -q 'REPO="${TICKETTY_REPOSITORY_URL:-https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git}"' "$INSTALL_ROOT/install.sh"
 grep -q 'repo="${TICKETTY_REPOSITORY_URL:-https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git}"' "$INSTALL_ROOT/ops/deployment/bootstrap.sh"
 grep -q 'DEFAULT_REPO="https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git"' "$TICKETTY"
-grep -q 'TICKETTY_GITHUB_REPOSITORY="${TICKETTY_GITHUB_REPOSITORY:-asrarjojo7-max/ticketty-recovery-FORK}"' "$TICKETTY"
+grep -q 'env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-asrarjojo7-max/ticketty-recovery-FORK}"' "$TICKETTY"
 grep -q 'TICKETTY_GITHUB_REPOSITORY=asrarjojo7-max/ticketty-recovery-FORK' "$TICKETTY"
