@@ -13,7 +13,7 @@ TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
 BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
-DEFAULT_REPO="https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git"
+DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
 RESOURCE_RECONFIGURE=0
 BACKEND_PORT=3001
@@ -163,7 +163,7 @@ ensure_env(){
   env_set_missing TICKETTY_OPS_SOCKET "$OPS_SOCKET" "$f"
   env_set_missing TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE" "$f"
   env_set_missing TICKETTY_REMOTE_OPS_ENABLED true "$f"
-  env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-asrarjojo7-max/ticketty-recovery-FORK}" "$f"
+  env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}" "$f"
   env_set_missing TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}" "$f"
   env_set_missing TICKETTY_INSTALL_ROOT "$INSTALL_ROOT" "$f"
   env_set_missing BACKUP_DIR "$BACKUP_ROOT" "$f"
@@ -219,7 +219,7 @@ TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE=$TELEGRAM_ALERT_TOKEN_FILE
 CLOUDFLARE_TUNNEL_TOKEN_FILE=$CLOUDFLARE_TOKEN_FILE
 CLOUDFLARE_HOSTNAME=PLACEHOLDER
 CLOUDFLARE_TUNNEL_IMAGE_TAG=2026.9.3
-TICKETTY_GITHUB_REPOSITORY=asrarjojo7-max/ticketty-recovery-FORK
+TICKETTY_GITHUB_REPOSITORY=mogahedadamy/ticketty-recovery
 TICKETTY_RELEASE_CHANNEL=stable
 TICKETTY_INSTALL_ROOT=$INSTALL_ROOT
 TICKETTY_OPS_SOCKET=$OPS_SOCKET
@@ -459,6 +459,33 @@ verify_final(){
 }
 cmd_install(){
   root; lock; dirs; load
+  local existing_install=0 previous_status="" update_plan="" update_target=""
+  if [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]]; then existing_install=1; fi
+  previous_status="$(get DEPLOYMENT_STATUS 2>/dev/null || true)"
+  if [[ "$existing_install" -eq 1 && "$previous_status" == READY && -z "$REF" ]]; then
+    step "TICKETTY — فحص التثبيت الحالي والتحديث"
+    update_plan="$(plan_json)"
+    if [[ "$(printf "%s" "$update_plan" | jq -r ".update // false")" == true ]]; then
+      update_target="$(printf "%s" "$update_plan" | jq -r ".latest")"
+      printf '  الإصدار الحالي: %s\n' "$(current_release)"
+      printf '  الإصدار الجديد: %s\n' "$update_target"
+      if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
+        read -r -p "تطبيق الإصدار الجديد الآن؟ [Y/n]: " answer
+        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "تم إلغاء التحديث. شغّل sudo ticketty update لاحقًا."
+      fi
+      update_ref "$update_target"
+    else
+      ok "لا يوجد Release أحدث."
+    fi
+    ensure_env
+    configure_alertmanager_receiver
+    ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"
+    ops_service
+    phase VERIFY verify_final
+    setv DEPLOYMENT_STATUS READY
+    step "اكتملت عملية التحقق/التحديث"
+    return
+  fi
   step "TICKETTY — التثبيت الذكي"
   [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]] && warn "تم العثور على تثبيت سابق؛ لن نعيد إنشاء البيانات أو الأسرار الموجودة."
   phase PACKAGES packages
