@@ -54,7 +54,9 @@ err_file="$TMP/second.err"
 MOCK_PROFILE=standard NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0 >"$out_file" 2>"$err_file"
 out="$(cat "$out_file")"
 err="$(cat "$err_file")"
-grep -q '^RESOURCE_PROFILE=standard
+grep -q '^RESOURCE_PROFILE=standard$' <<<"$out"
+grep -q 'Accepted resource profile is already stored' <<<"$err"
+[[ "$(jq -r '.accepted.accepted_at' "$STATE/resource-plan.json")" == "$first_at" ]]
 
 if MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0 >/dev/null 2>&1; then
   echo "resource profile changed silently on same server" >&2
