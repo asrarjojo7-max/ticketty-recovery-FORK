@@ -518,32 +518,56 @@ cmd_update(){
   [[ "$CONFIRMED" -eq 1 ]] || { read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; }
   update_ref "$t"
 }
+plan_rollback_json(){
+  local target commit migration
+  target="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
+  commit="$(get PREVIOUS_RELEASE_COMMIT 2>/dev/null || true)"
+  migration="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
+  if [[ -z "$target" || -z "$commit" ]]; then
+    jq -n '{ok:true,rollback:false,reason:"no-previous-release"}'
+    return
+  fi
+  if [[ "$migration" != no ]]; then
+    jq -n --arg m "$migration" '{ok:true,rollback:false,previous_release:true,reason:"migration-guard",migration_state:$m}'
+    return
+  fi
+  jq -n --arg target "$target" --arg commit "$commit" '{ok:true,rollback:true,release:$target,commit:$commit,reason:"safe-no-migration"}'
+}
+
 cmd_rollback(){
   root
   lock
   dirs
   load
+  if [[ "$JSON_OUTPUT" -eq 1 || "$DRY_RUN" -eq 1 ]]; then
+    plan_rollback_json
+    return
+  fi
   rollback_ref
 }
 
 status_json(){
   load
-  local r d s o
+  local r d s o p m
   r="$(current_release 2>/dev/null || true)"
   d="$(get APP_HOSTNAME 2>/dev/null || true)"
   s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo UNKNOWN)"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
-  jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o"     '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o}'
+  p="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
+  m="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
+  jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m"     '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
 }
 cmd_status(){
   load
-  local r d s o
+  local r d s o p m
   r="$(current_release 2>/dev/null || echo 'غير معروف')"
   d="$(get APP_HOSTNAME 2>/dev/null || echo 'غير مضبوط')"
   s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'غير معروف')"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
+  p="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
+  m="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
   if [[ "$JSON_OUTPUT" -eq 1 ]]; then
-    jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o"       '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o}'
+    jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m"       '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
     return
   fi
   step "TICKETTY — حالة السيرفر"
