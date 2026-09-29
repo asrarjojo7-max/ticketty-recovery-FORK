@@ -459,7 +459,34 @@ verify_final(){
 }
 cmd_install(){
   root; lock; dirs; load
-  local existing_install=0 previous_status="" update_plan="" update_target=""\n  if [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]]; then existing_install=1; fi\n  previous_status="$(get DEPLOYMENT_STATUS 2>/dev/null || true)"\n  if [[ "$existing_install" -eq 1 && "$previous_status" == READY && -z "$REF" ]]; then\n    step "TICKETTY — فحص التثبيت الحالي والتحديث"\n    update_plan="$(plan_json)"\n    if [[ "$(printf "%s" "$update_plan" | jq -r ".update // false")" == true ]]; then\n      update_target="$(printf "%s" "$update_plan" | jq -r ".latest")"\n      printf '  الإصدار الحالي: %s\\n' "$(current_release)"\n      printf '  الإصدار الجديد: %s\\n' "$update_target"\n      if [[ "$NON_INTERACTIVE" -eq 0 ]]; then\n        read -r -p "تطبيق الإصدار الجديد الآن؟ [Y/n]: " answer\n        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "تم إلغاء التحديث. شغّل sudo ticketty update لاحقًا."\n      fi\n      update_ref "$update_target"\n    else\n      ok "لا يوجد Release أحدث."\n    fi\n    ensure_env\n    configure_alertmanager_receiver\n    ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"\n    ops_service\n    phase VERIFY verify_final\n    setv DEPLOYMENT_STATUS READY\n    step "اكتملت عملية التحقق/التحديث"\n    return\n  fi\n  step "TICKETTY — التثبيت الذكي"
+  local existing_install=0 previous_status="" update_plan="" update_target=""
+  if [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]]; then existing_install=1; fi
+  previous_status="$(get DEPLOYMENT_STATUS 2>/dev/null || true)"
+  if [[ "$existing_install" -eq 1 && "$previous_status" == READY && -z "$REF" ]]; then
+    step "TICKETTY — فحص التثبيت الحالي والتحديث"
+    update_plan="$(plan_json)"
+    if [[ "$(printf "%s" "$update_plan" | jq -r ".update // false")" == true ]]; then
+      update_target="$(printf "%s" "$update_plan" | jq -r ".latest")"
+      printf '  الإصدار الحالي: %s\n' "$(current_release)"
+      printf '  الإصدار الجديد: %s\n' "$update_target"
+      if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
+        read -r -p "تطبيق الإصدار الجديد الآن؟ [Y/n]: " answer
+        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "تم إلغاء التحديث. شغّل sudo ticketty update لاحقًا."
+      fi
+      update_ref "$update_target"
+    else
+      ok "لا يوجد Release أحدث."
+    fi
+    ensure_env
+    configure_alertmanager_receiver
+    ln -sfn "$ETC_ROOT/ticketty.env" "$INSTALL_ROOT/.env"
+    ops_service
+    phase VERIFY verify_final
+    setv DEPLOYMENT_STATUS READY
+    step "اكتملت عملية التحقق/التحديث"
+    return
+  fi
+  step "TICKETTY — التثبيت الذكي"
   [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]] && warn "تم العثور على تثبيت سابق؛ لن نعيد إنشاء البيانات أو الأسرار الموجودة."
   phase PACKAGES packages
   phase CHECKOUT checkout
