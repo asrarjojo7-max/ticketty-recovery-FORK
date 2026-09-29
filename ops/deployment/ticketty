@@ -253,7 +253,51 @@ telegram(){
   if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
   ok "Telegram"; }
-cloudflare(){ [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && { ok "Cloudflare Tunnel token موجود"; return; }; [[ "$NON_INTERACTIVE" -eq 1 ]] && return; printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'; local m t; read -r -p "اختر [1]: " m; [[ -n "$m" ]] || m=1; case "$m" in 1) read -r -s -p "Tunnel Token: " t; printf '\n'; [[ -n "$t" ]] || die "Tunnel Token مطلوب."; printf '%s\n' "$t" > "$CLOUDFLARE_TOKEN_FILE"; chmod 600 "$CLOUDFLARE_TOKEN_FILE";; 2) "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE";; 3) warn "Cloudflare مؤجل.";; *) die "خيار غير صالح.";; esac; }
+cloudflare(){
+  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+    ok "Cloudflare Tunnel token موجود"
+    return
+  fi
+  if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]]; then
+    warn "Cloudflare مؤجل؛ لن نطلب الإعداد مرة أخرى أثناء الاستئناف."
+    return
+  fi
+  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+    setv CLOUDFLARE_STATUS DEFERRED
+    warn "Cloudflare مؤجل في التشغيل غير التفاعلي."
+    return
+  fi
+  printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'
+  local m t
+  read -r -p "اختر [1]: " m
+  [[ -n "$m" ]] || m=1
+  case "$m" in
+    1)
+      read -r -s -p "Tunnel Token: " t
+      printf '\n'
+      [[ -n "$t" ]] || die "Tunnel Token مطلوب."
+      printf "%s\n" "$t" > "$CLOUDFLARE_TOKEN_FILE"
+      chmod 600 "$CLOUDFLARE_TOKEN_FILE"
+      setv CLOUDFLARE_STATUS CONFIGURED
+      ;;
+    2)
+      "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
+      if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+        setv CLOUDFLARE_STATUS CONFIGURED
+      else
+        setv CLOUDFLARE_STATUS DEFERRED
+      fi
+      ;;
+    3)
+      setv CLOUDFLARE_STATUS DEFERRED
+      warn "Cloudflare مؤجل."
+      ;;
+    *)
+      die "خيار غير صالح."
+      ;;
+  esac
+}
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
@@ -289,7 +333,7 @@ verify_phase(){
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
     DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && ! grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
     TELEGRAM) [[ -s "$TELEGRAM_TOKEN_FILE" && -s "$TELEGRAM_ALERT_TOKEN_FILE" && -s "$OPS_HMAC_FILE" ]];;
-    CLOUDFLARE) [[ ! -s "$CLOUDFLARE_TOKEN_FILE" ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
+    CLOUDFLARE) [[ -s "$CLOUDFLARE_TOKEN_FILE" || "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
     COMPOSE) docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config --quiet >/dev/null 2>&1;;
     DEPLOY) health;;
     OPS) systemctl is-active --quiet ticketty-ops.service && [[ -S "$OPS_SOCKET" ]];;
