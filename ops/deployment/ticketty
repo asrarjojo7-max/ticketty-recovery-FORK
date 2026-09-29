@@ -2,10 +2,10 @@
 set -Eeuo pipefail
 umask 077
 INSTALL_ROOT="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
-ETC_ROOT="/etc/ticketty"
-STATE_DIR="/var/lib/ticketty/deployment"
+ETC_ROOT="${TICKETTY_ETC_ROOT:-/etc/ticketty}"
+STATE_DIR="${TICKETTY_DEPLOYMENT_STATE_DIR:-/var/lib/ticketty/deployment}"
 STATE_FILE="$STATE_DIR/state.env"
-LOCK_FILE="/run/lock/ticketty-deploy.lock"
+LOCK_FILE="${TICKETTY_LOCK_FILE:-/run/lock/ticketty-deploy.lock}"
 OPS_GROUP="ticketty-ops"
 OPS_SOCKET="/run/ticketty/ops.sock"
 OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
@@ -77,6 +77,27 @@ load(){
     p="$(grep '^WEB_PORT=' "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
     [[ "$p" =~ ^[0-9]+$ ]] && WEB_PORT="$p"
   fi
+}
+server_identity(){
+  local machine_id
+  if [[ -n "${TICKETTY_SERVER_ID:-}" ]]; then
+    printf "%s\n" "$TICKETTY_SERVER_ID"
+    return
+  fi
+  for file in /etc/machine-id /var/lib/dbus/machine-id; do
+    if [[ -r "$file" ]]; then
+      machine_id="$(tr -d "[:space:]" < "$file")"
+      if [[ "$machine_id" =~ ^[0-9a-fA-F]{32}$ ]]; then
+        printf "machine-%s\n" "$(printf "%s" "$machine_id" | sha256sum | cut -d" " -f1)"
+        return
+      fi
+    fi
+  done
+  hostname -s
+}
+env_set_missing(){
+  local key="$1" value="$2" file="${3:-$ETC_ROOT/ticketty.env}"
+  grep -q "^$key=" "$file" 2>/dev/null || printf "%s=%s\n" "$key" "$value" >> "$file"
 }
 packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "المتطلبات موجودة"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "التوزيعة غير مدعومة للتثبيت التلقائي."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "تثبيت المتطلبات تلقائيًا؟ [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
 resources(){
@@ -350,7 +371,7 @@ cmd_install(){
   phase CHECKOUT checkout
   setv PROJECT_DIR "$INSTALL_ROOT"
   setv REPOSITORY "$REPOSITORY"
-  [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "${TICKETTY_SERVER_ID:-$(hostname -s)}"
+  [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "$(server_identity)"
   phase PREFLIGHT resources
   [[ -n "$(get DEPLOYMENT_ID 2>/dev/null || true)" ]] || setv DEPLOYMENT_ID "DEP-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 3)"
   phase ENV write_env
