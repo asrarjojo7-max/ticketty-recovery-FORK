@@ -117,7 +117,7 @@ packages(){
     command -v "$x" >/dev/null 2>&1 || miss=1
   done
   . /etc/os-release
-  [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."
+  [[ "$ID" == ubuntu || "$ID" == debian ]] || die "Automatic installation supports Ubuntu and Debian only."
 
   if [[ "$miss" -ne 0 ]]; then
     if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
