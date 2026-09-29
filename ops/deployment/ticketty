@@ -111,7 +111,63 @@ env_set_missing(){
   local key="$1" value="$2" file="${3:-$ETC_ROOT/ticketty.env}"
   grep -q "^$key=" "$file" 2>/dev/null || printf "%s=%s\n" "$key" "$value" >> "$file"
 }
-packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "Required packages are installed"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "Install required packages automatically? [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
+packages(){
+  local miss=0 x docker_ready=0
+  for x in git curl openssl jq flock; do
+    command -v "$x" >/dev/null 2>&1 || miss=1
+  done
+  . /etc/os-release
+  [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."
+
+  if [[ "$miss" -ne 0 ]]; then
+    if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
+      read -r -p "Install required system packages automatically? [Y/n]: " a
+      [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."
+    fi
+    printf "  Installing required system packages...\n"
+    apt-get update
+    apt-get install -y ca-certificates curl git openssl jq util-linux gnupg
+  fi
+
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    docker_ready=1
+  fi
+
+  if [[ "$docker_ready" -eq 0 ]]; then
+    if dpkg-query -W -f="${Status}\n" docker.io 2>/dev/null | grep -q "install ok installed"; then
+      die "Docker is installed from the distribution package (docker.io) but is not healthy. Remove/migrate that package to Docker Engine from the official repository before continuing."
+    fi
+    local docker_os suite arch
+    case "$ID" in
+      ubuntu) docker_os=ubuntu; suite="${UBUNTU_CODENAME:-$VERSION_CODENAME}" ;;
+      debian) docker_os=debian; suite="$VERSION_CODENAME" ;;
+    esac
+    arch="$(dpkg --print-architecture)"
+    [[ -n "$suite" ]] || die "Unable to determine the Docker repository suite."
+    printf "  Configuring the official Docker repository...\n"
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL "https://download.docker.com/linux/$docker_os/gpg" -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/$docker_os
+Suites: $suite
+Components: stable
+Architectures: $arch
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+    apt-get update
+    printf "  Installing Docker Engine, containerd, Buildx, and Compose...\n"
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  fi
+
+  systemctl enable --now docker
+  docker info >/dev/null 2>&1 || die "Docker daemon is not healthy after installation. Check: systemctl status docker"
+  docker compose version >/dev/null 2>&1 || die "Docker Compose plugin is not available."
+  printf "  Running Docker runtime smoke test...\n"
+  docker run --rm hello-world
+  ok "Docker Engine, containerd, Buildx, and Compose are ready"
+}
 resources(){
   local server_id out profile decision accepted_server
   server_id="$(get SERVER_ID 2>/dev/null || true)"
