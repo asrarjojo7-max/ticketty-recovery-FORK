@@ -12,6 +12,7 @@ OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
 TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
+CLOUDFLARED_DIR="$ETC_ROOT/cloudflared"
 BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
 DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
@@ -373,7 +374,9 @@ cloudflare(){
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){
   local -a compose_cmd=("docker" "compose" "-f" "$INSTALL_ROOT/compose.yaml" "--env-file" "$INSTALL_ROOT/.env")
-  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
+    compose_cmd+=(--profile cloudflare-local)
+  elif [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
     compose_cmd+=(--profile cloudflare)
   fi
 
