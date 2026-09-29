@@ -65,7 +65,7 @@ printf "%s\n" \
 tar -czf "$BUNDLE" -C "$STATE_ROOT" ticketty-profile.json transfer-manifest.txt
 sha256sum "$BUNDLE" > "$BUNDLE.sha256"
 IMPORT_STATE="$TMP/import-state"
-TICKETTY_ETC_ROOT="$TMP/fresh-etc" TICKETTY_DEPLOYMENT_STATE_DIR="$IMPORT_STATE" \
+TICKETTY_INSTALL_ROOT="$ROOT" TICKETTY_ETC_ROOT="$TMP/fresh-etc" TICKETTY_DEPLOYMENT_STATE_DIR="$IMPORT_STATE" \
   "$TRANSFER" import "$BUNDLE" >/dev/null
 [[ "$(grep "^TRANSFER_SOURCE_RELEASE=" "$IMPORT_STATE/state.env" | cut -d= -f2-)" == "v2026.10.01" ]]
 [[ "$(grep "^TRANSFER_SOURCE_COMMIT=" "$IMPORT_STATE/state.env" | cut -d= -f2-)" == "0123456789abcdef0123456789abcdef01234567" ]]
