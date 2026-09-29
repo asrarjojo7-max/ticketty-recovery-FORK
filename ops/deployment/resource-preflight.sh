@@ -10,9 +10,9 @@ NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 CONFIRMED="${CONFIRMED:-0}"
 
 die(){ echo "ERROR: $*" >&2; exit 1; }
-[[ -x "$RESOURCE_SCRIPT" ]] || die "resource-profile.sh غير موجود أو غير قابل للتنفيذ."
-[[ -n "$STATE_DIR" && -n "$SERVER_ID" ]] || die "مسار الحالة ومعرّف الخادم مطلوبان."
-command -v jq >/dev/null 2>&1 || die "jq مطلوب لفحص خطة الموارد."
+[[ -x "$RESOURCE_SCRIPT" ]] || die "resource-profile.sh is missing or not executable."
+[[ -n "$STATE_DIR" && -n "$SERVER_ID" ]] || die "State directory and server ID are required."
+command -v jq >/dev/null 2>&1 || die "jq is required for resource plan validation."
 install -d -m 0700 "$STATE_DIR"
 PLAN_FILE="$STATE_DIR/resource-plan.json"
 
