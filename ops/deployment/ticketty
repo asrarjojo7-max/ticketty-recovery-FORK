@@ -30,7 +30,8 @@ get(){ local key="$1"; [[ -f "$STATE_FILE" ]] || return 1; awk -F= -v k="$key" '
 setv(){ local key="$1" val="$2" tmp; dirs; tmp="$(mktemp "$STATE_DIR/state.XXXXXX")"; [[ -f "$STATE_FILE" ]] && awk -F= -v k="$key" '$1!=k{print}' "$STATE_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$val" >> "$tmp"; chmod 600 "$tmp"; mv "$tmp" "$STATE_FILE"; }
 phase(){
   local name="$1"; shift
-  local idx=0 item label
+  local idx=0 item label total start elapsed start_pct done_pct
+  total="${#PHASES[@]}"
   for item in "${PHASES[@]}"; do
     idx=$((idx+1))
     [[ "$item" == "$name" ]] && break
@@ -48,20 +49,31 @@ phase(){
     OPS) label="Remote Operations";;
     *) label="$name";;
   esac
+  start_pct=$(( (idx - 1) * 100 / total ))
+  done_pct=$(( idx * 100 / total ))
+
   if [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]]; then
-    if verify_phase "$name"; then ok "[$idx/${#PHASES[@]}] $label - verified"; return; fi
-    warn "[$idx/${#PHASES[@]}] $label - verification failed; retrying."
+    if verify_phase "$name"; then
+      ok "[$done_pct%] [$idx/$total] $label - verified"
+      return
+    fi
+    warn "[$start_pct%] [$idx/$total] $label - verification failed; retrying."
     setv "PHASE_$name" PENDING
   fi
-  printf "\n  \033[36m \033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
+
+  printf "\n=== [%3d%%] [%d/%d] %s ===\n" "$start_pct" "$idx" "$total" "$label"
   setv "PHASE_$name" RUNNING
+  start=$SECONDS
+
   if "$@"; then
+    elapsed=$((SECONDS - start))
     setv "PHASE_$name" DONE
     setv "PHASE_${name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    ok "$label - completed"
+    ok "[$done_pct%] [$idx/$total] $label - completed in ${elapsed}s"
   else
+    elapsed=$((SECONDS - start))
     setv "PHASE_$name" FAILED
-    die "$label failed. Run: sudo ticketty resume"
+    die "$label failed after ${elapsed}s. Run: sudo ticketty resume"
   fi
 }
 lock(){ dirs; exec 9>"$LOCK_FILE"; flock -n 9 || die "Another deployment operation is already running."; }
@@ -304,11 +316,23 @@ cloudflare(){
 }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
 stack_up(){
+  local -a compose_cmd=("docker" "compose" "-f" "$INSTALL_ROOT/compose.yaml" "--env-file" "$INSTALL_ROOT/.env")
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
-    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d --build
-  else
-    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build
+    compose_cmd+=(--profile cloudflare)
   fi
+
+  printf '  Building Docker images (live output)...\n'
+  if ! "${compose_cmd[@]}" --progress plain build; then
+    err "Docker image build failed. The service deployment was not completed."
+    return 1
+  fi
+
+  printf '  Starting services...\n'
+  if ! "${compose_cmd[@]}" up -d --no-build; then
+    err "Service startup failed. The deployment was not completed."
+    return 1
+  fi
+
   ok "Services started"
 }
 ops_service(){
