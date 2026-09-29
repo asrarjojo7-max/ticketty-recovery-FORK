@@ -114,8 +114,8 @@ wizard(){
 
   echo
   echo "Cloudflare - choose a connection method:"
-  echo "  1) I already have a Tunnel"
-  echo "  2) Create a Tunnel + configure the domain automatically"
+  echo "  1) Use an existing Tunnel"
+  echo "  2) Create a Tunnel and configure the domain automatically"
   read -r -p "Choose [1]: " mode
   mode="${mode:-1}"
 
