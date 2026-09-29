@@ -24,7 +24,7 @@ if [[ -s "$TOKEN_FILE" ]]; then
 fi
 
 release="$(curl -fsSL "${headers[@]}" "https://api.github.com/repos/$REPO/releases/tags/$REF")" || die "GitHub Release not found for tag $REF."
-[[ "$(printf "%s" "$release" | jq -r ".tag_name // empty")" == "$REF" ]] || die "اسم Release لا يطابق الوسم الis required."
+[[ "$(printf "%s" "$release" | jq -r ".tag_name // empty")" == "$REF" ]] || die "Release name does not match the requested tag."
 
 ref_json="$(curl -fsSL "${headers[@]}" "https://api.github.com/repos/$REPO/git/ref/tags/$REF")" || die "Unable to read Git tag."
 object_type="$(printf "%s" "$ref_json" | jq -r ".object.type // empty")"
