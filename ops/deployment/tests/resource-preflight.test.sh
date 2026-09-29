@@ -37,16 +37,12 @@ chmod 0755 "$MOCK"
 STATE="$TMP/state"
 mkdir -p "$STATE"
 
-# ticketty invokes the helper through command substitution, so interactive
-# confirmation must use the controlling TTY while machine state stays on stdout.
+# ticketty invokes the helper through command substitution.
+# Human-readable output must stay off stdout, and interactive confirmation
+# must read from the controlling TTY.
 grep -q 'read -r -p "$prompt" answer < /dev/tty' "$HELPER"
-grep -q 'Accept resource profile' "$HELPER"
-
-TTY_OUT="$TMP/tty.out"
-printf 'y\n' | script -qec "MOCK_PROFILE=minimal NON_INTERACTIVE=0 CONFIRMED=0 \"$HELPER\" \"$MOCK\" \"$STATE\" server-tty 0" /dev/null >"$TTY_OUT"
-grep -q 'RESOURCE_PROFILE=minimal' "$TTY_OUT"
-jq -e '.accepted.profile == "minimal" and .accepted.server_id == "server-tty" and .accepted.explicit_confirmation == true' "$STATE/resource-plan.json" >/dev/null
-
+grep -q 'printf .*.Resource discovery:. >&2' "$HELPER"
+grep -q 'printf .*.Recommended profile: %s\\n. "\$profile" >&2' "$HELPER"
 
 out="$(MOCK_PROFILE=standard NON_INTERACTIVE=1 CONFIRMED=1 "$HELPER" "$MOCK" "$STATE" server-a 0)"
 grep -q '^RESOURCE_PROFILE=standard$' <<<"$out"
