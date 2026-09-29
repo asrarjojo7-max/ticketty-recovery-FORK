@@ -350,6 +350,7 @@ plan_json(){ local cur latest; cur="$(current_release)"; latest="$(latest_json |
 select_initial_release(){
   local target
   target="$REF"
+  if [[ -z "$target" ]]; then target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"; fi
   if [[ -z "$target" ]]; then target="$(latest_json 2>/dev/null | jq -r ".tag_name // empty" || true)"; fi
   if [[ -n "$target" ]]; then
     "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
