@@ -253,6 +253,7 @@ jobs:
       - name: Validate deployment scripts
         run: |
           bash -n ops/deployment/ticketty
+          bash -n install.sh ops/deployment/bootstrap.sh ops/deployment/ticketty
           bash -n ops/deployment/bootstrap.sh
           bash -n ops/deployment/cloudflare.sh
           bash -n ops/deployment/profile.sh
