@@ -147,31 +147,39 @@ configure_alertmanager_receiver(){
 ensure_env(){
   local f="$ETC_ROOT/ticketty.env"
   [[ -f "$f" ]] || return
-  local pair
+  local pair value
   pair="$(grep '^TELEGRAM_PAIRING_CODE=' "$f" | cut -d= -f2- || true)"
   if [[ -z "$pair" ]]; then
     pair="$(openssl rand -hex 24)"
-    env_set TELEGRAM_PAIRING_CODE "$pair"
+    env_set_missing TELEGRAM_PAIRING_CODE "$pair" "$f"
   fi
-  env_set TELEGRAM_BOT_TOKEN_FILE "$TELEGRAM_TOKEN_FILE"
-  env_set TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE "$TELEGRAM_ALERT_TOKEN_FILE"
-  env_set CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE"
-  env_set TICKETTY_OPS_SOCKET "$OPS_SOCKET"
-  env_set TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE"
-  env_set TICKETTY_REMOTE_OPS_ENABLED true
-  env_set TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}"
-  env_set TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}"
-  env_set TICKETTY_INSTALL_ROOT "$INSTALL_ROOT"
-  env_set BACKUP_DIR "$BACKUP_ROOT"
-  local value
-  value="$(get RELEASE_CHANNEL 2>/dev/null || true)"; [[ -n "$value" ]] && env_set TICKETTY_RELEASE_CHANNEL "$value"
-  value="$(get BACKUP_REMOTE 2>/dev/null || true)"; [[ -n "$value" ]] && env_set RCLONE_REMOTE "$value"
-  value="$(get BACKUP_WEEKLY_REMOTE 2>/dev/null || true)"; [[ -n "$value" ]] && env_set RCLONE_WEEKLY_REMOTE "$value"
-  value="$(get BACKUP_MONTHLY_REMOTE 2>/dev/null || true)"; [[ -n "$value" ]] && env_set RCLONE_MONTHLY_REMOTE "$value"
-  value="$(get BACKEND_PORT 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set BACKEND_PORT "$value"
-  value="$(get WEB_PORT 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set WEB_PORT "$value"
-  value="$(get TRUST_PROXY_HOPS 2>/dev/null || true)"; [[ "$value" =~ ^[0-9]+$ ]] && env_set TRUST_PROXY_HOPS "$value"
-  value="$(get CLOUDFLARE_TUNNEL_ID 2>/dev/null || true)"; [[ -n "$value" ]] && env_set CLOUDFLARE_TUNNEL_ID "$value"
+  env_set_missing TELEGRAM_BOT_TOKEN_FILE "$TELEGRAM_TOKEN_FILE" "$f"
+  env_set_missing TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE "$TELEGRAM_ALERT_TOKEN_FILE" "$f"
+  env_set_missing CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE" "$f"
+  env_set_missing TICKETTY_OPS_SOCKET "$OPS_SOCKET" "$f"
+  env_set_missing TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE" "$f"
+  env_set_missing TICKETTY_REMOTE_OPS_ENABLED true "$f"
+  env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}" "$f"
+  env_set_missing TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}" "$f"
+  env_set_missing TICKETTY_INSTALL_ROOT "$INSTALL_ROOT" "$f"
+  env_set_missing BACKUP_DIR "$BACKUP_ROOT" "$f"
+
+  value="$(get RELEASE_CHANNEL 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing TICKETTY_RELEASE_CHANNEL "$value" "$f"
+  value="$(get BACKUP_REMOTE 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing RCLONE_REMOTE "$value" "$f"
+  value="$(get BACKUP_WEEKLY_REMOTE 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing RCLONE_WEEKLY_REMOTE "$value" "$f"
+  value="$(get BACKUP_MONTHLY_REMOTE 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing RCLONE_MONTHLY_REMOTE "$value" "$f"
+  value="$(get BACKEND_PORT 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] && env_set_missing BACKEND_PORT "$value" "$f"
+  value="$(get WEB_PORT 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] && env_set_missing WEB_PORT "$value" "$f"
+  value="$(get TRUST_PROXY_HOPS 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] && env_set_missing TRUST_PROXY_HOPS "$value" "$f"
+  value="$(get CLOUDFLARE_TUNNEL_ID 2>/dev/null || true)"
+  [[ -n "$value" ]] && env_set_missing CLOUDFLARE_TUNNEL_ID "$value" "$f"
   chmod 600 "$f"
 }
 write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "بيئة الإنتاج موجودة"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
