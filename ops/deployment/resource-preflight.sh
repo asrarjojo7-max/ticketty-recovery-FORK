@@ -39,10 +39,10 @@ printf '  Monitoring: %s\n' "$monitoring" >&2
 
 case "$decision" in
   blocked)
-    die "الموارد ضمن فئة constrained؛ التثبيت محظور بهذه السياسة الحالية. لا يتم تجاوز بوابات الأمان."
+    die "Resources are in the constrained tier; installation is blocked by the current safety policy."
     ;;
   review|ready) ;;
-  *) die "قرار موارد غير معروف: $decision" ;;
+  *) die "Unknown resource decision: $decision" ;;
 esac
 
 accepted_profile=""
@@ -71,16 +71,16 @@ emit_state(){
 if (( same_server == 1 && FORCE_RECONFIGURE != 1 )); then
   if [[ "$accepted_profile" == "$profile" ]]; then
     ok_msg="Accepted resource profile is already stored for this server: $accepted_profile"
-    printf '  ✓ %s\n' "$ok_msg" >&2
+    printf '  [OK] %s\n' "$ok_msg" >&2
     emit_state
     exit 0
   fi
-  warn_msg="الخادم نفسه أعطى خطة مختلفة عن الخطة المعتمدة ($accepted_profile → $profile). لن نغيرها بصمت."
+  warn_msg="The same server produced a different profile ($accepted_profile -> $profile). It will not be changed silently."
   printf '  ! %s\n' "$warn_msg" >&2
 fi
 
 if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
-  [[ "$CONFIRMED" -eq 1 ]] || die "خطة الموارد تحتاج موافقة صريحة في التشغيل غير التفاعلي؛ استخدم --confirm."
+  [[ "$CONFIRMED" -eq 1 ]] || die "Resource plan requires explicit confirmation in non-interactive mode; use --confirm."
 else
   prompt="Accept resource profile '$profile' on this server? [y/N]: "
   if [[ -r /dev/tty ]]; then
