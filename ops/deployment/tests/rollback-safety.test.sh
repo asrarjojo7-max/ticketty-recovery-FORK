@@ -23,6 +23,10 @@ EOF
 
   STATE_DIR="$state"
   STATE_FILE="$state/state.env"
+  die(){
+    printf '%s\n' "$*" >&2
+    return 1
+  }
   get(){
     local key="$1"
     awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE" 2>/dev/null
