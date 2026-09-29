@@ -88,6 +88,7 @@ else
   else
     read -r -p "$prompt" answer
   fi
+  answer="$(printf '%s' "$answer" | tr -d '\r' | tr -d '[:space:]')"
   case "$answer" in
     y|Y|yes|YES) ;;
     *) die "Resource profile was not accepted." ;;
