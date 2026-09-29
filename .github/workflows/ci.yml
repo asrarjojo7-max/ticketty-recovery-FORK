@@ -263,6 +263,7 @@ jobs:
           python3 -m py_compile ops/deployment/ops-server.py
           python3 ops/deployment/remote-ops.test.py
           bash ops/deployment/tests/resource-profile.test.sh
+          bash ops/deployment/tests/script-modes.test.sh
           bash ops/deployment/tests/resource-preflight.test.sh
           bash ops/deployment/tests/lifecycle.test.sh
       - name: Validate Compose configuration
