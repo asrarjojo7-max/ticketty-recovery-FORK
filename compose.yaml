@@ -196,8 +196,23 @@ services:
     profiles:
       - cloudflare
     volumes:
-      - ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/ticketty/cloudflare-tunnel-token}:/run/secrets/cloudflare_tunnel_token:ro
+      - ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/ticketty/secrets/cloudflare-tunnel-token}:/run/secrets/cloudflare_tunnel_token:ro
 
+  cloudflared-local:
+    image: cloudflare/cloudflared:${CLOUDFLARE_TUNNEL_IMAGE_TAG:-2026.9.3}
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --config
+      - /etc/cloudflared/config.yml
+      - run
+    depends_on:
+      web:
+        condition: service_healthy
+    profiles:
+      - cloudflare-local
+    volumes:
+      - ${CLOUDFLARE_CONFIG_DIR:-/etc/ticketty/cloudflared}:/etc/cloudflared:ro
   telegram-assistant:
     build:
       context: ./ops/telegram-assistant

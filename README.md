@@ -9,7 +9,7 @@
 على خادم Linux جديد، نفّذ **هذا الأمر الوحيد**:
 
 ```bash
-curl -fL --progress-bar https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh -o /tmp/ticketty-install.sh && sudo bash /tmp/ticketty-install.sh && rm -f /tmp/ticketty-install.sh
+command -v curl >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y ca-certificates curl; } && curl -fL --progress-bar https://raw.githubusercontent.com/mogahedadamy/ticketty-recovery/master/install.sh -o /tmp/ticketty-install.sh && sudo bash /tmp/ticketty-install.sh && rm -f /tmp/ticketty-install.sh
 ```
 
 بعد ذلك يبدأ معالج Ticketty تلقائيًا ويقوم بفحص الخادم ثم يمر بمراحل التثبيت المطلوبة.
@@ -26,7 +26,7 @@ curl -fL --progress-bar https://raw.githubusercontent.com/mogahedadamy/ticketty-
 
 1. التحقق من صلاحيات root وتوفير أدوات النظام المطلوبة.
 2. اكتشاف ما إذا كان Ticketty مثبتًا بالفعل.
-3. تثبيت أو التحقق من Git وDocker وDocker Compose والأدوات اللازمة.
+3. تثبيت أو التحقق من Git وDocker Engine وcontainerd وBuildx وDocker Compose والأدوات اللازمة، باستخدام حزم Docker الرسمية على Ubuntu/Debian.
 4. جلب كود Ticketty والتحقق من حالة مستودع الخادم.
 5. فحص CPU وRAM والقرص وقيود cgroups والموارد المتاحة، ثم بناء خطة موارد مناسبة.
 6. إنشاء بيئة الإنتاج والأسرار مرة واحدة فقط عند الحاجة.
@@ -46,6 +46,25 @@ curl -fL --progress-bar https://raw.githubusercontent.com/mogahedadamy/ticketty-
 - بعض خيارات البيئة اللازمة للتثبيت.
 
 لا تحتاج إلى إنشاء ملفات secrets يدويًا أو تشغيل migrations يدويًا أو تشغيل Docker Compose بنفسك.
+
+### إعداد Cloudflare بسهولة
+
+في خيار الإعداد التلقائي، لا يطلب Ticketty منك إنشاء API Token أو إدخال Account ID أو Zone ID.
+
+بدلًا من ذلك، يعرض المعالج رابط تسجيل دخول Cloudflare:
+
+```text
+Cloudflare setup
+  1) Sign in with your browser and configure automatically
+  2) Use an existing Tunnel token
+  3) Configure later
+
+Choose [1]:
+```
+
+عند اختيار الخيار الأول، يفتح Ticketty مسار المصادقة الرسمي لـ cloudflared. افتح الرابط الظاهر في الطرفية من أي جهاز، سجّل الدخول إلى Cloudflare، واختر الدومين. بعد اكتمال المصادقة، يقوم Ticketty تلقائيًا بإنشاء Tunnel، إنشاء DNS route للدومين، وإنشاء إعداد التشغيل على الخادم.
+
+لا تحتاج في هذا المسار إلى نسخ API Token أو Account ID أو Zone ID يدويًا.
 
 بعد اكتمال التثبيت، يعرض Ticketty رمز ربط Telegram على الخادم لاستخدامه في المحادثة الخاصة مع البوت.
 
