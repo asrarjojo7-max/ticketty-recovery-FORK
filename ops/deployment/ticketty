@@ -459,7 +459,7 @@ cmd_setup_cf(){
     public_health || warn "Cloudflare يعمل لكن الدومين العام لم يستجب بعد؛ استخدم ticketty doctor."
   fi
 }
-usage(){ printf '%s\n' 'ticketty | install | resume | update | migrate | status | doctor | gate TAG | setup-cloudflare | profile-export | profile-import FILE | transfer-export | transfer-import FILE'; }
+usage(){ printf '%s\\n' 'ticketty | install | resume | update | migrate | status | doctor | reconfigure-resources | gate TAG | setup-cloudflare | profile-export | profile-import FILE | transfer-export | transfer-import'; }
 menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) ترحيل قاعدة البيانات\n  5) الحالة\n  6) الفحص التشخيصي\n  7) Cloudflare\n  8) إعادة تقييم موارد الخادم\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;8) cmd_reconfigure_resources;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
 main(){
   local command=menu
