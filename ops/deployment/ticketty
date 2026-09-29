@@ -19,12 +19,12 @@ RESOURCE_RECONFIGURE=0
 BACKEND_PORT=3001
 WEB_PORT=3000
 PHASES=(PACKAGES CHECKOUT PREFLIGHT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY OPS VERIFY)
-ok(){ printf '  \033[32m✓\033[0m %s\n' "$*"; }
-warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
-err(){ printf '  \033[31m✗\033[0m %s\n' "$*" >&2; }
+ok(){ printf '  [OK] %s\n' "$*"; }
+warn(){ printf '  [WARN] %s\n' "$*"; }
+err(){ printf '  [ERROR] %s\n' "$*" >&2; }
 die(){ err "$*"; exit 1; }
-step(){ printf '\n\033[1m%s\033[0m\n' "$*"; }
-root(){ [[ "$(id -u)" -eq 0 ]] || die "شغّل باستخدام sudo/root."; }
+step(){ printf '\n=== %s ===\n' "$*"; }
+root(){ [[ "$(id -u)" -eq 0 ]] || die "Run as sudo/root."; }
 dirs(){ install -d -m 0700 "$STATE_DIR" "$STATE_DIR/logs" "$ETC_ROOT/secrets"; install -d -m 0750 /run/ticketty /run/lock; }
 get(){ local key="$1"; [[ -f "$STATE_FILE" ]] || return 1; awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE"; }
 setv(){ local key="$1" val="$2" tmp; dirs; tmp="$(mktemp "$STATE_DIR/state.XXXXXX")"; [[ -f "$STATE_FILE" ]] && awk -F= -v k="$key" '$1!=k{print}' "$STATE_FILE" > "$tmp" || true; printf '%s=%s\n' "$key" "$val" >> "$tmp"; chmod 600 "$tmp"; mv "$tmp" "$STATE_FILE"; }
@@ -36,35 +36,35 @@ phase(){
     [[ "$item" == "$name" ]] && break
   done
   case "$name" in
-    PREFLIGHT) label="فحص السيرفر";;
-    PACKAGES) label="المتطلبات";;
-    CHECKOUT) label="كود Ticketty";;
-    ENV) label="الإعداد والأسرار";;
-    DOMAIN) label="الدومين";;
+    PREFLIGHT) label="Server Resources";;
+    PACKAGES) label="Prerequisites";;
+    CHECKOUT) label="Ticketty Source";;
+    ENV) label="Configuration & Secrets";;
+    DOMAIN) label="Domain";;
     TELEGRAM) label="Telegram";;
     CLOUDFLARE) label="Cloudflare";;
-    COMPOSE) label="فحص Docker Compose";;
-    DEPLOY) label="تشغيل الخدمات";;
+    COMPOSE) label="Docker Compose Validation";;
+    DEPLOY) label="Service Deployment";;
     OPS) label="Remote Operations";;
     *) label="$name";;
   esac
   if [[ "$(get "PHASE_$name" 2>/dev/null || true)" == DONE ]]; then
-    if verify_phase "$name"; then ok "[$idx/${#PHASES[@]}] $label — مكتمل ومتحقق"; return; fi
-    warn "[$idx/${#PHASES[@]}] $label — التحقق فشل؛ سنعيد المرحلة."
+    if verify_phase "$name"; then ok "[$idx/${#PHASES[@]}] $label - verified"; return; fi
+    warn "[$idx/${#PHASES[@]}] $label - verification failed; retrying."
     setv "PHASE_$name" PENDING
   fi
-  printf "\n  \033[36m●\033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
+  printf "\n  \033[36m \033[0m [%s/%s] %s\n" "$idx" "${#PHASES[@]}" "$label"
   setv "PHASE_$name" RUNNING
   if "$@"; then
     setv "PHASE_$name" DONE
     setv "PHASE_${name}_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    ok "$label — تم"
+    ok "$label - completed"
   else
     setv "PHASE_$name" FAILED
-    die "$label فشل. استخدم: sudo ticketty resume"
+    die "$label failed. Run: sudo ticketty resume"
   fi
 }
-lock(){ dirs; exec 9>"$LOCK_FILE"; flock -n 9 || die "هناك عملية نشر أخرى تعمل."; }
+lock(){ dirs; exec 9>"$LOCK_FILE"; flock -n 9 || die "Another deployment operation is already running."; }
 load(){
   local v
   v="$(get PROJECT_DIR 2>/dev/null || true)"; [[ -n "$v" ]] && INSTALL_ROOT="$v"
@@ -99,20 +99,20 @@ env_set_missing(){
   local key="$1" value="$2" file="${3:-$ETC_ROOT/ticketty.env}"
   grep -q "^$key=" "$file" 2>/dev/null || printf "%s=%s\n" "$key" "$value" >> "$file"
 }
-packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "المتطلبات موجودة"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "التوزيعة غير مدعومة للتثبيت التلقائي."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "تثبيت المتطلبات تلقائيًا؟ [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
+packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "Required packages are installed"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "This distribution is not supported for automatic installation."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "Install required packages automatically? [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "Cancelled."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
 resources(){
   local server_id out profile decision accepted_server
   server_id="$(get SERVER_ID 2>/dev/null || true)"
   [[ -n "$server_id" ]] || server_id="$(hostname -s)"
-  [[ -n "$server_id" ]] || die "تعذر تحديد هوية الخادم."
-  [[ -x "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" ]] || die "بوابة فحص الموارد غير موجودة."
-  [[ -x "$INSTALL_ROOT/ops/deployment/resource-profile.sh" ]] || die "مخطط الموارد غير موجود."
+  [[ -n "$server_id" ]] || die "Unable to determine server identity."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" ]] || die "Resource preflight helper is missing."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-profile.sh" ]] || die "Resource profile planner is missing."
   out="$(NON_INTERACTIVE="$NON_INTERACTIVE" CONFIRMED="$CONFIRMED" "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" "$INSTALL_ROOT/ops/deployment/resource-profile.sh" "$STATE_DIR" "$server_id" "$RESOURCE_RECONFIGURE")" || return 1
   printf "%s\n" "$out"
   profile="$(grep "^RESOURCE_PROFILE=" <<<"$out" | cut -d= -f2-)"
   decision="$(grep "^RESOURCE_PROFILE_DECISION=" <<<"$out" | cut -d= -f2-)"
   accepted_server="$(grep "^RESOURCE_PROFILE_SERVER_ID=" <<<"$out" | cut -d= -f2-)"
-  [[ -n "$profile" && -n "$decision" && -n "$accepted_server" ]] || die "تعذر حفظ خطة الموارد."
+  [[ -n "$profile" && -n "$decision" && -n "$accepted_server" ]] || die "Unable to save the resource plan."
   setv RESOURCE_PROFILE "$profile"
   setv RESOURCE_PROFILE_DECISION "$decision"
   setv RESOURCE_PROFILE_SERVER_ID "$accepted_server"
@@ -121,10 +121,10 @@ resources(){
   setv RESOURCE_EFFECTIVE_MEMORY_KIB "$(grep "^RESOURCE_EFFECTIVE_MEMORY_KIB=" <<<"$out" | cut -d= -f2-)"
   setv RESOURCE_EFFECTIVE_CPU_MILLICORES "$(grep "^RESOURCE_EFFECTIVE_CPU_MILLICORES=" <<<"$out" | cut -d= -f2-)"
   setv RESOURCE_AVAILABLE_DISK_KIB "$(grep "^RESOURCE_AVAILABLE_DISK_KIB=" <<<"$out" | cut -d= -f2-)"
-  ok "خطة الموارد معتمدة: $profile"
+  ok "Resource profile accepted: $profile"
 }
-checkout(){ [[ -d "$INSTALL_ROOT/.git" ]] && { ok "المستودع موجود"; return; }; mkdir -p "$(dirname "$INSTALL_ROOT")"; git clone "$REPOSITORY" "$INSTALL_ROOT"; ok "تم جلب المستودع"; }
-clean(){ git -C "$INSTALL_ROOT" diff --quiet || die "توجد تغييرات محلية غير محفوظة."; git -C "$INSTALL_ROOT" diff --cached --quiet || die "توجد تغييرات staged."; }
+checkout(){ [[ -d "$INSTALL_ROOT/.git" ]] && { ok "Repository already present"; return; }; mkdir -p "$(dirname "$INSTALL_ROOT")"; git clone "$REPOSITORY" "$INSTALL_ROOT"; ok "Repository cloned"; }
+clean(){ git -C "$INSTALL_ROOT" diff --quiet || die "Local uncommitted changes detected."; git -C "$INSTALL_ROOT" diff --cached --quiet || die "Staged changes detected."; }
 env_set(){
   local key="$1" value="$2" file="$ETC_ROOT/ticketty.env"
   if grep -q "^$key=" "$file"; then
@@ -142,7 +142,7 @@ configure_alertmanager_receiver(){
   fi
   chown root:65534 "$file" 2>/dev/null || true
   chmod 640 "$file"
-  ok "قناة تنبيهات Telegram داخل الشبكة جاهزة"
+  ok "Telegram alert channel is ready"
 }
 ensure_env(){
   local f="$ETC_ROOT/ticketty.env"
@@ -186,7 +186,7 @@ ensure_env(){
   [[ -n "$value" ]] && env_set_missing CLOUDFLARE_TUNNEL_ID "$value" "$f"
   chmod 600 "$f"
 }
-write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "بيئة الإنتاج موجودة"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
+write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "Production environment already exists"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
 POSTGRES_DB=ticketty
 POSTGRES_USER=ticketty_admin
 POSTGRES_PASSWORD=$db1
@@ -236,18 +236,18 @@ domain(){
   local d
   d="$(get APP_HOSTNAME 2>/dev/null || true)"
   if [[ -z "$d" || "$d" == PLACEHOLDER ]]; then
-    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="${TICKETTY_DOMAIN:-}"; else read -r -p "الدومين (مثال app.example.com): " d; fi
+    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then d="${TICKETTY_DOMAIN:-}"; else read -r -p "Domain (example: app.example.com): " d; fi
   fi
-  [[ "$d" =~ ^([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$ ]] || die "صيغة الدومين غير صحيحة."
+  [[ "$d" =~ ^([A-Za-z0-9-]+\.)+[A-Za-z]{2,}$ ]] || die "Invalid domain format."
   sed -i "s#^WEB_ORIGIN=.*#WEB_ORIGIN=https://$d#;s#^APP_ORIGIN=.*#APP_ORIGIN=https://$d#;s#^CLOUDFLARE_HOSTNAME=.*#CLOUDFLARE_HOSTNAME=$d#" "$ETC_ROOT/ticketty.env"
   setv APP_HOSTNAME "$d"
-  ok "الدومين: $d"
+  ok "Domain: $d"
 }
 telegram(){
   if [[ ! -s "$TELEGRAM_TOKEN_FILE" ]]; then
     local t
-    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="${TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token من BotFather: " t; printf '\n'; fi
-    [[ -n "$t" ]] || die "Telegram Bot Token مطلوب."
+    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="${TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token from BotFather: " t; printf '\n'; fi
+    [[ -n "$t" ]] || die "Telegram Bot Token is required."
     printf '%s\n' "$t" > "$TELEGRAM_TOKEN_FILE"; chmod 600 "$TELEGRAM_TOKEN_FILE"
   fi
   secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32
@@ -260,27 +260,27 @@ telegram(){
 cloudflare(){
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
     setv CLOUDFLARE_STATUS CONFIGURED
-    ok "Cloudflare Tunnel token موجود"
+    ok "Cloudflare Tunnel token already exists"
     return
   fi
   if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]]; then
-    warn "Cloudflare مؤجل؛ لن نطلب الإعداد مرة أخرى أثناء الاستئناف."
+    warn "Cloudflare is deferred; it will not be requested again during resume."
     return
   fi
   if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
     setv CLOUDFLARE_STATUS DEFERRED
-    warn "Cloudflare مؤجل في التشغيل غير التفاعلي."
+    warn "Cloudflare is deferred in non-interactive mode."
     return
   fi
-  printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'
+  printf '\nCloudflare\n  1) Use existing Tunnel\n  2) Create Tunnel + DNS automatically\n  3) Configure later\n'
   local m t
-  read -r -p "اختر [1]: " m
+  read -r -p "Choose [1]: " m
   [[ -n "$m" ]] || m=1
   case "$m" in
     1)
       read -r -s -p "Tunnel Token: " t
       printf '\n'
-      [[ -n "$t" ]] || die "Tunnel Token مطلوب."
+      [[ -n "$t" ]] || die "Tunnel Token is required."
       printf "%s\n" "$t" > "$CLOUDFLARE_TOKEN_FILE"
       chmod 600 "$CLOUDFLARE_TOKEN_FILE"
       setv CLOUDFLARE_STATUS CONFIGURED
@@ -295,10 +295,10 @@ cloudflare(){
       ;;
     3)
       setv CLOUDFLARE_STATUS DEFERRED
-      warn "Cloudflare مؤجل."
+      warn "Cloudflare deferred."
       ;;
     *)
-      die "خيار غير صالح."
+      die "Invalid option."
       ;;
   esac
 }
@@ -309,7 +309,7 @@ stack_up(){
   else
     docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" up -d --build
   fi
-  ok "الخدمات"
+  ok "Services started"
 }
 ops_service(){
   getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
@@ -319,7 +319,7 @@ ops_service(){
   chmod 640 "$OPS_HMAC_FILE"
   systemctl daemon-reload
   systemctl enable --now ticketty-ops.service
-  systemctl is-active --quiet ticketty-ops.service || die "Remote Ops لم يبدأ."
+  systemctl is-active --quiet ticketty-ops.service || die "Remote Ops service did not start."
   ok "Remote Ops"
 }
 health(){ local bp="$BACKEND_PORT" wp="$WEB_PORT"; [[ -n "$bp" ]] || bp=3001; [[ -n "$wp" ]] || wp=3000; curl -fsS "http://127.0.0.1:$bp/api/health/liveness" >/dev/null && curl -fsS "http://127.0.0.1:$wp/api/health/live" >/dev/null; }
@@ -346,7 +346,7 @@ verify_phase(){
   esac
 }
 
-public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "الدومين العام متصل عبر Cloudflare"; return 0; }; sleep 5; done; return 1; }
+public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "Public domain is reachable through Cloudflare"; return 0; }; sleep 5; done; return 1; }
 
 current_release(){ get RELEASE_REF 2>/dev/null || git -C "$INSTALL_ROOT" describe --tags --exact-match HEAD 2>/dev/null || git -C "$INSTALL_ROOT" rev-parse --short=12 HEAD; }
 latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; }
@@ -363,25 +363,25 @@ select_initial_release(){
     setv RELEASE_REF "$target"
     setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
     setv DEPLOYMENT_CHANNEL stable
-    ok "تم اعتماد الإصدار $target"
+    ok "Release accepted: $target"
     return 0
   fi
   if [[ -n "$(get RELEASE_REF 2>/dev/null || true)" ]]; then return 0; fi
-  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then die "لا يوجد GitHub Release منشور؛ مرّر --ref أو أنشئ Release."; fi
-  warn "لا يوجد GitHub Release منشور حاليًا."
-  read -r -p "تثبيت master للتطوير بدلًا من Release؟ [y/N]: " answer
-  [[ "$answer" =~ ^[Yy]$ ]] || die "أنشئ GitHub Release ثم أعد المحاولة."
+  if [[ "$NON_INTERACTIVE" -eq 1 ]]; then die "No published GitHub Release found; pass --ref or create a Release."; fi
+  warn "No published GitHub Release is currently available."
+  read -r -p "Install master for development instead of a Release? [y/N]: " answer
+  [[ "$answer" =~ ^[Yy]$ ]] || die "Create a GitHub Release, then try again."
   git -C "$INSTALL_ROOT" fetch origin master
   git -C "$INSTALL_ROOT" checkout --detach origin/master
   setv RELEASE_REF master
   setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
   setv DEPLOYMENT_CHANNEL development
-  warn "تم اختيار master للتطوير؛ هذه ليست نسخة إنتاجية رسمية."
+  warn "master was selected for development; this is not an official production build."
 }
-prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Backup قبل التحديث"; }
+prebackup(){ local db user stamp file; db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; stamp="$(date -u +%Y%m%dT%H%M%SZ)"; file="$BACKUP_ROOT/pre-deploy/ticketty-$stamp.dump"; install -d -m 0700 "$BACKUP_ROOT/pre-deploy"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" exec -T postgres pg_dump -U "$user" -d "$db" --format=custom --no-owner --no-acl > "$file"; sha256sum "$file" > "$file.sha256"; setv LAST_PREDEPLOY_BACKUP "$file"; ok "Pre-update backup created"; }
 update_ref(){
   local target="$1" old old_ref
-  [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Release tag غير صالح."
+  [[ "$target" =~ ^v?[0-9][A-Za-z0-9._+-]*$ ]] || die "Invalid Release tag."
   ensure_checkout
   clean
   [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: $target"; return; }
@@ -394,28 +394,28 @@ update_ref(){
   setv LAST_UPDATE_TARGET "$target"
   setv LAST_UPDATE_MIGRATION_APPLIED no
   git -C "$INSTALL_ROOT" fetch --tags --force origin
-  git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release غير موجود."
+  git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release not found."
   git -C "$INSTALL_ROOT" checkout --detach "$target"
   if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" run --rm migrate; then
     setv LAST_UPDATE_MIGRATION_APPLIED unknown
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
-    die "فشل migration؛ لا يوجد rollback تلقائي لقاعدة البيانات أو التطبيق. راجع سجلات migration وعمّل forward recovery."
+    die "Migration failed; automatic rollback of the database or application is blocked. Review migration logs and perform forward recovery."
   fi
   setv LAST_UPDATE_MIGRATION_APPLIED yes
   if ! stack_up; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
-    die "فشل تشغيل الإصدار الجديد بعد migration؛ لا يمكن إعادة التطبيق تلقائيًا إلى الإصدار السابق مع قاعدة بيانات قد تكون تغيّرت."
+    die "The new release failed after migration; automatic application rollback is blocked because the database may have changed."
   fi
   if ! health; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
-    die "فشل health check بعد migration؛ لا يمكن إعادة التطبيق تلقائيًا إلى الإصدار السابق."
+    die "Health check failed after migration; automatic application rollback is blocked."
   fi
   setv RELEASE_REF "$target"
   setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
   setv DEPLOYMENT_CHANNEL stable
   setv DEPLOYMENT_STATUS READY
   setv LAST_UPDATE_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  ok "تم نشر $target"
+  ok "Release $target deployed"
 }
 rollback_ref(){
   local target commit migration current
@@ -423,32 +423,32 @@ rollback_ref(){
   commit="$(get PREVIOUS_RELEASE_COMMIT 2>/dev/null || true)"
   migration="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
   current="$(get RELEASE_REF 2>/dev/null || true)"
-  [[ -n "$target" && -n "$commit" ]] || die "لا توجد نسخة سابقة مسجلة يمكن العودة إليها."
-  [[ "$migration" != yes ]] || die "تم تطبيق migration في آخر تحديث؛ rollback محظور لمنع عدم توافق الكود مع قاعدة البيانات. استخدم forward recovery أو إجراء restore الموثق."
-  [[ "$migration" == no ]] || die "حالة migration غير مؤكدة؛ rollback محظور حتى يتم التحقق من قاعدة البيانات."
-  [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: rollback إلى $target"; return; }
+  [[ -n "$target" && -n "$commit" ]] || die "No recorded previous release is available for rollback."
+  [[ "$migration" != yes ]] || die "The last update applied a migration; rollback is blocked to prevent code/database incompatibility. Use forward recovery or the documented restore procedure."
+  [[ "$migration" == no ]] || die "Migration state is unknown; rollback is blocked until the database state is verified."
+  [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: rollback to $target"; return; }
   if [[ "$CONFIRMED" -ne 1 ]]; then
-    read -r -p "سيتم إعادة التطبيق إلى $target دون rollback لقاعدة البيانات. المتابعة؟ [y/N]: " answer
-    [[ "$answer" =~ ^[Yy]$ ]] || die "تم الإلغاء."
+    read -r -p "Re-deploy $target without rolling back the database? [y/N]: " answer
+    [[ "$answer" =~ ^[Yy]$ ]] || die "Cancelled."
   fi
   "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
   git -C "$INSTALL_ROOT" fetch --tags --force origin
-  [[ "$(git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target^{commit}")" == "$commit" ]] || die "الإصدار السابق لم يعد يطابق commit المسجل."
+  [[ "$(git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target^{commit}")" == "$commit" ]] || die "The previous release no longer matches the recorded commit."
   git -C "$INSTALL_ROOT" checkout --detach "$target"
   if ! stack_up; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
-    die "فشل تشغيل الإصدار السابق؛ لا توجد محاولة ثانية تلقائية."
+    die "The previous release failed to start; no second automatic attempt will be made."
   fi
   if ! health; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
-    die "فشل health check بعد rollback."
+    die "Health check failed after rollback."
   fi
   setv RELEASE_REF "$target"
   setv RELEASE_COMMIT "$commit"
   setv DEPLOYMENT_STATUS READY
   setv LAST_ROLLBACK_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   setv LAST_ROLLBACK_FROM "$current"
-  ok "تم rollback إلى $target"
+  ok "Rolled back to $target"
 }
 
 verify_final(){
@@ -463,19 +463,19 @@ cmd_install(){
   if [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]]; then existing_install=1; fi
   previous_status="$(get DEPLOYMENT_STATUS 2>/dev/null || true)"
   if [[ "$existing_install" -eq 1 && "$previous_status" == READY && -z "$REF" ]]; then
-    step "TICKETTY — فحص التثبيت الحالي والتحديث"
+    step "TICKETTY - Existing Installation Check & Update"
     update_plan="$(plan_json)"
     if [[ "$(printf "%s" "$update_plan" | jq -r ".update // false")" == true ]]; then
       update_target="$(printf "%s" "$update_plan" | jq -r ".latest")"
-      printf '  الإصدار الحالي: %s\n' "$(current_release)"
-      printf '  الإصدار الجديد: %s\n' "$update_target"
+      printf '  Current release: %s\n' "$(current_release)"
+      printf '  New release: %s\n' "$update_target"
       if [[ "$NON_INTERACTIVE" -eq 0 ]]; then
-        read -r -p "تطبيق الإصدار الجديد الآن؟ [Y/n]: " answer
-        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "تم إلغاء التحديث. شغّل sudo ticketty update لاحقًا."
+        read -r -p "Apply the new release now? [Y/n]: " answer
+        [[ -z "$answer" || "$answer" =~ ^[Yy]$ ]] || die "Update cancelled. Run sudo ticketty update later."
       fi
       update_ref "$update_target"
     else
-      ok "لا يوجد Release أحدث."
+      ok "No newer Release is available."
     fi
     ensure_env
     configure_alertmanager_receiver
@@ -483,11 +483,11 @@ cmd_install(){
     ops_service
     phase VERIFY verify_final
     setv DEPLOYMENT_STATUS READY
-    step "اكتملت عملية التحقق/التحديث"
+    step "Verification / update completed"
     return
   fi
-  step "TICKETTY — التثبيت الذكي"
-  [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]] && warn "تم العثور على تثبيت سابق؛ لن نعيد إنشاء البيانات أو الأسرار الموجودة."
+  step "TICKETTY - Smart Installation"
+  [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]] && warn "Existing installation detected; existing data and secrets will not be recreated."
   phase PACKAGES packages
   phase CHECKOUT checkout
   setv PROJECT_DIR "$INSTALL_ROOT"
@@ -505,18 +505,18 @@ cmd_install(){
   phase CLOUDFLARE cloudflare
   phase COMPOSE compose_validate
   phase DEPLOY stack_up
-  if public_health; then ok "الدومين العام"; else warn "الدومين لم يستجب بعد؛ يمكن إعادة الفحص من ticketty doctor."; fi
+  if public_health; then ok "Public domain"; else warn "Public domain is not responding yet; run ticketty doctor."; fi
   phase OPS ops_service
   phase VERIFY verify_final
   setv DEPLOYMENT_STATUS READY
-  step "اكتمل التثبيت"
+  step "Installation completed"
   local pair
   pair="$(cat "$STATE_DIR/pairing-code" 2>/dev/null || true)"
   if [[ -n "$pair" ]]; then
     printf '\n'
-    ok "لربط Telegram:"
+    ok "To pair Telegram:"
     printf '  /start %s\n' "$pair"
-    printf '  (هذه القيمة سرية؛ لا ترسلها في قناة عامة)\n'
+    printf '  (This value is secret; do not post it in a public channel.)\n'
   fi
 }
 cmd_resume(){ cmd_install; }
@@ -525,12 +525,12 @@ cmd_migrate(){
   lock
   dirs
   load
-  [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]] || die "Ticketty غير مهيأ."
-  if [[ "$CONFIRMED" -ne 1 ]]; then read -r -p "سيتم أخذ نسخة احتياطية وتشغيل migrations. المتابعة؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi
+  [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]] || die "Ticketty is not initialized."
+  if [[ "$CONFIRMED" -ne 1 ]]; then read -r -p "A backup will be created and migrations will run. Continue? [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "Cancelled."; fi
   prebackup
   docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" run --rm migrate
   setv LAST_MIGRATION_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  ok "اكتمل migration والتحققات المدمجة"
+  ok "Migration and integrated checks completed"
 }
 cmd_update(){
   root
@@ -540,9 +540,9 @@ cmd_update(){
   local p t
   p="$(plan_json)"
   if [[ "$JSON_OUTPUT" -eq 1 || "$DRY_RUN" -eq 1 ]]; then printf "%s\n" "$p"; return; fi
-  [[ "$(printf "%s" "$p" | jq -r ".update // false")" == true ]] || { ok "لا يوجد Release أحدث."; return; }
+  [[ "$(printf "%s" "$p" | jq -r ".update // false")" == true ]] || { ok "No newer Release is available."; return; }
   t="$(printf "%s" "$p" | jq -r ".latest")"
-  [[ "$CONFIRMED" -eq 1 ]] || { read -r -p "تحديث Ticketty إلى $t؟ [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; }
+  [[ "$CONFIRMED" -eq 1 ]] || { read -r -p "Update Ticketty to $t? [y/N]: " a; [[ "$a" =~ ^[Yy]$ ]] || die "Cancelled."; }
   update_ref "$t"
 }
 plan_rollback_json(){
@@ -587,9 +587,9 @@ status_json(){
 cmd_status(){
   load
   local r d s o p m
-  r="$(current_release 2>/dev/null || echo 'غير معروف')"
-  d="$(get APP_HOSTNAME 2>/dev/null || echo 'غير مضبوط')"
-  s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'غير معروف')"
+  r="$(current_release 2>/dev/null || echo 'unknown')"
+  d="$(get APP_HOSTNAME 2>/dev/null || echo 'not configured')"
+  s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'unknown')"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
   p="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
   m="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
@@ -597,51 +597,51 @@ cmd_status(){
     jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m"       '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
     return
   fi
-  step "TICKETTY — حالة السيرفر"
-  printf '  الإصدار: %s\n' "$r"
-  printf '  الدومين: %s\n' "$d"
-  printf '  حالة النشر: %s\n' "$s"
+  step "TICKETTY - Server Status"
+  printf '  Release: %s\n' "$r"
+  printf '  Domain: %s\n' "$d"
+  printf '  Deployment status: %s\n' "$s"
   printf '  Remote Ops: %s\n\n' "$o"
   if [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]]; then
     docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps || true
   else
-    warn "ملفات تشغيل Ticketty غير مكتملة بعد."
+    warn "Ticketty runtime files are not complete yet."
   fi
 }
-cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
+cmd_doctor(){ load; step "Ticketty - Diagnostics"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
 cmd_reconfigure_resources(){
   root
   lock
   dirs
   load
-  [[ -x "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" ]] || die "بوابة فحص الموارد غير موجودة."
-  [[ -x "$INSTALL_ROOT/ops/deployment/resource-profile.sh" ]] || die "مخطط الموارد غير موجود."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" ]] || die "Resource preflight helper is missing."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-profile.sh" ]] || die "Resource profile planner is missing."
   RESOURCE_RECONFIGURE=1
   resources
 }
-cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] || die "Release tag مطلوب."; "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$gate_ref"; }
+cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] || die "Release tag is required."; "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$gate_ref"; }
 cmd_profile_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/profile.sh" export "${1:-}"; }
-cmd_profile_import(){ root; load; [[ -n "${1:-}" ]] || die "ملف profile مطلوب."; exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"; }
+cmd_profile_import(){ root; load; [[ -n "${1:-}" ]] || die "Profile file is required."; exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"; }
 cmd_transfer_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/transfer.sh" export "${1:-}"; }
 cmd_transfer_import(){
   root
   load
-  [[ -n "${1:-}" ]] || die "ملف النقل مطلوب."
+  [[ -n "${1:-}" ]] || die "Transfer bundle is required."
   "$INSTALL_ROOT/ops/deployment/transfer.sh" import "$1"
-  [[ -f "$STATE_DIR/ticketty-profile.json" ]] || die "ملف profile لم يتم استخراجه من حزمة النقل."
+  [[ -f "$STATE_DIR/ticketty-profile.json" ]] || die "Profile file was not extracted from the transfer bundle."
   "$INSTALL_ROOT/ops/deployment/profile.sh" import "$STATE_DIR/ticketty-profile.json"
-  ok "تم تطبيق إعدادات النقل غير السرية. لم يتم استيراد أي سر أو قاعدة بيانات."
+  ok "Non-secret transfer settings applied. No secrets or database were imported."
 }
 cmd_setup_cf(){
   root; load
   "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
   if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
     docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d cloudflared
-    public_health || warn "Cloudflare يعمل لكن الدومين العام لم يستجب بعد؛ استخدم ticketty doctor."
+    public_health || warn "Cloudflare is running but the public domain is not responding yet; run ticketty doctor."
   fi
 }
 usage(){ printf '%s\\n' 'ticketty | install | resume | update | rollback | migrate | status | doctor | reconfigure-resources | gate TAG | setup-cloudflare | profile-export | profile-import FILE | transfer-export | transfer-import'; }
-menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) ترحيل قاعدة البيانات\n  5) الحالة\n  6) الفحص التشخيصي\n  7) Cloudflare\n  8) إعادة تقييم موارد الخادم\n  9) rollback إلى آخر إصدار مسجل\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;8) cmd_reconfigure_resources;;9) cmd_rollback;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
+menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) Install system\n  2) Resume installation\n  3) Update system\n  4) Run database migration\n  5) Show status\n  6) Run diagnostics\n  7) Cloudflare\n  8) Reconfigure server resources\n  9) Rollback to recorded previous release\n  0) Exit\n\n'; read -r -p "Choose: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;8) cmd_reconfigure_resources;;9) cmd_rollback;;0) return;;*) warn "Invalid selection";; esac; done; }
 main(){
   local command=menu
   while (($#)); do
@@ -653,7 +653,7 @@ main(){
       --confirm) CONFIRMED=1; shift;;
       --ref) REF="$2"; shift 2;;
       -h|--help) usage; return 0;;
-      *) die "وسيط غير معروف: $1";;
+      *) die "Unknown argument: $1";;
     esac
   done
   case "$command" in
@@ -680,7 +680,7 @@ if [[ "${1:-}" == "profile-export" ]]; then
 fi
 if [[ "${1:-}" == "profile-import" ]]; then
   shift
-  [[ -n "${1:-}" ]] || die "ملف profile مطلوب."
+  [[ -n "${1:-}" ]] || die "Profile file is required."
   load
   exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"
 fi

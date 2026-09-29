@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HELPER="$ROOT/resource-preflight.sh"
 TMP="$(mktemp -d)"
+trap 'rc=$?; echo "resource-preflight.test.sh failed at line $LINENO: $BASH_COMMAND (rc=$rc)" >&2; exit "$rc"' ERR
 trap 'rm -rf "$TMP"' EXIT
 
 MOCK="$TMP/resource-profile.sh"
@@ -37,14 +38,25 @@ chmod 0755 "$MOCK"
 STATE="$TMP/state"
 mkdir -p "$STATE"
 
+# ticketty invokes the helper through command substitution.
+# Human-readable output must stay off stdout, and interactive confirmation
+# must read from the controlling TTY.
+grep -Fq 'read -r -p "$prompt" answer < /dev/tty' "$HELPER"
+grep -Fq "printf '  Resource discovery:\\n' >&2" "$HELPER"
+grep -Fq "printf '  Recommended profile: %s\\n' \"\$profile\" >&2" "$HELPER"
+
 out="$(MOCK_PROFILE=standard NON_INTERACTIVE=1 CONFIRMED=1 "$HELPER" "$MOCK" "$STATE" server-a 0)"
 grep -q '^RESOURCE_PROFILE=standard$' <<<"$out"
 jq -e '.accepted.profile == "standard" and .accepted.server_id == "server-a" and .accepted.explicit_confirmation == true' "$STATE/resource-plan.json" >/dev/null
 first_at="$(jq -r '.accepted.accepted_at' "$STATE/resource-plan.json")"
 
-out="$(MOCK_PROFILE=standard NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0)"
+out_file="$TMP/second.out"
+err_file="$TMP/second.err"
+MOCK_PROFILE=standard NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0 >"$out_file" 2>"$err_file"
+out="$(cat "$out_file")"
+err="$(cat "$err_file")"
 grep -q '^RESOURCE_PROFILE=standard$' <<<"$out"
-grep -q 'خطة الموارد المعتمدة محفوظة' <<<"$out"
+grep -q 'Accepted resource profile is already stored' <<<"$err"
 [[ "$(jq -r '.accepted.accepted_at' "$STATE/resource-plan.json")" == "$first_at" ]]
 
 if MOCK_PROFILE=minimal NON_INTERACTIVE=1 CONFIRMED=0 "$HELPER" "$MOCK" "$STATE" server-a 0 >/dev/null 2>&1; then

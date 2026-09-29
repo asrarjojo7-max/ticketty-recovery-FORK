@@ -37,7 +37,7 @@ EOF
   rc=$?
   set -e
   [[ "$rc" -ne 0 ]] || { echo "rollback unexpectedly allowed after migration" >&2; echo "$output" >&2; return 1; }
-  grep -q "rollback محظور" <<<"$output"
+  grep -q "rollback is blocked" <<<"$output"
 }
 
 assert_update_does_not_auto_checkout_old_after_migration(){
