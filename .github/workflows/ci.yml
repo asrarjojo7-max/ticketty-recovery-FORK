@@ -232,9 +232,81 @@ jobs:
           path: web/test-results/
           retention-days: 7
 
+  telegram-assistant-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate Telegram assistant
+        run: |
+          node --check ops/telegram-assistant/server.mjs
+          node --test ops/telegram-assistant/core.test.mjs
+      - name: Build Telegram assistant image
+        run: docker build --file ops/telegram-assistant/Dockerfile --tag ticketty-telegram-assistant:ci ops/telegram-assistant
+
+  deployment-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment scripts
+        run: |
+          bash -n ops/deployment/ticketty
+          bash -n ops/deployment/bootstrap.sh
+          bash -n ops/deployment/cloudflare.sh
+          bash -n ops/deployment/profile.sh
+          bash -n ops/deployment/release-gate.sh
+          bash -n ops/deployment/transfer.sh
+          bash -n ops/deployment/resource-preflight.sh
+          bash -n install.sh
+          python3 -m py_compile ops/deployment/ops-server.py
+          python3 ops/deployment/remote-ops.test.py
+          bash ops/deployment/tests/resource-profile.test.sh
+          bash ops/deployment/tests/script-modes.test.sh
+          bash ops/deployment/tests/resource-preflight.test.sh
+          bash ops/deployment/tests/lifecycle.test.sh
+          bash ops/deployment/tests/rollback-safety.test.sh
+      - name: Validate Compose configuration
+        run: |
+          cat > .env.ci <<'EOF'
+          POSTGRES_DB=ticketty
+          POSTGRES_USER=ticketty_admin
+          POSTGRES_PASSWORD=ci-db-password
+          MIGRATION_DATABASE_URL=postgresql://ticketty_admin:ci-db-password@postgres:5432/ticketty?schema=public
+          RUNTIME_DATABASE_PASSWORD=ci-runtime-password
+          RUNTIME_DATABASE_URL=postgresql://ticketty_runtime:ci-runtime-password@postgres:5432/ticketty?schema=public
+          MONITORING_DATABASE_PASSWORD=ci-monitor-password
+          JWT_SECRET=ci-jwt-secret
+          WEB_ORIGIN=https://ticketty.example.test
+          APP_ORIGIN=https://ticketty.example.test
+          POSTGRES_EXPORTER_DSN=postgresql://ticketty_monitor:ci-monitor-password@postgres:5432/ticketty?sslmode=disable
+          ALERTMANAGER_WEBHOOK_URL_FILE=/etc/ticketty/alertmanager-webhook-url
+          NODE_EXPORTER_TEXTFILE_DIR=/var/lib/ticketty/metrics
+          PROMETHEUS_PORT=9090
+          ALERTMANAGER_PORT=9093
+          TELEGRAM_BOT_TOKEN_FILE=/etc/ticketty/secrets/telegram-bot-token
+          TELEGRAM_PAIRING_CODE=ci-pairing-code
+          TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE=/etc/ticketty/secrets/telegram-alert-webhook-token
+          TICKETTY_OPS_GID=1001
+          TICKETTY_OPS_SOCKET=/run/ticketty/ops.sock
+          TICKETTY_OPS_HMAC_FILE=/etc/ticketty/secrets/ticketty-ops-hmac
+          TICKETTY_REMOTE_OPS_ENABLED=true
+          CLOUDFLARE_TUNNEL_TOKEN_FILE=/etc/ticketty/secrets/cloudflare-tunnel-token
+          CLOUDFLARE_HOSTNAME=ticketty.example.test
+          CLOUDFLARE_TUNNEL_IMAGE_TAG=2026.9.3
+          BACKUP_DIR=/var/lib/ticketty/backups
+          RCLONE_REMOTE=
+          RCLONE_WEEKLY_REMOTE=
+          RCLONE_MONTHLY_REMOTE=
+          BACKUP_RETENTION_DAYS=0
+          EOF
+          docker compose --env-file .env.ci config --quiet
+          rm -f .env.ci
+
   container-builds:
     runs-on: ubuntu-latest
-    needs: [backend-quality, backend-integration, web-quality, web-e2e]
+    needs: [backend-quality, backend-integration, web-quality, web-e2e, telegram-assistant-quality, deployment-quality]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
