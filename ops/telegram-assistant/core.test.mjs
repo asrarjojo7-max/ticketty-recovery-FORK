@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractBearerToken, intentFromText, normalizeArabic } from './core.mjs';
+import {
+  extractBearerToken,
+  extractStartPairingCode,
+  intentFromText,
+  normalizeArabic,
+} from './core.mjs';
 
 test('normalizes common Arabic punctuation and whitespace', () => {
   assert.equal(normalizeArabic('  حالة النظام؟  '), 'حالة النظام');
@@ -18,6 +23,15 @@ test('understands natural Arabic status questions', () => {
   assert.equal(intentFromText('rollback'), 'rollback');
   assert.equal(intentFromText('حالة التحديث'), 'deployment_status');
   assert.equal(intentFromText('هل انتهى التحديث؟'), 'deployment_status');
+});
+
+test('parses only valid Telegram /start pairing commands', () => {
+  assert.equal(extractStartPairingCode('/start'), '');
+  assert.equal(extractStartPairingCode('/start abc123'), 'abc123');
+  assert.equal(extractStartPairingCode('/start@ticketty_bot abc123'), 'abc123');
+  assert.equal(extractStartPairingCode(' /start   abc123  '), 'abc123');
+  assert.equal(extractStartPairingCode('/started abc123'), null);
+  assert.equal(extractStartPairingCode('/start abc123 extra'), null);
 });
 
 test('does not guess unknown requests', () => {

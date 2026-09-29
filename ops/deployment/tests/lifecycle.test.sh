@@ -74,3 +74,11 @@ TICKETTY_INSTALL_ROOT="$INSTALL_ROOT" TICKETTY_ETC_ROOT="$TMP/fresh-etc" TICKETT
 grep -q 'target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"' "$TICKETTY"
 
 echo "lifecycle tests: PASS (identity, env preservation, profile transfer, release preservation, Cloudflare deferral)"
+
+
+# New installs must default to the canonical repository used by this repository.
+grep -q 'REPO="${TICKETTY_REPOSITORY_URL:-https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git}"' "$INSTALL_ROOT/install.sh"
+grep -q 'repo="${TICKETTY_REPOSITORY_URL:-https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git}"' "$INSTALL_ROOT/ops/deployment/bootstrap.sh"
+grep -q 'DEFAULT_REPO="https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git"' "$TICKETTY"
+grep -q 'env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-asrarjojo7-max/ticketty-recovery-FORK}"' "$TICKETTY"
+grep -q 'TICKETTY_GITHUB_REPOSITORY=asrarjojo7-max/ticketty-recovery-FORK' "$TICKETTY"

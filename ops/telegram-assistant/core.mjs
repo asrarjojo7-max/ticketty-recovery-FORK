@@ -105,6 +105,13 @@ function intentFromText(input) {
   return null;
 }
 
+function extractStartPairingCode(input) {
+  if (typeof input !== 'string') return null;
+
+  const match = input.trim().match(/^\/start(?:@\w+)?(?:\s+(\S+))?$/i);
+  return match ? match[1] ?? '' : null;
+}
+
 function extractBearerToken(authorization) {
   if (typeof authorization !== 'string') return null;
   if (!authorization.startsWith('Bearer ')) return null;
@@ -112,4 +119,9 @@ function extractBearerToken(authorization) {
   return token || null;
 }
 
-export { extractBearerToken, intentFromText, normalizeArabic };
+export {
+  extractBearerToken,
+  extractStartPairingCode,
+  intentFromText,
+  normalizeArabic,
+};
