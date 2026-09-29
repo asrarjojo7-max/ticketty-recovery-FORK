@@ -19,11 +19,11 @@ RESOURCE_RECONFIGURE=0
 BACKEND_PORT=3001
 WEB_PORT=3000
 PHASES=(PACKAGES CHECKOUT PREFLIGHT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY OPS VERIFY)
-ok(){ printf '   %s\n' "$*"; }
-warn(){ printf '   %s\n' "$*"; }
-err(){ printf '   %s\n' "$*" >&2; }
+ok(){ printf '  [OK] %s\n' "$*"; }
+warn(){ printf '  [WARN] %s\n' "$*"; }
+err(){ printf '  [ERROR] %s\n' "$*" >&2; }
 die(){ err "$*"; exit 1; }
-step(){ printf '\n\033[1m%s\033[0m\n' "$*"; }
+step(){ printf '\n=== %s ===\n' "$*"; }
 root(){ [[ "$(id -u)" -eq 0 ]] || die "Run as sudo/root."; }
 dirs(){ install -d -m 0700 "$STATE_DIR" "$STATE_DIR/logs" "$ETC_ROOT/secrets"; install -d -m 0750 /run/ticketty /run/lock; }
 get(){ local key="$1"; [[ -f "$STATE_FILE" ]] || return 1; awk -F= -v k="$key" '$1==k{sub(/^[^=]*=/,"");print;exit}' "$STATE_FILE"; }
