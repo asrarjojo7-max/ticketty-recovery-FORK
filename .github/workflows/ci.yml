@@ -258,10 +258,12 @@ jobs:
           bash -n ops/deployment/profile.sh
           bash -n ops/deployment/release-gate.sh
           bash -n ops/deployment/transfer.sh
+          bash -n ops/deployment/resource-preflight.sh
           bash -n install.sh
           python3 -m py_compile ops/deployment/ops-server.py
           python3 ops/deployment/remote-ops.test.py
           bash ops/deployment/tests/resource-profile.test.sh
+          bash ops/deployment/tests/resource-preflight.test.sh
       - name: Validate Compose configuration
         run: |
           cat > .env.ci <<'EOF'
