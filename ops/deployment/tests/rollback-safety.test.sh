@@ -91,7 +91,7 @@ EOF
   }
 
   set +e
-  update_ref v2026.10.01 >/dev/null 2>&1
+  ( update_ref v2026.10.01 >/dev/null 2>&1 )
   rc=$?
   set -e
   [[ "$rc" -ne 0 ]] || { echo "update unexpectedly succeeded with failed stack_up" >&2; return 1; }
