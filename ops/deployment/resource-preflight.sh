@@ -57,10 +57,22 @@ fi
 same_server=0
 [[ -n "$accepted_profile" && "$accepted_server" == "$SERVER_ID" ]] && same_server=1
 
+emit_state(){
+  printf 'RESOURCE_PROFILE=%s\n' "$profile"
+  printf 'RESOURCE_PROFILE_DECISION=%s\n' "$decision"
+  printf 'RESOURCE_PROFILE_SERVER_ID=%s\n' "$SERVER_ID"
+  printf 'RESOURCE_PROFILE_ACCEPTED_AT=%s\n' "$accepted_at"
+  printf 'RESOURCE_PROFILE_PLAN_FILE=%s\n' "$PLAN_FILE"
+  printf 'RESOURCE_EFFECTIVE_MEMORY_KIB=%s\n' "$memory"
+  printf 'RESOURCE_EFFECTIVE_CPU_MILLICORES=%s\n' "$cpu"
+  printf 'RESOURCE_AVAILABLE_DISK_KIB=%s\n' "$disk"
+}
+
 if (( same_server == 1 && FORCE_RECONFIGURE != 1 )); then
   if [[ "$accepted_profile" == "$profile" ]]; then
     ok_msg="خطة الموارد المعتمدة محفوظة ولم تتغير على هذا الخادم: $accepted_profile"
     printf '  ✓ %s\n' "$ok_msg"
+    emit_state
     exit 0
   fi
   warn_msg="الخادم نفسه أعطى خطة مختلفة عن الخطة المعتمدة ($accepted_profile → $profile). لن نغيرها بصمت."
@@ -74,7 +86,7 @@ else
   [[ "$answer" =~ ^[Yy]$ ]] || die "لم يتم اعتماد خطة الموارد."
 fi
 
-accepted_at="${accepted_at:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+accepted_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 jq -n \
   --arg server "$SERVER_ID" \
   --arg accepted_at "$accepted_at" \
@@ -93,11 +105,4 @@ jq -n \
 chmod 600 "$PLAN_FILE.tmp"
 mv "$PLAN_FILE.tmp" "$PLAN_FILE"
 
-printf 'RESOURCE_PROFILE=%s\n' "$profile"
-printf 'RESOURCE_PROFILE_DECISION=%s\n' "$decision"
-printf 'RESOURCE_PROFILE_SERVER_ID=%s\n' "$SERVER_ID"
-printf 'RESOURCE_PROFILE_ACCEPTED_AT=%s\n' "$accepted_at"
-printf 'RESOURCE_PROFILE_PLAN_FILE=%s\n' "$PLAN_FILE"
-printf 'RESOURCE_EFFECTIVE_MEMORY_KIB=%s\n' "$memory"
-printf 'RESOURCE_EFFECTIVE_CPU_MILLICORES=%s\n' "$cpu"
-printf 'RESOURCE_AVAILABLE_DISK_KIB=%s\n' "$disk"
+emit_state
