@@ -3,7 +3,7 @@ set -Eeuo pipefail
 umask 077
 
 # One-command bootstrap for a fresh Linux VPS.
-REPO="${TICKETTY_REPOSITORY_URL:-https://github.com/asrarjojo7-max/ticketty-recovery-FORK.git}"
+REPO="${TICKETTY_REPOSITORY_URL:-https://github.com/mogahedadamy/ticketty-recovery.git}"
 ROOT="${TICKETTY_INSTALL_ROOT:-/srv/ticketty}"
 
 [[ "$(id -u)" -eq 0 ]] || exec sudo -E bash "$0" "$@"
