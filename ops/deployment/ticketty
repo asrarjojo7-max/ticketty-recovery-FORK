@@ -15,9 +15,10 @@ CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
 BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
 DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
+RESOURCE_RECONFIGURE=0
 BACKEND_PORT=3001
 WEB_PORT=3000
-PHASES=(PREFLIGHT PACKAGES CHECKOUT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY OPS VERIFY)
+PHASES=(PACKAGES CHECKOUT PREFLIGHT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY OPS VERIFY)
 ok(){ printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn(){ printf '  \033[33m!\033[0m %s\n' "$*"; }
 err(){ printf '  \033[31m✗\033[0m %s\n' "$*" >&2; }
@@ -78,7 +79,29 @@ load(){
   fi
 }
 packages(){ local miss=0 x; for x in git curl openssl jq flock docker; do command -v "$x" >/dev/null 2>&1 || miss=1; done; [[ "$miss" -eq 0 ]] && { systemctl enable --now docker >/dev/null 2>&1 || true; ok "المتطلبات موجودة"; return; }; . /etc/os-release; [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || die "التوزيعة غير مدعومة للتثبيت التلقائي."; if [[ "$NON_INTERACTIVE" -eq 0 ]]; then read -r -p "تثبيت المتطلبات تلقائيًا؟ [Y/n]: " a; [[ -z "$a" || "$a" =~ ^[Yy]$ ]] || die "تم الإلغاء."; fi; apt-get update; apt-get install -y ca-certificates git curl openssl jq util-linux docker.io docker-compose-v2; systemctl enable --now docker; }
-resources(){ local ram free; ram="$(awk '/MemTotal:/ {print $2}' /proc/meminfo)"; free="$(df -Pk / | awk 'NR==2{print $4}')"; (( ram >= 2097152 )) || warn "RAM أقل من 2 GiB."; [[ "$free" -ge 20971520 ]] || die "المساحة الحرة أقل من 20 GiB."; ok "الموارد"; }
+resources(){
+  local server_id out profile decision accepted_server
+  server_id="$(get SERVER_ID 2>/dev/null || true)"
+  [[ -n "$server_id" ]] || server_id="$(hostname -s)"
+  [[ -n "$server_id" ]] || die "تعذر تحديد هوية الخادم."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" ]] || die "بوابة فحص الموارد غير موجودة."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-profile.sh" ]] || die "مخطط الموارد غير موجود."
+  out="$(NON_INTERACTIVE="$NON_INTERACTIVE" CONFIRMED="$CONFIRMED" "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" "$INSTALL_ROOT/ops/deployment/resource-profile.sh" "$STATE_DIR" "$server_id" "$RESOURCE_RECONFIGURE")" || return 1
+  printf "%s\n" "$out"
+  profile="$(grep "^RESOURCE_PROFILE=" <<<"$out" | cut -d= -f2-)"
+  decision="$(grep "^RESOURCE_PROFILE_DECISION=" <<<"$out" | cut -d= -f2-)"
+  accepted_server="$(grep "^RESOURCE_PROFILE_SERVER_ID=" <<<"$out" | cut -d= -f2-)"
+  [[ -n "$profile" && -n "$decision" && -n "$accepted_server" ]] || die "تعذر حفظ خطة الموارد."
+  setv RESOURCE_PROFILE "$profile"
+  setv RESOURCE_PROFILE_DECISION "$decision"
+  setv RESOURCE_PROFILE_SERVER_ID "$accepted_server"
+  setv RESOURCE_PROFILE_ACCEPTED_AT "$(grep "^RESOURCE_PROFILE_ACCEPTED_AT=" <<<"$out" | cut -d= -f2-)"
+  setv RESOURCE_PROFILE_PLAN_FILE "$(grep "^RESOURCE_PROFILE_PLAN_FILE=" <<<"$out" | cut -d= -f2-)"
+  setv RESOURCE_EFFECTIVE_MEMORY_KIB "$(grep "^RESOURCE_EFFECTIVE_MEMORY_KIB=" <<<"$out" | cut -d= -f2-)"
+  setv RESOURCE_EFFECTIVE_CPU_MILLICORES "$(grep "^RESOURCE_EFFECTIVE_CPU_MILLICORES=" <<<"$out" | cut -d= -f2-)"
+  setv RESOURCE_AVAILABLE_DISK_KIB "$(grep "^RESOURCE_AVAILABLE_DISK_KIB=" <<<"$out" | cut -d= -f2-)"
+  ok "خطة الموارد معتمدة: $profile"
+}
 checkout(){ [[ -d "$INSTALL_ROOT/.git" ]] && { ok "المستودع موجود"; return; }; mkdir -p "$(dirname "$INSTALL_ROOT")"; git clone "$REPOSITORY" "$INSTALL_ROOT"; ok "تم جلب المستودع"; }
 clean(){ git -C "$INSTALL_ROOT" diff --quiet || die "توجد تغييرات محلية غير محفوظة."; git -C "$INSTALL_ROOT" diff --cached --quiet || die "توجد تغييرات staged."; }
 env_set(){
@@ -226,7 +249,12 @@ health(){ local bp="$BACKEND_PORT" wp="$WEB_PORT"; [[ -n "$bp" ]] || bp=3001; [[
 
 verify_phase(){
   case "$1" in
-    PREFLIGHT) resources >/dev/null 2>&1;;
+    PREFLIGHT)
+      local current_server accepted_server
+      current_server="$(get SERVER_ID 2>/dev/null || hostname -s)"
+      accepted_server="$(jq -r '.accepted.server_id // empty' "$STATE_DIR/resource-plan.json" 2>/dev/null || true)"
+      [[ -s "$STATE_DIR/resource-plan.json" && -n "$current_server" && "$accepted_server" == "$current_server" ]]
+      ;;
     PACKAGES) command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && command -v git >/dev/null 2>&1 && command -v jq >/dev/null 2>&1;;
     CHECKOUT) [[ -d "$INSTALL_ROOT/.git" ]];;
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
@@ -318,12 +346,12 @@ cmd_install(){
   root; lock; dirs; load
   step "TICKETTY — التثبيت الذكي"
   [[ -f "$ETC_ROOT/ticketty.env" || -f "$STATE_FILE" ]] && warn "تم العثور على تثبيت سابق؛ لن نعيد إنشاء البيانات أو الأسرار الموجودة."
-  phase PREFLIGHT resources
   phase PACKAGES packages
   phase CHECKOUT checkout
   setv PROJECT_DIR "$INSTALL_ROOT"
   setv REPOSITORY "$REPOSITORY"
   [[ -n "$(get SERVER_ID 2>/dev/null || true)" ]] || setv SERVER_ID "${TICKETTY_SERVER_ID:-$(hostname -s)}"
+  phase PREFLIGHT resources
   [[ -n "$(get DEPLOYMENT_ID 2>/dev/null || true)" ]] || setv DEPLOYMENT_ID "DEP-$(date -u +%Y%m%dT%H%M%SZ)-$(openssl rand -hex 3)"
   phase ENV write_env
   ensure_env
@@ -408,6 +436,16 @@ cmd_status(){
   fi
 }
 cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
+cmd_reconfigure_resources(){
+  root
+  lock
+  dirs
+  load
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-preflight.sh" ]] || die "بوابة فحص الموارد غير موجودة."
+  [[ -x "$INSTALL_ROOT/ops/deployment/resource-profile.sh" ]] || die "مخطط الموارد غير موجود."
+  RESOURCE_RECONFIGURE=1
+  resources
+}
 cmd_gate(){ root; load; local gate_ref="${REF:-${1:-}}"; [[ -n "$gate_ref" ]] || die "Release tag مطلوب."; "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$gate_ref"; }
 cmd_profile_export(){ root; load; exec "$INSTALL_ROOT/ops/deployment/profile.sh" export "${1:-}"; }
 cmd_profile_import(){ root; load; [[ -n "${1:-}" ]] || die "ملف profile مطلوب."; exec "$INSTALL_ROOT/ops/deployment/profile.sh" import "$1"; }
@@ -422,12 +460,12 @@ cmd_setup_cf(){
   fi
 }
 usage(){ printf '%s\n' 'ticketty | install | resume | update | migrate | status | doctor | gate TAG | setup-cloudflare | profile-export | profile-import FILE | transfer-export | transfer-import FILE'; }
-menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) ترحيل قاعدة البيانات\n  5) الحالة\n  6) الفحص التشخيصي\n  7) Cloudflare\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
+menu(){ while true; do step "TICKETTY DEPLOYMENT"; printf '  1) تثبيت النظام\n  2) متابعة التثبيت\n  3) تحديث النظام\n  4) ترحيل قاعدة البيانات\n  5) الحالة\n  6) الفحص التشخيصي\n  7) Cloudflare\n  8) إعادة تقييم موارد الخادم\n  0) خروج\n\n'; read -r -p "اختر: " c; case "$c" in 1) cmd_install;;2) cmd_install;;3) cmd_update;;4) cmd_migrate;;5) cmd_status;;6) cmd_doctor;;7) cmd_setup_cf;;8) cmd_reconfigure_resources;;0) return;;*) warn "اختيار غير صالح";; esac; done; }
 main(){
   local command=menu
   while (($#)); do
     case "$1" in
-      install|resume|update|migrate|status|doctor|setup-cloudflare|gate|profile-export|profile-import|transfer-export|transfer-import) command="$1"; shift;;
+      install|resume|update|migrate|status|doctor|reconfigure-resources|setup-cloudflare|gate|profile-export|profile-import|transfer-export|transfer-import) command="$1"; shift;;
       --non-interactive) NON_INTERACTIVE=1; shift;;
       --json) JSON_OUTPUT=1; shift;;
       --dry-run|--plan) DRY_RUN=1; shift;;
@@ -444,6 +482,7 @@ main(){
     migrate) cmd_migrate;;
     status) cmd_status;;
     doctor) cmd_doctor;;
+    reconfigure-resources) cmd_reconfigure_resources;;
     setup-cloudflare) cmd_setup_cf;;
     gate) cmd_gate;;
     profile-export) cmd_profile_export;;
