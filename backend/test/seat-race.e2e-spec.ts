@@ -465,10 +465,12 @@ describe('seat race (Go-Live T-1): concurrent same-seat purchase', () => {
   }, 120_000);
 
   it('allocates distinct organization ticket numbers for simultaneous sales on different trips', async () => {
-    const [first, second] = await Promise.all([
-      createAdditionalTrip('a', 72),
-      createAdditionalTrip('b', 96),
-    ]);
+    // إعداد الرحلتين ليس جزءًا من السباق المقاس هنا؛ نجعله تسلسليًا
+    // لعزل الاختبار عن سباق جانبي في GET /api/trips/:id/seats.
+    // السباق الحقيقي الذي يثبت بوابة Go-Live يبدأ أدناه عند بيع المقعدين
+    // بالتزامن على رحلتين مختلفتين.
+    const first = await createAdditionalTrip('a', 72);
+    const second = await createAdditionalTrip('b', 96);
 
     const responses = await Promise.all(
       [first, second].map((target, index) =>
