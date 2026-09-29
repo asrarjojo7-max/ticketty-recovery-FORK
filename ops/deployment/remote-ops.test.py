@@ -128,6 +128,13 @@ exit 2
         duplicate=call(str(sock),sign(secret,"EXECUTE_UPDATE",{"plan_id":plan2_id}))
         assert duplicate["ok"] is False
 
+        for _ in range(50):
+            operation_status=call(str(sock),sign(secret,"OPERATION_STATUS",{"plan_id":plan2_id}))
+            if operation_status["ok"] and operation_status["result"]["status"]=="success":
+                break
+            time.sleep(0.05)
+        assert operation_status["result"]["status"]=="success"
+
         rollback_plan=call(str(sock),sign(secret,"PLAN_ROLLBACK"))
         assert rollback_plan["ok"] is True
         assert rollback_plan["result"]["rollback"] is True
