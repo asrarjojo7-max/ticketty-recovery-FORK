@@ -275,6 +275,7 @@ jobs:
           bash ops/deployment/tests/deployment-runtime.test.sh
           bash ops/deployment/tests/prerequisites.test.sh
           bash ops/deployment/tests/cloudflare-setup.test.sh
+          bash ops/deployment/tests/monitoring-permissions.test.sh
       - name: Validate Compose configuration
         run: |
           cat > .env.ci <<'EOF'
@@ -319,4 +320,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - run: docker build --file backend/Dockerfile --tag ticketty-backend:ci backend
+      - name: Verify deploy-time invariant SQL is present in migrate runtime image
+        run: docker run --rm --entrypoint sh ticketty-backend:ci -lc 'test -r /app/test/sql/database-invariants.sql'
       - run: docker build --file web/Dockerfile --tag ticketty-web:ci web
