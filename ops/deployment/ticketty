@@ -136,7 +136,7 @@ env_set(){
 secret_file(){ local f="$1" n="$2"; [[ -s "$f" ]] || { openssl rand -base64 "$n" | tr -d '\n' > "$f"; chmod 600 "$f"; }; }
 configure_alertmanager_receiver(){
   local file="$ETC_ROOT/alertmanager-webhook-url"
-  if [[ [WARN] -f "$file" ]]; then
+  if [[ ! -f "$file" ]]; then
     printf '%s\n' 'http://telegram-assistant:8090/alerts' > "$file"
     chmod 640 "$file"
   fi
@@ -153,7 +153,7 @@ ensure_env(){
     pair="$(openssl rand -hex 24)"
     env_set_missing TELEGRAM_PAIRING_CODE "$pair" "$f"
   fi
-  if [[ [WARN] -s "$STATE_DIR/pairing-code" ]]; then
+  if [[ ! -s "$STATE_DIR/pairing-code" ]]; then
     printf "%s\n" "$pair" > "$STATE_DIR/pairing-code"
     chmod 600 "$STATE_DIR/pairing-code"
   fi
@@ -244,7 +244,7 @@ domain(){
   ok "Domain: $d"
 }
 telegram(){
-  if [[ [WARN] -s "$TELEGRAM_TOKEN_FILE" ]]; then
+  if [[ ! -s "$TELEGRAM_TOKEN_FILE" ]]; then
     local t
     if [[ "$NON_INTERACTIVE" -eq 1 ]]; then t="${TELEGRAM_BOT_TOKEN:-}"; else read -r -s -p "Telegram Bot Token from BotFather: " t; printf '\n'; fi
     [[ -n "$t" ]] || die "Telegram Bot Token is required."
@@ -335,7 +335,7 @@ verify_phase(){
     PACKAGES) command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && command -v git >/dev/null 2>&1 && command -v jq >/dev/null 2>&1;;
     CHECKOUT) [[ -d "$INSTALL_ROOT/.git" ]];;
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
-    DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && [WARN] grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
+    DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && ! grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
     TELEGRAM) [[ -s "$TELEGRAM_TOKEN_FILE" && -s "$TELEGRAM_ALERT_TOKEN_FILE" && -s "$OPS_HMAC_FILE" ]];;
     CLOUDFLARE) [[ -s "$CLOUDFLARE_TOKEN_FILE" || "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]] || docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared;;
     COMPOSE) docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config --quiet >/dev/null 2>&1;;
@@ -396,17 +396,17 @@ update_ref(){
   git -C "$INSTALL_ROOT" fetch --tags --force origin
   git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release not found."
   git -C "$INSTALL_ROOT" checkout --detach "$target"
-  if [WARN] docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" run --rm migrate; then
+  if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" run --rm migrate; then
     setv LAST_UPDATE_MIGRATION_APPLIED unknown
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "Migration failed; automatic rollback of the database or application is blocked. Review migration logs and perform forward recovery."
   fi
   setv LAST_UPDATE_MIGRATION_APPLIED yes
-  if [WARN] stack_up; then
+  if ! stack_up; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "The new release failed after migration; automatic application rollback is blocked because the database may have changed."
   fi
-  if [WARN] health; then
+  if ! health; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "Health check failed after migration; automatic application rollback is blocked."
   fi
@@ -435,11 +435,11 @@ rollback_ref(){
   git -C "$INSTALL_ROOT" fetch --tags --force origin
   [[ "$(git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target^{commit}")" == "$commit" ]] || die "The previous release no longer matches the recorded commit."
   git -C "$INSTALL_ROOT" checkout --detach "$target"
-  if [WARN] stack_up; then
+  if ! stack_up; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "The previous release failed to start; no second automatic attempt will be made."
   fi
-  if [WARN] health; then
+  if ! health; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "Health check failed after rollback."
   fi
