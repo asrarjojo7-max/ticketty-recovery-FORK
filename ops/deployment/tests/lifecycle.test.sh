@@ -69,6 +69,6 @@ TICKETTY_INSTALL_ROOT="$ROOT" TICKETTY_ETC_ROOT="$TMP/fresh-etc" TICKETTY_DEPLOY
   "$TRANSFER" import "$BUNDLE" >/dev/null
 [[ "$(grep "^TRANSFER_SOURCE_RELEASE=" "$IMPORT_STATE/state.env" | cut -d= -f2-)" == "v2026.10.01" ]]
 [[ "$(grep "^TRANSFER_SOURCE_COMMIT=" "$IMPORT_STATE/state.env" | cut -d= -f2-)" == "0123456789abcdef0123456789abcdef01234567" ]]
-grep -q \'target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"\' "$TICKETTY"
+grep -q 'target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"' "$TICKETTY"
 
 echo "lifecycle tests: PASS (identity, env preservation, profile transfer, release preservation, Cloudflare deferral)"
