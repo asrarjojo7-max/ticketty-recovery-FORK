@@ -15,11 +15,15 @@ CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
 CLOUDFLARED_DIR="$ETC_ROOT/cloudflared"
 BACKUP_ROOT="${BACKUP_DIR:-/var/lib/ticketty/backups}"
 DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"
+REPOSITORY="${TICKETTY_REPOSITORY_URL:-$DEFAULT_REPO}"
 NON_INTERACTIVE=0; JSON_OUTPUT=0; CONFIRMED=0; DRY_RUN=0; REF=""
 RESOURCE_RECONFIGURE=0
 BACKEND_PORT=3001
 WEB_PORT=3000
-PHASES=(PACKAGES CHECKOUT PREFLIGHT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY OPS VERIFY)
+POSTGRES_HOST_PORT=15432
+BACKUP_ENV_FILE="$ETC_ROOT/backup.env"
+RCLONE_CONFIG_FILE="$ETC_ROOT/rclone.conf"
+PHASES=(PACKAGES CHECKOUT PREFLIGHT ENV DOMAIN TELEGRAM CLOUDFLARE COMPOSE DEPLOY BACKUP MONITORING OPS VERIFY)
 ok(){ printf '  [OK] %s\n' "$*"; }
 warn(){ printf '  [WARN] %s\n' "$*"; }
 err(){ printf '  [ERROR] %s\n' "$*" >&2; }
@@ -47,6 +51,8 @@ phase(){
     CLOUDFLARE) label="Cloudflare";;
     COMPOSE) label="Docker Compose Validation";;
     DEPLOY) label="Service Deployment";;
+    BACKUP) label="Backup & Recovery";;
+    MONITORING) label="Monitoring Verification";;
     OPS) label="Remote Operations";;
     *) label="$name";;
   esac
@@ -82,13 +88,15 @@ load(){
   local v
   v="$(get PROJECT_DIR 2>/dev/null || true)"; [[ -n "$v" ]] && INSTALL_ROOT="$v"
   v="$(get REPOSITORY 2>/dev/null || true)"
-  if [[ -n "$v" ]]; then REPOSITORY="$v"; else REPOSITORY="$DEFAULT_REPO"; fi
+  if [[ -n "$v" ]]; then REPOSITORY="$v"; else REPOSITORY="${TICKETTY_REPOSITORY_URL:-$DEFAULT_REPO}"; fi
   if [[ -f "$ETC_ROOT/ticketty.env" ]]; then
     local p
     p="$(grep '^BACKEND_PORT=' "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
     [[ "$p" =~ ^[0-9]+$ ]] && BACKEND_PORT="$p"
     p="$(grep '^WEB_PORT=' "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
     [[ "$p" =~ ^[0-9]+$ ]] && WEB_PORT="$p"
+    p="$(grep '^POSTGRES_HOST_PORT=' "$ETC_ROOT/ticketty.env" | cut -d= -f2- || true)"
+    [[ "$p" =~ ^[0-9]+$ ]] && POSTGRES_HOST_PORT="$p"
   fi
 }
 server_identity(){
@@ -114,7 +122,7 @@ env_set_missing(){
 }
 packages(){
   local miss=0 x docker_ready=0
-  for x in git curl openssl jq flock; do
+  for x in git curl openssl jq flock pg_dump pg_restore rclone python3; do
     command -v "$x" >/dev/null 2>&1 || miss=1
   done
   . /etc/os-release
@@ -127,7 +135,7 @@ packages(){
     fi
     printf "  Installing required system packages...\n"
     apt-get update
-    apt-get install -y ca-certificates curl git openssl jq util-linux gnupg
+    apt-get install -y ca-certificates curl git openssl jq util-linux gnupg postgresql-client rclone python3-minimal
   fi
 
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
@@ -161,17 +169,6 @@ EOF
     printf "  Installing Docker Engine, containerd, Buildx, and Compose...\n"
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
-
-  if ! command -v cloudflared >/dev/null 2>&1; then
-    printf "  Configuring the official Cloudflare package repository...\\n"
-    install -m 0755 -d /usr/share/keyrings
-    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
-    chmod a+r /usr/share/keyrings/cloudflare-main.gpg
-    printf "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main\\n" > /etc/apt/sources.list.d/cloudflared.list
-    apt-get update
-    apt-get install -y cloudflared
-  fi
-  command -v cloudflared >/dev/null 2>&1 || die "cloudflared is not available after installation."
 
   systemctl enable --now docker
   docker info >/dev/null 2>&1 || die "Docker daemon is not healthy after installation. Check: systemctl status docker"
@@ -266,6 +263,14 @@ ensure_env(){
   [[ -n "$value" ]] && env_set_missing CLOUDFLARE_TUNNEL_ID "$value" "$f"
   chmod 600 "$f"
 }
+repo_slug(){
+  local repo="$1"
+  repo="${repo#https://github.com/}"
+  repo="${repo#http://github.com/}"
+  repo="${repo%.git}"
+  [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "Release Gate requires a GitHub repository in owner/name form."
+  printf '%s\n' "$repo"
+}
 write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "Production environment already exists"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
 POSTGRES_DB=ticketty
 POSTGRES_USER=ticketty_admin
@@ -289,6 +294,7 @@ PILOT_PAYMENT_MODE=CASH
 WEB_PORT=3000
 BACKEND_PORT=3001
 POSTGRES_EXPORTER_DSN=postgresql://ticketty_monitor:$db3@postgres:5432/ticketty?sslmode=disable
+POSTGRES_HOST_PORT=15432
 ALERTMANAGER_WEBHOOK_URL_FILE=$ETC_ROOT/alertmanager-webhook-url
 NODE_EXPORTER_TEXTFILE_DIR=/var/lib/ticketty/metrics
 PROMETHEUS_PORT=9090
@@ -299,7 +305,8 @@ TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE=$TELEGRAM_ALERT_TOKEN_FILE
 CLOUDFLARE_TUNNEL_TOKEN_FILE=$CLOUDFLARE_TOKEN_FILE
 CLOUDFLARE_HOSTNAME=PLACEHOLDER
 CLOUDFLARE_TUNNEL_IMAGE_TAG=2026.9.3
-TICKETTY_GITHUB_REPOSITORY=mogahedadamy/ticketty-recovery
+TICKETTY_GITHUB_REPOSITORY=$(repo_slug "$REPOSITORY")
+TICKETTY_CI_WORKFLOW_NAME=${TICKETTY_CI_WORKFLOW_NAME:-CI}
 TICKETTY_RELEASE_CHANNEL=stable
 TICKETTY_INSTALL_ROOT=$INSTALL_ROOT
 TICKETTY_OPS_SOCKET=$OPS_SOCKET
@@ -310,6 +317,7 @@ RCLONE_REMOTE=
 RCLONE_WEEKLY_REMOTE=
 RCLONE_MONTHLY_REMOTE=
 BACKUP_RETENTION_DAYS=0
+RCLONE_CONFIG_FILE=$RCLONE_CONFIG_FILE
 EOF
 chmod 600 "$f"; printf '%s\n' "$pair" > "$STATE_DIR/pairing-code"; chmod 600 "$STATE_DIR/pairing-code"; ok "Environment + secrets"; }
 domain(){
@@ -411,6 +419,87 @@ stack_up(){
 
   ok "Services started"
 }
+install_unit_template(){
+  local source="$1" target="$2" root_escaped
+  root_escaped="${INSTALL_ROOT//\\/\\\\}"
+  root_escaped="${root_escaped//&/\\&}"
+  root_escaped="${root_escaped//\//\\/}"
+  sed "s#__TICKETTY_ROOT__#$root_escaped#g" "$source" > "$target"
+  chmod 0644 "$target"
+}
+backup_setup(){
+  local remote db user password source_config watchdog_webhook
+  remote="${TICKETTY_RCLONE_REMOTE:-$(get BACKUP_REMOTE 2>/dev/null || true)}"
+  if [[ -z "$remote" ]]; then
+    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+      die "Off-site backup is required. Set TICKETTY_RCLONE_REMOTE to a configured rclone destination."
+    fi
+    read -r -p "Configured rclone destination for daily backups (e.g. b2:ticketty-prod): " remote
+  fi
+  [[ -n "$remote" ]] || die "An off-site backup destination is required."
+  command -v rclone >/dev/null 2>&1 || die "rclone is required for off-site backups."
+  getent group ticketty >/dev/null 2>&1 || groupadd --system ticketty
+  id ticketty >/dev/null 2>&1 || useradd --system --gid ticketty --home-dir /var/lib/ticketty --shell /usr/sbin/nologin ticketty
+  source_config="${TICKETTY_RCLONE_CONFIG_FILE:-$RCLONE_CONFIG_FILE}"
+  if [[ ! -s "$source_config" ]]; then
+    if [[ -s /root/.config/rclone/rclone.conf ]]; then
+      install -m 0640 -o root -g ticketty /root/.config/rclone/rclone.conf "$RCLONE_CONFIG_FILE"
+      source_config="$RCLONE_CONFIG_FILE"
+    else
+      die "rclone config was not found. Configure rclone first or set TICKETTY_RCLONE_CONFIG_FILE."
+    fi
+  elif [[ "$source_config" != "$RCLONE_CONFIG_FILE" ]]; then
+    install -m 0640 -o root -g ticketty "$source_config" "$RCLONE_CONFIG_FILE"
+    source_config="$RCLONE_CONFIG_FILE"
+  fi
+  RCLONE_CONFIG="$source_config" rclone lsd "$remote" >/dev/null || die "Cannot access the configured backup destination: $remote"
+  db="$(grep '^POSTGRES_DB=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"
+  user="$(grep '^POSTGRES_USER=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"
+  password="$(grep '^POSTGRES_PASSWORD=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"
+  watchdog_webhook="${TICKETTY_WATCHDOG_WEBHOOK_URL:-$(get WATCHDOG_WEBHOOK_URL 2>/dev/null || true)}"
+  install -d -m 0750 -o ticketty -g ticketty "$BACKUP_ROOT" /var/lib/ticketty/backup-state /var/lib/ticketty/metrics /var/log/ticketty
+  cat > "$BACKUP_ENV_FILE" <<EOF
+DATABASE_URL=postgresql://$user:$password@127.0.0.1:$POSTGRES_HOST_PORT/$db
+RCLONE_REMOTE=$remote
+RCLONE_CONFIG=$RCLONE_CONFIG_FILE
+BACKUP_DIR=$BACKUP_ROOT
+BACKUP_STATE_DIR=/var/lib/ticketty/backup-state
+BACKUP_METRICS_DIR=/var/lib/ticketty/metrics
+BACKUP_LOG_DIR=/var/log/ticketty
+BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-0}
+WATCHDOG_WEBHOOK_URL=$watchdog_webhook
+EOF
+  chown root:ticketty "$BACKUP_ENV_FILE" "$RCLONE_CONFIG_FILE"
+  chmod 0640 "$BACKUP_ENV_FILE" "$RCLONE_CONFIG_FILE"
+  install_unit_template "$INSTALL_ROOT/ops/systemd/ticketty-backup.service" /etc/systemd/system/ticketty-backup.service
+  install_unit_template "$INSTALL_ROOT/ops/systemd/ticketty-backup.timer" /etc/systemd/system/ticketty-backup.timer
+  install_unit_template "$INSTALL_ROOT/ops/systemd/ticketty-backup-watchdog.service" /etc/systemd/system/ticketty-backup-watchdog.service
+  install_unit_template "$INSTALL_ROOT/ops/systemd/ticketty-backup-watchdog.timer" /etc/systemd/system/ticketty-backup-watchdog.timer
+  install_unit_template "$INSTALL_ROOT/ops/systemd/ticketty-worker-watchdog.service" /etc/systemd/system/ticketty-worker-watchdog.service
+  install_unit_template "$INSTALL_ROOT/ops/systemd/ticketty-worker-watchdog.timer" /etc/systemd/system/ticketty-worker-watchdog.timer
+  systemctl daemon-reload
+  systemctl enable --now ticketty-backup.timer ticketty-backup-watchdog.timer ticketty-worker-watchdog.timer
+  if ! systemctl start ticketty-backup.service; then
+    die "Initial off-site backup failed. Inspect: journalctl -u ticketty-backup.service"
+  fi
+  [[ -s /var/lib/ticketty/backup-state/last-success ]] || die "Backup did not record a verified success."
+  setv BACKUP_STATUS VERIFIED
+  setv WORKER_WATCHDOG_STATUS ENABLED
+  setv BACKUP_REMOTE "$remote"
+  ok "Off-site backup verified and scheduled"
+}
+monitoring_verify(){
+  local target_health running_services
+  running_services="$(docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps --status running --services 2>/dev/null || true)"
+  grep -qx 'prometheus' <<<"$running_services" || die "Prometheus container is not running."
+  grep -qx 'alertmanager' <<<"$running_services" || die "Alertmanager container is not running."
+  curl -fsS http://127.0.0.1:${PROMETHEUS_PORT:-9090}/-/ready >/dev/null || die "Prometheus readiness check failed."
+  curl -fsS http://127.0.0.1:${ALERTMANAGER_PORT:-9093}/-/ready >/dev/null || die "Alertmanager readiness check failed."
+  target_health="$(curl -fsS http://127.0.0.1:${PROMETHEUS_PORT:-9090}/api/v1/targets 2>/dev/null || true)"
+  printf '%s' "$target_health" | jq -e '.status == "success" and ([.data.activeTargets[]?.health] | any(. == "up"))' >/dev/null || die "Prometheus has no healthy active targets."
+  setv MONITORING_STATUS VERIFIED
+  ok "Prometheus and Alertmanager verified"
+}
 ops_service(){
   getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
   install -d -m 0750 -o root -g "$OPS_GROUP" /run/ticketty
@@ -432,7 +521,7 @@ verify_phase(){
       accepted_server="$(jq -r '.accepted.server_id // empty' "$STATE_DIR/resource-plan.json" 2>/dev/null || true)"
       [[ -s "$STATE_DIR/resource-plan.json" && -n "$current_server" && "$accepted_server" == "$current_server" ]]
       ;;
-    PACKAGES) command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && command -v git >/dev/null 2>&1 && command -v jq >/dev/null 2>&1;;
+    PACKAGES) command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && command -v git >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 && command -v pg_dump >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1 && command -v rclone >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1;;
     CHECKOUT) [[ -d "$INSTALL_ROOT/.git" ]];;
     ENV) [[ -f "$ETC_ROOT/ticketty.env" && -s "$OPS_HMAC_FILE" ]];;
     DOMAIN) [[ -n "$(get APP_HOSTNAME 2>/dev/null || true)" ]] && [[ -f "$ETC_ROOT/ticketty.env" ]] && ! grep -q "PLACEHOLDER" "$ETC_ROOT/ticketty.env";;
@@ -449,6 +538,8 @@ verify_phase(){
       ;;
     COMPOSE) docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config --quiet >/dev/null 2>&1;;
     DEPLOY) health;;
+    BACKUP) [[ "$(get BACKUP_STATUS 2>/dev/null || true)" == VERIFIED ]] && [[ "$(get WORKER_WATCHDOG_STATUS 2>/dev/null || true)" == ENABLED ]] && systemctl is-enabled --quiet ticketty-backup.timer && systemctl is-enabled --quiet ticketty-backup-watchdog.timer && systemctl is-enabled --quiet ticketty-worker-watchdog.timer && [[ -s /var/lib/ticketty/backup-state/last-success ]];;
+    MONITORING) [[ "$(get MONITORING_STATUS 2>/dev/null || true)" == VERIFIED ]] && curl -fsS http://127.0.0.1:${PROMETHEUS_PORT:-9090}/-/ready >/dev/null 2>&1 && curl -fsS http://127.0.0.1:${ALERTMANAGER_PORT:-9093}/-/ready >/dev/null 2>&1;;
     OPS) systemctl is-active --quiet ticketty-ops.service && [[ -S "$OPS_SOCKET" ]];;
     VERIFY) health;;
     *) return 1;;
@@ -458,7 +549,15 @@ verify_phase(){
 public_health(){ local host; host="$(get APP_HOSTNAME 2>/dev/null || true)"; [[ -n "$host" ]] || return 0; [[ -s "$CLOUDFLARE_TOKEN_FILE" || -s "$CLOUDFLARED_DIR/config.yml" ]] || return 0; for _ in 1 2 3 4 5 6 7 8 9 10; do curl -fsS --connect-timeout 5 --max-time 10 "https://$host/api/health/live" >/dev/null 2>&1 && { ok "Public domain is reachable through Cloudflare"; return 0; }; sleep 5; done; return 1; }
 
 current_release(){ get RELEASE_REF 2>/dev/null || git -C "$INSTALL_ROOT" describe --tags --exact-match HEAD 2>/dev/null || git -C "$INSTALL_ROOT" rev-parse --short=12 HEAD; }
-latest_json(){ local repo; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; }
+gate_release(){
+  local output commit
+  output="$("$INSTALL_ROOT/ops/deployment/release-gate.sh" "$1")" || return 1
+  printf '%s\n' "$output" >&2
+  commit="$(printf '%s\n' "$output" | awk '$1=="Commit:" {print $2; exit}')"
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "Release Gate did not return a commit SHA."
+  printf '%s\n' "$commit"
+}
+latest_json(){ local repo token; repo="$(grep '^TICKETTY_GITHUB_REPOSITORY=' "$ETC_ROOT/ticketty.env" | cut -d= -f2-)"; token="${GITHUB_READONLY_TOKEN:-}"; [[ -z "$token" && -s "$ETC_ROOT/secrets/github-readonly-token" ]] && token="$(tr -d '\r\n' < "$ETC_ROOT/secrets/github-readonly-token")"; if [[ -n "$token" ]]; then curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H "Authorization: Bearer $token" "https://api.github.com/repos/$repo/releases/latest"; else curl -fsSL -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' "https://api.github.com/repos/$repo/releases/latest"; fi; }
 plan_json(){ local cur latest; cur="$(current_release)"; latest="$(latest_json | jq -r '.tag_name // empty')"; [[ -n "$latest" ]] || { jq -n --arg c "$cur" '{ok:true,update:false,current:$c,reason:"no-release"}'; return; }; if [[ "$cur" == "$latest" ]]; then jq -n --arg c "$cur" --arg l "$latest" '{ok:true,update:false,current:$c,latest:$l}'; else latest_json | jq --arg c "$cur" '{ok:true,update:true,current:$c,latest:.tag_name,url:.html_url,name:(.name//.tag_name),published_at:.published_at,body:(.body//"")}'; fi; }
 select_initial_release(){
   local target
@@ -466,8 +565,11 @@ select_initial_release(){
   if [[ -z "$target" ]]; then target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"; fi
   if [[ -z "$target" ]]; then target="$(latest_json 2>/dev/null | jq -r ".tag_name // empty" || true)"; fi
   if [[ -n "$target" ]]; then
-    "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
+    local gated_commit actual_commit
+    gated_commit="$(gate_release "$target")"
     git -C "$INSTALL_ROOT" fetch --tags --force origin
+    actual_commit="$(git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target^{commit}")"
+    [[ "$actual_commit" == "$gated_commit" ]] || die "Release tag moved after Release Gate verification."
     git -C "$INSTALL_ROOT" checkout --detach "$target"
     setv RELEASE_REF "$target"
     setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
@@ -494,7 +596,8 @@ update_ref(){
   ensure_checkout
   clean
   [[ "$DRY_RUN" -eq 1 ]] && { ok "Dry run: $target"; return; }
-  "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
+  local gated_commit actual_commit
+  gated_commit="$(gate_release "$target")"
   prebackup
   old="$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
   old_ref="$(current_release)"
@@ -504,6 +607,8 @@ update_ref(){
   setv LAST_UPDATE_MIGRATION_APPLIED no
   git -C "$INSTALL_ROOT" fetch --tags --force origin
   git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target" >/dev/null 2>&1 || die "Release not found."
+  actual_commit="$(git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target^{commit}")"
+  [[ "$actual_commit" == "$gated_commit" ]] || die "Release tag moved after Release Gate verification."
   git -C "$INSTALL_ROOT" checkout --detach "$target"
   if ! docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" run --rm migrate; then
     setv LAST_UPDATE_MIGRATION_APPLIED unknown
@@ -518,6 +623,14 @@ update_ref(){
   if ! health; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "Health check failed after migration; automatic application rollback is blocked."
+  fi
+  if ! monitoring_verify; then
+    setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
+    die "Monitoring verification failed after migration; automatic application rollback is blocked."
+  fi
+  if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == CONFIGURED ]] && ! public_health; then
+    setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
+    die "Public health check failed after migration; automatic application rollback is blocked."
   fi
   setv RELEASE_REF "$target"
   setv RELEASE_COMMIT "$(git -C "$INSTALL_ROOT" rev-parse HEAD)"
@@ -540,7 +653,9 @@ rollback_ref(){
     read -r -p "Re-deploy $target without rolling back the database? [y/N]: " answer
     [[ "$answer" =~ ^[Yy]$ ]] || die "Cancelled."
   fi
-  "$INSTALL_ROOT/ops/deployment/release-gate.sh" "$target"
+  local gated_commit
+  gated_commit="$(gate_release "$target")"
+  [[ "$gated_commit" == "$commit" ]] || die "Recorded previous release no longer matches the Release Gate commit."
   git -C "$INSTALL_ROOT" fetch --tags --force origin
   [[ "$(git -C "$INSTALL_ROOT" rev-parse "refs/tags/$target^{commit}")" == "$commit" ]] || die "The previous release no longer matches the recorded commit."
   git -C "$INSTALL_ROOT" checkout --detach "$target"
@@ -551,6 +666,14 @@ rollback_ref(){
   if ! health; then
     setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
     die "Health check failed after rollback."
+  fi
+  if ! monitoring_verify; then
+    setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
+    die "Monitoring verification failed after rollback."
+  fi
+  if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == CONFIGURED ]] && ! public_health; then
+    setv DEPLOYMENT_STATUS RECOVERY_REQUIRED
+    die "Public health check failed after rollback."
   fi
   setv RELEASE_REF "$target"
   setv RELEASE_COMMIT "$commit"
@@ -614,7 +737,18 @@ cmd_install(){
   phase CLOUDFLARE cloudflare
   phase COMPOSE compose_validate
   phase DEPLOY stack_up
-  if public_health; then ok "Public domain"; else warn "Public domain is not responding yet; run ticketty doctor."; fi
+  phase BACKUP backup_setup
+  phase MONITORING monitoring_verify
+  if public_health; then
+    setv PUBLIC_ACCESS_STATUS VERIFIED
+    ok "Public domain"
+  elif [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == DEFERRED ]]; then
+    setv PUBLIC_ACCESS_STATUS DEFERRED
+    warn "Public domain verification deferred with Cloudflare."
+  else
+    setv PUBLIC_ACCESS_STATUS FAILED
+    die "Public domain is not reachable through the configured Cloudflare Tunnel."
+  fi
   phase OPS ops_service
   phase VERIFY verify_final
   setv DEPLOYMENT_STATUS READY
@@ -684,26 +818,28 @@ cmd_rollback(){
 
 status_json(){
   load
-  local r d s o p m
+  local r d s o p m b w n
   r="$(current_release 2>/dev/null || true)"
   d="$(get APP_HOSTNAME 2>/dev/null || true)"
   s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo UNKNOWN)"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
   p="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
   m="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
-  jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m"     '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
+  b="$(get BACKUP_STATUS 2>/dev/null || echo NOT_CONFIGURED)"; w="$(get MONITORING_STATUS 2>/dev/null || echo NOT_VERIFIED)"; n="$(get PUBLIC_ACCESS_STATUS 2>/dev/null || echo NOT_VERIFIED)"
+  jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m" --arg b "$b" --arg w "$w" --arg n "$n" '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,backup_status:$b,monitoring_status:$w,public_access_status:$n,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
 }
 cmd_status(){
   load
-  local r d s o p m
+  local r d s o p m b w n
   r="$(current_release 2>/dev/null || echo 'unknown')"
   d="$(get APP_HOSTNAME 2>/dev/null || echo 'not configured')"
   s="$(get DEPLOYMENT_STATUS 2>/dev/null || echo 'unknown')"
   o="$(systemctl is-active ticketty-ops.service 2>/dev/null || echo inactive)"
   p="$(get PREVIOUS_RELEASE_REF 2>/dev/null || true)"
   m="$(get LAST_UPDATE_MIGRATION_APPLIED 2>/dev/null || true)"
+  b="$(get BACKUP_STATUS 2>/dev/null || echo NOT_CONFIGURED)"; w="$(get MONITORING_STATUS 2>/dev/null || echo NOT_VERIFIED)"; n="$(get PUBLIC_ACCESS_STATUS 2>/dev/null || echo NOT_VERIFIED)"
   if [[ "$JSON_OUTPUT" -eq 1 ]]; then
-    jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m"       '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
+    jq -n --arg r "$r" --arg d "$d" --arg s "$s" --arg o "$o" --arg p "$p" --arg m "$m" --arg b "$b" --arg w "$w" --arg n "$n" '{ok:true,release:$r,domain:$d,status:$s,remote_ops:$o,backup_status:$b,monitoring_status:$w,public_access_status:$n,rollback:{available:($p != "" and $m == "no"),previous_release:$p,migration_state:$m}}'
     return
   fi
   step "TICKETTY - Server Status"
@@ -711,13 +847,30 @@ cmd_status(){
   printf '  Domain: %s\n' "$d"
   printf '  Deployment status: %s\n' "$s"
   printf '  Remote Ops: %s\n\n' "$o"
+  printf '  Backup: %s | Monitoring: %s | Public access: %s\n' "$b" "$w" "$n"
   if [[ -f "$INSTALL_ROOT/compose.yaml" && -f "$INSTALL_ROOT/.env" ]]; then
     docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps || true
   else
     warn "Ticketty runtime files are not complete yet."
   fi
 }
-cmd_doctor(){ load; step "Ticketty - Diagnostics"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
+cmd_doctor(){
+  load
+  step "Ticketty - Diagnostics"
+  command -v docker >/dev/null && ok Docker || warn Docker
+  docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"
+  [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment
+  [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" ]] && docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare-local ps --status running cloudflared-local 2>/dev/null | grep -q cloudflared-local; then ok "Cloudflare local tunnel"; elif [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare ps --status running cloudflared 2>/dev/null | grep -q cloudflared; then ok "Cloudflare token tunnel"; else warn Cloudflare; fi
+  [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"
+  systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"
+  docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose
+  health && ok "Backend + Web" || warn "Backend/Web"
+  [[ "$(get BACKUP_STATUS 2>/dev/null || true)" == VERIFIED ]] && ok "Off-site backup" || warn "Off-site backup"
+  [[ "$(get WORKER_WATCHDOG_STATUS 2>/dev/null || true)" == ENABLED ]] && systemctl is-enabled --quiet ticketty-worker-watchdog.timer && ok "Worker watchdog" || warn "Worker watchdog"
+  [[ "$(get MONITORING_STATUS 2>/dev/null || true)" == VERIFIED ]] && ok Monitoring || warn Monitoring
+  if [[ "$(get CLOUDFLARE_STATUS 2>/dev/null || true)" == CONFIGURED ]]; then public_health && ok "Public domain" || warn "Public domain"; fi
+}
 cmd_reconfigure_resources(){
   root
   lock
@@ -744,7 +897,12 @@ cmd_transfer_import(){
 cmd_setup_cf(){
   root; load
   "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
-  if [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+  if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
+    docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare-local up -d cloudflared-local
+    public_health || warn "Cloudflare local tunnel is running but the public domain is not responding yet; run ticketty doctor."
+  elif [[ -s "$CLOUDFLARE_TOKEN_FILE" ]]; then
+    setv CLOUDFLARE_STATUS CONFIGURED
     docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" --profile cloudflare up -d cloudflared
     public_health || warn "Cloudflare is running but the public domain is not responding yet; run ticketty doctor."
   fi

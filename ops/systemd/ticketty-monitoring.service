@@ -7,9 +7,9 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-WorkingDirectory=/srv/ticketty
-ExecStart=/srv/ticketty/ops/monitoring/run-host-monitoring.sh start
-ExecStop=/srv/ticketty/ops/monitoring/run-host-monitoring.sh stop
+WorkingDirectory=__TICKETTY_ROOT__
+ExecStart=__TICKETTY_ROOT__/ops/monitoring/run-host-monitoring.sh start
+ExecStop=__TICKETTY_ROOT__/ops/monitoring/run-host-monitoring.sh stop
 TimeoutStartSec=180
 TimeoutStopSec=60
 

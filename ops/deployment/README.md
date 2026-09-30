@@ -32,6 +32,8 @@ sudo ticketty transfer-import <bundle.tar.gz>
 - تحديث Release الإنتاجي يمر عبر release-gate ويتطلب نجاح CI على نفس commit.
 - migration يمكن تشغيله مستقلًا عبر ticketty migrate مع نسخة احتياطية مسبقة.
 - فشل التطبيق أو health checks يعيد كود التطبيق إلى الإصدار السابق؛ migrations لا تُعكس تلقائيًا.
+- التثبيت الإنتاجي لا يصبح `READY` قبل قبول وجهة `rclone` خارجية، إنشاء `/etc/ticketty/backup.env`، تشغيل نسخة أولية متحققة، وتفعيل timers النسخ و`worker-watchdog`.
+- Prometheus وAlertmanager يعملان من Compose ويتم التحقق من جاهزية endpoints ووجود target صحي؛ الوصول العام يُسجل كـ`VERIFIED` أو `DEFERRED` بوضوح.
 
 ## Cloudflare
 
@@ -40,7 +42,19 @@ sudo ticketty transfer-import <bundle.tar.gz>
 1. Tunnel موجود مسبقًا: الصق Tunnel Token مرة واحدة.
 2. API-managed: Token محدود الصلاحيات + Account ID + Zone ID لإنشاء Tunnel وضبط hostname وDNS.
 
-عند وجود Tunnel token يشغل Compose خدمة `cloudflared` من profile `cloudflare`، ويتم إجراء فحص HTTP عام على `https://<hostname>/api/health/live` بعد النشر.
+عند وجود Tunnel token يشغل Compose خدمة `cloudflared` من profile `cloudflare`. وعند إنشاء Tunnel محليًا عبر browser authorization يشغل profile `cloudflare-local`. في الحالتين يتم إجراء فحص HTTP عام على `https://<hostname>/api/health/live` بعد النشر.
+
+## Backup وWorker Watchdog
+
+أثناء `ticketty install`:
+
+1. يُطلب `RCLONE_REMOTE` أو يُقرأ من `TICKETTY_RCLONE_REMOTE`.
+2. تُختبر الوجهة بـ`rclone` قبل المتابعة.
+3. يُنشأ `/etc/ticketty/backup.env` بصلاحيات مقيدة، مع اتصال PostgreSQL عبر `127.0.0.1:15432`.
+4. تُفعّل `ticketty-backup.timer` و`ticketty-backup-watchdog.timer` و`ticketty-worker-watchdog.timer`.
+5. تُنفذ نسخة أولية حقيقية، ويُشترط وجود `last-success` قبل إعلان الجاهزية.
+
+النسخ الليلي لا يعتمد على Node على المضيف؛ يستخدم `python3` فقط لتطبيع معاملات اتصال PostgreSQL، ويتم تثبيته ضمن متطلبات الخادم.
 
 ## Telegram Remote Operations
 

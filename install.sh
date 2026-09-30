@@ -22,10 +22,10 @@ fi
 mkdir -p "$(dirname "$ROOT")"
 if [[ -d "$ROOT/.git" ]]; then
   echo "Existing Ticketty installation detected at $ROOT"
-  echo "Refreshing bootstrap tools from the repository..."
-  GIT_TERMINAL_PROMPT=0 git -C "$ROOT" fetch --force "$REPO" master
-  git -C "$ROOT" show FETCH_HEAD:ops/deployment/ticketty > /usr/local/bin/ticketty
-  git -C "$ROOT" show FETCH_HEAD:ops/deployment/bootstrap.sh > /usr/local/bin/ticketty-bootstrap
+  echo "Using the installed deployment manager; releases are refreshed by the release-gated update flow."
+  [[ -x "$ROOT/ops/deployment/ticketty" ]] || { echo "ERROR: Installed deployment manager is missing: $ROOT/ops/deployment/ticketty" >&2; exit 1; }
+  install -m 0755 "$ROOT/ops/deployment/ticketty" /usr/local/bin/ticketty
+  install -m 0755 "$ROOT/ops/deployment/bootstrap.sh" /usr/local/bin/ticketty-bootstrap
 else
   [[ ! -e "$ROOT" ]] || { echo "ERROR: Path exists but is not a Git repository: $ROOT" >&2; exit 1; }
   git clone "$REPO" "$ROOT"

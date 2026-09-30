@@ -72,7 +72,7 @@ Record start/end time, backup timestamp, achieved RPO/RTO, row-count sanity chec
 
 | المتطلب | التنفيذ |
 |---|---|
-| جدولة تلقائية | cron يومي 02:30 (الأمر أدناه) |
+| جدولة تلقائية | `ticketty-backup.timer` عبر systemd؛ cron أدناه مرجع للتثبيت اليدوي فقط |
 | نسخة خارج الخادم | `RCLONE_REMOTE` (B2/S3/Google/…) + **تحقق حجم طرف-للطرف بعد الرفع** |
 | retention | `BACKUP_RETENTION_DAYS` — معطّل افتراضيًا (`0`) حتى اعتماد سياسة الحذف؛ عند قيمة موجبة يطبق على Daily محليًا وخارجيًا |
 | فشل مرئي | exit 1 (يفشل cron التوثيقي) + سجل CSV + **إنذار HIGH عبر نفس قناة الـ watchdog** |
@@ -80,7 +80,9 @@ Record start/end time, backup timestamp, achieved RPO/RTO, row-count sanity chec
 | فشل الـ cron نفسه | `backup-watchdog.sh` في جدول مستقل: لا نجاح خلال 25 ساعة → exit 1 + إنذار |
 | الاستعادة | نفس `restore-postgres.sh` + التمرين الربعي `verify-restore.sh` |
 
-### التثبيت (cron على الخادم)
+### التثبيت اليدوي (cron على الخادم)
+
+مسار `ticketty install` الرسمي يثبت `ticketty-backup.service` و`ticketty-backup.timer` و`ticketty-backup-watchdog.timer`، ويجري نسخة أولية قبل إعلان الجاهزية. استخدم cron التالي فقط عند التشغيل اليدوي خارج Installer:
 
 ```cron
 30 2 * * * cd /srv/ticketty && set -a; . /etc/ticketty/backup.env; set +a; \

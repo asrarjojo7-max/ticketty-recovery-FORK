@@ -1,7 +1,7 @@
 [Unit]
-Description=Ticketty verified off-site database backup
+Description=Ticketty accounting worker watchdog
 Wants=network-online.target
-After=network-online.target
+After=network-online.target docker.service
 
 [Service]
 Type=oneshot
@@ -9,7 +9,8 @@ User=ticketty
 Group=ticketty
 WorkingDirectory=__TICKETTY_ROOT__
 EnvironmentFile=/etc/ticketty/backup.env
-ExecStart=__TICKETTY_ROOT__/ops/backup-nightly.sh
+Environment=METRICS_URL=http://127.0.0.1:3001/api/metrics
+ExecStart=__TICKETTY_ROOT__/ops/worker-watchdog.sh
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict

@@ -7,6 +7,9 @@ REPO="${TICKETTY_GITHUB_REPOSITORY:-}"
 if [[ -z "$REPO" && -f "$CONFIG_ENV" ]]; then REPO="$(grep "^TICKETTY_GITHUB_REPOSITORY=" "$CONFIG_ENV" | cut -d= -f2- || true)"; fi
 REF="${1:-}"
 TOKEN_FILE="${GITHUB_READONLY_TOKEN_FILE:-/etc/ticketty/secrets/github-readonly-token}"
+CI_WORKFLOW_NAME="${TICKETTY_CI_WORKFLOW_NAME:-}"
+if [[ -z "$CI_WORKFLOW_NAME" && -f "$CONFIG_ENV" ]]; then CI_WORKFLOW_NAME="$(grep '^TICKETTY_CI_WORKFLOW_NAME=' "$CONFIG_ENV" | cut -d= -f2- || true)"; fi
+CI_WORKFLOW_NAME="${CI_WORKFLOW_NAME:-CI}"
 die(){ echo "ERROR: $*" >&2; exit 1; }
 need(){ command -v "$1" >/dev/null 2>&1 || die "$1 is required."; }
 
@@ -38,7 +41,7 @@ fi
 [[ "$commit_sha" =~ ^[0-9a-f]{40}$ ]] || die "Unable to determine release commit."
 
 runs="$(curl -fsSL "${headers[@]}" "https://api.github.com/repos/$REPO/actions/runs?head_sha=$commit_sha&per_page=100")" || die "Unable to read GitHub Actions."
-run_id="$(printf "%s" "$runs" | jq -r "[.workflow_runs[] | select(.name == \"CI\") | .id] | .[0] // empty")"
+run_id="$(printf "%s" "$runs" | jq -r --arg workflow "$CI_WORKFLOW_NAME" '[.workflow_runs[] | select(.name == $workflow) | .id] | .[0] // empty')"
 [[ "$run_id" =~ ^[0-9]+$ ]] || die "No CI run exists for the selected commit."
 run_json="$(curl -fsSL "${headers[@]}" "https://api.github.com/repos/$REPO/actions/runs/$run_id")" || die "Unable to read CI run."
 [[ "$(printf "%s" "$run_json" | jq -r ".head_sha")" == "$commit_sha" ]] || die "CI does not match the release commit."

@@ -7,7 +7,16 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
   exit 2
 fi
 
-postgres_url="$(POSTGRES_URL_INPUT="$DATABASE_URL" node -e "const u=new URL(process.env.POSTGRES_URL_INPUT);u.searchParams.delete('schema');process.stdout.write(u.toString())")"
+postgres_url="$(POSTGRES_URL_INPUT="$DATABASE_URL" python3 - <<'PY'
+import os
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+value = os.environ["POSTGRES_URL_INPUT"]
+parts = urlsplit(value)
+query = [(key, item) for key, item in parse_qsl(parts.query, keep_blank_values=True) if key != "schema"]
+print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
+PY
+)"
 backup_dir="${BACKUP_DIR:-$(pwd)/backups}"
 mkdir -p "$backup_dir"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"

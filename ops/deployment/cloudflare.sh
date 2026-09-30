@@ -10,6 +10,20 @@ die(){ echo "ERROR: $*" >&2; exit 1; }
 need(){ command -v "$1" >/dev/null 2>&1 || die "$1 is required."; }
 envv(){ grep "^$1=" "$ENV_FILE" | tail -1 | cut -d= -f2- || true; }
 setenv(){ local k="$1" v="$2"; if grep -q "^$k=" "$ENV_FILE"; then sed -i "s#^$k=.*#$k=$v#" "$ENV_FILE"; else printf "%s=%s\n" "$k" "$v" >> "$ENV_FILE"; fi; }
+ensure_cloudflared(){
+  command -v cloudflared >/dev/null 2>&1 && return 0
+  [[ -r /etc/os-release ]] || die "Unable to determine the operating system for cloudflared installation."
+  . /etc/os-release
+  [[ "$ID" == ubuntu || "$ID" == debian ]] || die "Automatic cloudflared installation supports Ubuntu and Debian only."
+  command -v apt-get >/dev/null 2>&1 || die "apt-get is required to install cloudflared."
+  install -m 0755 -d /usr/share/keyrings
+  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+  chmod a+r /usr/share/keyrings/cloudflare-main.gpg
+  printf 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main\n' > /etc/apt/sources.list.d/cloudflared.list
+  apt-get update
+  apt-get install -y cloudflared
+  command -v cloudflared >/dev/null 2>&1 || die "cloudflared installation failed."
+}
 
 cf(){
   local method="$1" path="$2" body="${3:-}"
@@ -95,7 +109,7 @@ create_api_tunnel(){
 }
 
 wizard(){
-  need curl; need jq; need openssl; need cloudflared
+  need curl; need jq; need openssl
   [[ -n "$ENV_FILE" && -n "$TOKEN_FILE" ]] || die "--env and --token-file are required."
 
   if [[ -s "$TOKEN_FILE" ]]; then
@@ -114,6 +128,7 @@ wizard(){
 
   case "$mode" in
     1)
+      ensure_cloudflared
       local host name login_home cert create_output id config_dir
       host="$(envv CLOUDFLARE_HOSTNAME)"
       [[ -n "$host" && "$host" != PLACEHOLDER ]] || die "A domain is required before Cloudflare setup."
