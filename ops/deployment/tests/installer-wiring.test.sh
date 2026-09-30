@@ -12,6 +12,12 @@ grep -Fq 'setv PUBLIC_ACCESS_STATUS VERIFIED' "$TICKETTY"
 grep -Fq 'setv PUBLIC_ACCESS_STATUS FAILED' "$TICKETTY"
 grep -Fq 'setv BACKUP_STATUS VERIFIED' "$TICKETTY"
 grep -Fq 'setv MONITORING_STATUS VERIFIED' "$TICKETTY"
+grep -Fq 'expected_jobs=' "$TICKETTY"
+grep -Fq 'ticketty-backend' "$INSTALL_ROOT/ops/monitoring/prometheus.yml"
+grep -Fq 'postgres-exporter:9187' "$INSTALL_ROOT/ops/monitoring/prometheus.yml"
+grep -Fq 'node-exporter:9100' "$INSTALL_ROOT/ops/monitoring/prometheus.yml"
+grep -Fq 'blackbox-exporter:9115' "$INSTALL_ROOT/ops/monitoring/prometheus.yml"
+grep -Fq 'alertmanager:9093' "$INSTALL_ROOT/ops/monitoring/prometheus.yml"
 
 # Backup must be scheduled independently and use an off-site destination.
 for unit in ticketty-backup.service ticketty-backup.timer ticketty-backup-watchdog.service ticketty-backup-watchdog.timer ticketty-worker-watchdog.service ticketty-worker-watchdog.timer; do
