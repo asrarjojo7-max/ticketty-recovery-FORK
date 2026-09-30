@@ -489,16 +489,30 @@ EOF
   ok "Off-site backup verified and scheduled"
 }
 monitoring_verify(){
-  local target_health running_services
-  running_services="$(docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps --status running --services 2>/dev/null || true)"
-  grep -qx 'prometheus' <<<"$running_services" || die "Prometheus container is not running."
-  grep -qx 'alertmanager' <<<"$running_services" || die "Alertmanager container is not running."
-  curl -fsS http://127.0.0.1:${PROMETHEUS_PORT:-9090}/-/ready >/dev/null || die "Prometheus readiness check failed."
-  curl -fsS http://127.0.0.1:${ALERTMANAGER_PORT:-9093}/-/ready >/dev/null || die "Alertmanager readiness check failed."
-  target_health="$(curl -fsS http://127.0.0.1:${PROMETHEUS_PORT:-9090}/api/v1/targets 2>/dev/null || true)"
-  printf '%s' "$target_health" | jq -e '.status == "success" and ([.data.activeTargets[]?.health] | any(. == "up"))' >/dev/null || die "Prometheus has no healthy active targets."
-  setv MONITORING_STATUS VERIFIED
-  ok "Prometheus and Alertmanager verified"
+  local target_health running_services deadline expected_jobs
+  expected_jobs='["ticketty-backend","prometheus","postgres","node","ticketty-web"]'
+  deadline=$((SECONDS + 120))
+  while (( SECONDS < deadline )); do
+    running_services="$(docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" ps --status running --services 2>/dev/null || true)"
+    if grep -qx 'prometheus' <<<"$running_services" && grep -qx 'alertmanager' <<<"$running_services" \
+      && curl -fsS "http://127.0.0.1:${PROMETHEUS_PORT:-9090}/-/ready" >/dev/null 2>&1 \
+      && curl -fsS "http://127.0.0.1:${ALERTMANAGER_PORT:-9093}/-/ready" >/dev/null 2>&1; then
+      target_health="$(curl -fsS "http://127.0.0.1:${PROMETHEUS_PORT:-9090}/api/v1/targets" 2>/dev/null || true)"
+      if printf '%s' "$target_health" | jq -e --argjson expected "$expected_jobs" '
+        .status == "success" and
+        ([.data.activeTargets[]? | select(.health == "up") | .labels.job] as $healthy |
+          all($expected[]; . as $job | ($healthy | index($job)) != null))
+      ' >/dev/null 2>&1; then
+        setv MONITORING_STATUS VERIFIED
+        ok "Prometheus and Alertmanager verified; all expected scrape targets are healthy"
+        return 0
+      fi
+    fi
+    sleep 5
+  done
+  target_health="$(curl -fsS "http://127.0.0.1:${PROMETHEUS_PORT:-9090}/api/v1/targets" 2>/dev/null || printf '%s' '{}')"
+  printf 'Prometheus target state at timeout: %s\n' "$target_health" >&2
+  die "Prometheus/Alertmanager readiness or one of the expected scrape targets failed within 120 seconds."
 }
 ops_service(){
   getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
