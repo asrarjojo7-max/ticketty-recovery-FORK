@@ -3,6 +3,9 @@ overrides:
   qs@<6.16.0: ">=6.16.0"
   # Keep aligned with pnpm-lock.yaml; 2.4.0 includes the upstream security fix.
   multer: 2.4.0
+  # Transitive via socket.io/@nestjs/platform-socket.io. 6.6.10 carries the
+  # fix for GHSA-2gc4-cqfq-p2gv (Engine.IO protocol revision mismatch DoS).
+  engine.io@<6.6.10: ">=6.6.10"
 
 allowBuilds:
   '@prisma/client': true
