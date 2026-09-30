@@ -4,7 +4,8 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HELPER="$ROOT/cloudflare.sh"
 
-grep -Fq 'need curl; need jq; need openssl; need cloudflared' "$HELPER"
+grep -Fq 'need curl; need jq; need openssl' "$HELPER"
+grep -Fq 'ensure_cloudflared' "$HELPER"
 grep -Fq 'Sign in with your browser and configure automatically' "$HELPER"
 grep -Fq 'cloudflared tunnel login' "$HELPER"
 grep -Fq 'cloudflared tunnel --origincert "$cert" create' "$HELPER"

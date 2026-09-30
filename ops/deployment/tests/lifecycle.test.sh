@@ -79,14 +79,20 @@ grep -q 'target="$(get TRANSFER_SOURCE_RELEASE 2>/dev/null || true)"' "$TICKETTY
 echo "lifecycle tests: PASS (identity, env preservation, profile transfer, release preservation, Cloudflare deferral)"
 
 
-# New installs must default to the canonical repository used by this repository.
+# New installs must use one repository source and must not bypass Release Gate via master.
 grep -q 'REPO="${TICKETTY_REPOSITORY_URL:-https://github.com/mogahedadamy/ticketty-recovery.git}"' "$INSTALL_ROOT/install.sh"
 grep -q 'repo="${TICKETTY_REPOSITORY_URL:-https://github.com/mogahedadamy/ticketty-recovery.git}"' "$INSTALL_ROOT/ops/deployment/bootstrap.sh"
 grep -q 'DEFAULT_REPO="https://github.com/mogahedadamy/ticketty-recovery.git"' "$TICKETTY"
 grep -q 'env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}"' "$TICKETTY"
-grep -q 'TICKETTY_GITHUB_REPOSITORY=mogahedadamy/ticketty-recovery' "$TICKETTY"
-grep -q 'git -C "\$ROOT" fetch --force "\$REPO" master' "$INSTALL_ROOT/install.sh"
-grep -q 'git -C "\$ROOT" show FETCH_HEAD:ops/deployment/ticketty > /usr/local/bin/ticketty' "$INSTALL_ROOT/install.sh"
+grep -q 'TICKETTY_GITHUB_REPOSITORY=$(repo_slug "\$REPOSITORY")' "$TICKETTY"
+grep -q 'Using the installed deployment manager; releases are refreshed by the release-gated update flow.' "$INSTALL_ROOT/install.sh"
+! grep -q 'fetch --force "\$REPO" master' "$INSTALL_ROOT/install.sh"
+grep -q 'gated_commit="\$(gate_release "\$target")"' "$TICKETTY"
+grep -q 'Release tag moved after Release Gate verification' "$TICKETTY"
+grep -q 'phase BACKUP backup_setup' "$TICKETTY"
+grep -q 'phase MONITORING monitoring_verify' "$TICKETTY"
+grep -q 'ticketty-backup.timer' "$TICKETTY"
+grep -q 'ticketty-backup-watchdog.timer' "$TICKETTY"
 
 # A completed installation must use the same installer command as a safe update entrypoint.
 grep -q 'previous_status="$(get DEPLOYMENT_STATUS 2>/dev/null || true)"' "$TICKETTY"
