@@ -211,6 +211,12 @@ env_set(){
   fi
 }
 secret_file(){ local f="$1" n="$2"; [[ -s "$f" ]] || { openssl rand -base64 "$n" | tr -d '\n' > "$f"; chmod 600 "$f"; }; }
+# Compose bind-mounts these secret files as single files into containers that run
+# as a non-root user, so the container never traverses this directory and only
+# the file's own owner/mode decides readability. `root:$OPS_GROUP` + 0640 grants
+# the container read access through the group it already joins via `group_add`,
+# without making the secret world-readable. Idempotent; never rewrites content.
+secure_container_secret(){ local f="$1"; [[ -f "$f" ]] || return 0; chown root:"$OPS_GROUP" "$f"; chmod 640 "$f"; }
 configure_alertmanager_receiver(){
   local file="$ETC_ROOT/alertmanager-webhook-url"
   if [[ ! -f "$file" ]]; then
@@ -240,6 +246,13 @@ ensure_env(){
   env_set_missing TICKETTY_OPS_SOCKET "$OPS_SOCKET" "$f"
   env_set_missing TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE" "$f"
   env_set_missing TICKETTY_REMOTE_OPS_ENABLED true "$f"
+  # Keys present in .env.production.example but absent on installs created before
+  # them. Defaults only; env_set_missing never overwrites an existing value.
+  env_set_missing API_BIND_HOST 0.0.0.0 "$f"
+  env_set_missing TELEGRAM_POLL_TIMEOUT_SECONDS 25 "$f"
+  env_set_missing TELEGRAM_REQUEST_TIMEOUT_MS 15000 "$f"
+  env_set_missing BACKUP_STATE_DIR /var/lib/ticketty/backup-state "$f"
+  env_set_missing BACKUP_METRICS_DIR /var/lib/ticketty/metrics "$f"
   env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}" "$f"
   env_set_missing TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}" "$f"
   env_set_missing TICKETTY_INSTALL_ROOT "$INSTALL_ROOT" "$f"
@@ -344,6 +357,8 @@ telegram(){
   local gid; gid="$(getent group "$OPS_GROUP" | cut -d: -f3)"
   if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
+  secure_container_secret "$TELEGRAM_TOKEN_FILE"
+  secure_container_secret "$TELEGRAM_ALERT_TOKEN_FILE"
   ok "Telegram"; }
 cloudflare(){
   if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then
@@ -520,6 +535,10 @@ ops_service(){
   sed "s#__TICKETTY_ROOT__#${INSTALL_ROOT}#g" "$INSTALL_ROOT/ops/systemd/ticketty-ops.service" > /etc/systemd/system/ticketty-ops.service
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"
   chmod 640 "$OPS_HMAC_FILE"
+  # Runs on fresh installs and on `resume`/update of existing ones, so installs
+  # created before the secret-permissions fix are repaired without a reinstall.
+  secure_container_secret "$TELEGRAM_TOKEN_FILE"
+  secure_container_secret "$TELEGRAM_ALERT_TOKEN_FILE"
   systemctl daemon-reload
   systemctl enable --now ticketty-ops.service
   systemctl is-active --quiet ticketty-ops.service || die "Remote Ops service did not start."

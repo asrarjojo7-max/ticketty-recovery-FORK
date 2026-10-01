@@ -38,4 +38,48 @@ grep -Fq 'ensure_cloudflared' "$ROOT/cloudflare.sh"
 # The bootstrap must not fetch unverified master code for an existing production install.
 ! grep -Fq 'fetch --force "$REPO" master' "$INSTALL_ROOT/install.sh"
 
-echo "installer wiring tests: PASS (release, backup, monitoring, Cloudflare, readiness gates)"
+die(){ printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+# Explicit assertions: under `set -e` a failing `! grep ...` is a silent no-op,
+# so every check below exits non-zero on violation instead of relying on -e.
+require(){ grep -Eq -- "$1" <<<"$2" || die "$3"; }
+reject(){ ! grep -Eq -- "$1" <<<"$2" || die "$3"; }
+
+# Regression: the image CMD is the Render bootstrap script. The backend service
+# must override it, otherwise the container crash-loops demanding
+# MIGRATION_DATABASE_URL (never passed to the app) before Nest ever starts.
+backend_service="$(awk '/^  backend:/{f=1} f&&/^  [a-zA-Z]/{if(!/^  backend:/)exit} f' "$COMPOSE")"
+[[ -n "$backend_service" ]] || die "backend service block not found in compose.yaml"
+# Strip comments so prose (e.g. why the Render entrypoint is overridden) does not
+# trip the assertions; only effective YAML keys are checked.
+backend_effective="$(sed 's/#.*$//' <<<"$backend_service")"
+require '^[[:space:]]+command:' "$backend_effective" "backend service must define a command override"
+reject 'render-entrypoint\.sh' "$backend_effective" "backend command must not be the Render entrypoint"
+require 'dist/main\.js' "$backend_effective" "backend command must start Nest directly (node dist/main.js)"
+# The application must never receive Render's admin/bootstrap credentials.
+reject 'MIGRATION_DATABASE_URL|RUNTIME_DATABASE_PASSWORD|INITIAL_ADMIN_(EMAIL|PASSWORD)' \
+  "$backend_effective" "backend service must not receive admin/bootstrap credentials"
+# The migrate service is the only one allowed to hold the admin connection.
+require 'MIGRATION_DATABASE_URL' \
+  "$(awk '/^  migrate:/{f=1} f&&/^  [a-zA-Z]/{if(!/^  migrate:/)exit} f' "$COMPOSE")" \
+  "migrate service must keep the admin connection"
+
+# Regression: container-mounted secrets were created 0600 root:root, so the
+# non-root container user got EACCES. They must be root:$OPS_GROUP + 0640 so the
+# container reads them through the group it already joins via group_add.
+require 'secure_container_secret\(\)\{ local f="\$1"; \[\[ -f "\$f" \]\] \|\| return 0; chown root:"\$OPS_GROUP" "\$f"; chmod 640 "\$f"; \}' \
+  "$(cat "$TICKETTY")" "installer must chown root:\$OPS_GROUP and chmod 640 the mounted secrets"
+require 'secure_container_secret "\$TELEGRAM_TOKEN_FILE"' "$(cat "$TICKETTY")" "telegram bot token must be made container-readable"
+require 'secure_container_secret "\$TELEGRAM_ALERT_TOKEN_FILE"' "$(cat "$TICKETTY")" "telegram alert webhook token must be made container-readable"
+# The repair must run on the resume/upgrade path, not only on first install.
+require 'secure_container_secret "\$TELEGRAM_TOKEN_FILE"' \
+  "$(awk '/^ops_service\(\)/{f=1} f&&/^}/{exit} f' "$TICKETTY")" \
+  "secret permission repair must run in ops_service (resume/upgrade path)"
+# Secrets must never become world-readable, and content must never be rewritten.
+reject 'chmod (644|666|604).*(TELEGRAM_TOKEN_FILE|TELEGRAM_ALERT_TOKEN_FILE)' \
+  "$(cat "$TICKETTY")" "telegram secrets must never be world-readable"
+# The Telegram container joins the ops group, which is what grants the read.
+require 'group_add:' \
+  "$(awk '/^  telegram-assistant:/{f=1} f&&/^  [a-zA-Z]/{if(!/^  telegram-assistant:/)exit} f' "$COMPOSE")" \
+  "telegram-assistant must join the ops group to read its secrets"
+
+echo "installer wiring tests: PASS (release, backup, monitoring, Cloudflare, readiness gates, backend command, secret permissions)"
