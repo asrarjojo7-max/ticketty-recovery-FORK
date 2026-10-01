@@ -63,4 +63,23 @@ require 'MIGRATION_DATABASE_URL' \
   "$(awk '/^  migrate:/{f=1} f&&/^  [a-zA-Z]/{if(!/^  migrate:/)exit} f' "$COMPOSE")" \
   "migrate service must keep the admin connection"
 
-echo "installer wiring tests: PASS (release, backup, monitoring, Cloudflare, readiness gates, backend command)"
+# Regression: container-mounted secrets were created 0600 root:root, so the
+# non-root container user got EACCES. They must be root:$OPS_GROUP + 0640 so the
+# container reads them through the group it already joins via group_add.
+require 'secure_container_secret\(\)\{ local f="\$1"; \[\[ -f "\$f" \]\] \|\| return 0; chown root:"\$OPS_GROUP" "\$f"; chmod 640 "\$f"; \}' \
+  "$(cat "$TICKETTY")" "installer must chown root:\$OPS_GROUP and chmod 640 the mounted secrets"
+require 'secure_container_secret "\$TELEGRAM_TOKEN_FILE"' "$(cat "$TICKETTY")" "telegram bot token must be made container-readable"
+require 'secure_container_secret "\$TELEGRAM_ALERT_TOKEN_FILE"' "$(cat "$TICKETTY")" "telegram alert webhook token must be made container-readable"
+# The repair must run on the resume/upgrade path, not only on first install.
+require 'secure_container_secret "\$TELEGRAM_TOKEN_FILE"' \
+  "$(awk '/^ops_service\(\)/{f=1} f&&/^}/{exit} f' "$TICKETTY")" \
+  "secret permission repair must run in ops_service (resume/upgrade path)"
+# Secrets must never become world-readable, and content must never be rewritten.
+reject 'chmod (644|666|604).*(TELEGRAM_TOKEN_FILE|TELEGRAM_ALERT_TOKEN_FILE)' \
+  "$(cat "$TICKETTY")" "telegram secrets must never be world-readable"
+# The Telegram container joins the ops group, which is what grants the read.
+require 'group_add:' \
+  "$(awk '/^  telegram-assistant:/{f=1} f&&/^  [a-zA-Z]/{if(!/^  telegram-assistant:/)exit} f' "$COMPOSE")" \
+  "telegram-assistant must join the ops group to read its secrets"
+
+echo "installer wiring tests: PASS (release, backup, monitoring, Cloudflare, readiness gates, backend command, secret permissions)"
