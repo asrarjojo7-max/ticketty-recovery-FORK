@@ -64,6 +64,11 @@ services:
     # accidental `docker compose up --scale backend=N` while in-process
     # accounting/subscription workers are enabled.
     container_name: ticketty-backend-singleton-worker
+    # The image CMD is the Render.com bootstrap script (scripts/render-entrypoint.sh),
+    # which requires the Render-only admin credentials and reseeds the first admin.
+    # Compose already provisions those in the `migrate` service, so the application
+    # service must start Nest directly and must never receive the admin connection.
+    command: ["node", "dist/main.js"]
     restart: unless-stopped
     environment:
       <<: *backend-environment
@@ -86,6 +91,7 @@ services:
       interval: 15s
       timeout: 3s
       retries: 5
+      start_period: 30s
     stop_grace_period: 30s
 
   web:
