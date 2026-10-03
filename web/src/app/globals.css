@@ -1962,3 +1962,30 @@ button {
     display: inline-flex;
   }
 }
+
+
+/* Landing-page conversion and mobile rhythm refinements */
+.mockup-caption { max-width: 680px; margin: 12px auto 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.7; text-align: center; }
+.pricing-grid-single { grid-template-columns: minmax(0, 620px); justify-content: center; }
+.pricing-announcement { align-items: flex-start; }
+.pricing-announcement .plan-price strong { font-size: clamp(25px, 4vw, 34px); }
+@media (max-width: 900px) {
+  .landing-hero { margin-top: clamp(28px, 5vh, 48px); margin-bottom: 48px; }
+  .hero-badge { margin-bottom: 16px; padding: 7px 13px; }
+  .landing-hero > p { margin-top: 14px; line-height: 1.8; }
+  .hero-actions { gap: 10px; margin-top: 22px; }
+  .hero-mockup { margin-top: 28px; }
+}
+@media (max-width: 560px) {
+  .landing-header { min-height: 68px; padding-inline: 16px; }
+  .landing-header .primary-link { font-size: 13px; }
+  .landing-hero { width: min(calc(100% - 32px), 1152px); margin-top: 24px; }
+  .landing-hero h1 { font-size: clamp(29px, 8vw, 36px); line-height: 1.42; }
+  .hero-actions { max-width: none; }
+  .hero-actions > a { width: 100%; }
+  .mock-content { padding: 12px; }
+  .mock-ticket-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .ticket-route { grid-column: 1 / -1; grid-row: 2; }
+  .mockup-caption { font-size: 11px; }
+  .pricing-grid-single { grid-template-columns: minmax(0, 1fr); }
+}
