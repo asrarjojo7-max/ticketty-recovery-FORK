@@ -18,8 +18,10 @@ import {
 export const metadata: Metadata = {
   title: "Ticketty — منظومة إدارة شركات النقل البري",
   description:
-    "منصة ERP تشغيلية لشركات النقل في السودان: الرحلات، المبيعات، التحصيل، والتقارير في نظام واحد آمن.",
+    "منظومة تشغيل لشركات النقل البري في السودان لإدارة الرحلات والحجوزات والمبيعات والتحصيل والتقارير في مساحة عمل واحدة.",
 };
+
+const trialWhatsAppUrl = "{trialWhatsAppUrl}";
 
 const capabilities = [
   {
@@ -84,13 +86,16 @@ export default function Home() {
           <Link href="/about" className="ghost-link landing-nav-page">
             من نحن
           </Link>
-          <Link href="/#pricing" className="ghost-link landing-nav-page">
-            الأسعار
+          <Link href="#how-it-works" className="ghost-link landing-nav-page">
+            كيف تبدأ
+          </Link>
+          <Link href="#faq" className="ghost-link landing-nav-page">
+            الأسئلة الشائعة
           </Link>
           <Link href="/login" className="ghost-link">
             دخول الموظفين
           </Link>
-          <Link href="https://wa.me/249906346148?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D9%81%D9%8A%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%AA%D8%AC%D8%B1%D8%A8%D8%A9%20Ticketty%20%D8%A7%D9%84%D9%85%D8%AC%D8%A7%D9%86%D9%8A%D8%A9%20%D9%84%D9%85%D8%AF%D8%A9%2030%20%D9%8A%D9%88%D9%85%D8%A7%D9%8B." target="_blank" rel="noopener noreferrer" className="primary-link">
+          <Link href="{trialWhatsAppUrl}" target="_blank" rel="noopener noreferrer" className="primary-link">
             استفسر عن التجربة
           </Link>
         </nav>
@@ -112,7 +117,7 @@ export default function Home() {
           والمبيعات، والتحصيل، والتقارير في مساحة عمل واحدة.
         </p>
         <div className="hero-actions">
-          <Link href="https://wa.me/249906346148?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D9%81%D9%8A%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%AA%D8%AC%D8%B1%D8%A8%D8%A9%20Ticketty%20%D8%A7%D9%84%D9%85%D8%AC%D8%A7%D9%86%D9%8A%D8%A9%20%D9%84%D9%85%D8%AF%D8%A9%2030%20%D9%8A%D9%88%D9%85%D8%A7%D9%8B." target="_blank" rel="noopener noreferrer" className="primary-link">
+          <Link href="{trialWhatsAppUrl}" target="_blank" rel="noopener noreferrer" className="primary-link">
             استفسر عن تجربة 30 يوماً
           </Link>
           <Link href="#capabilities" className="ghost-link">
@@ -314,6 +319,31 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="landing-process" id="how-it-works" aria-labelledby="process-title">
+        <header className="section-head">
+          <span className="eyebrow">خطوتك الأولى</span>
+          <h2 id="process-title">كيف تبدأ مع Ticketty؟</h2>
+          <p>تعرّف على النظام أولاً، ثم ناقش مع الفريق طريقة التجربة المناسبة لطبيعة شركتك.</p>
+        </header>
+        <ol className="process-grid">
+          <li className="process-card">
+            <span className="process-number" aria-hidden="true">١</span>
+            <h3>تواصل معنا</h3>
+            <p>أرسل استفسارك عن التجربة المجانية لمدة 30 يوماً عبر واتساب.</p>
+          </li>
+          <li className="process-card">
+            <span className="process-number" aria-hidden="true">٢</span>
+            <h3>عرّفنا باحتياجك</h3>
+            <p>شاركنا نبذة عن نشاط شركتك والعمليات التي تريد تنظيمها.</p>
+          </li>
+          <li className="process-card">
+            <span className="process-number" aria-hidden="true">٣</span>
+            <h3>ناقش تفاصيل التجربة</h3>
+            <p>يوضح لك الفريق آلية العرض والتفعيل والخطوات المناسبة للبدء.</p>
+          </li>
+        </ol>
+      </section>
+
       <section className="landing-pricing" id="pricing">
         <div className="section-head">
           <span className="eyebrow">التجربة والاشتراك</span>
@@ -334,10 +364,40 @@ export default function Home() {
               العملة المعتمدة للتسعير: <bdi>ج.س — جنيه سوداني (SDG)</bdi>.
               لا نعرض سعراً قبل اعتماده رسمياً.
             </p>
-            <Link href="https://wa.me/249906346148?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D9%81%D9%8A%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%AA%D8%AC%D8%B1%D8%A8%D8%A9%20Ticketty%20%D8%A7%D9%84%D9%85%D8%AC%D8%A7%D9%86%D9%8A%D8%A9%20%D9%84%D9%85%D8%AF%D8%A9%2030%20%D9%8A%D9%88%D9%85%D8%A7%D9%8B." target="_blank" rel="noopener noreferrer" className="primary-link plan-cta">
+            <Link href="{trialWhatsAppUrl}" target="_blank" rel="noopener noreferrer" className="primary-link plan-cta">
               استفسر عن تجربة 30 يوماً
             </Link>
           </div>
+        </div>
+      </section>
+
+      <section className="landing-faq" id="faq" aria-labelledby="faq-title">
+        <header className="section-head">
+          <span className="eyebrow">إجابات واضحة</span>
+          <h2 id="faq-title">الأسئلة الشائعة</h2>
+          <p>معلومات أساسية قبل التواصل بشأن تجربة Ticketty.</p>
+        </header>
+        <div className="faq-list">
+          <details className="faq-item">
+            <summary>لمن صُممت Ticketty؟</summary>
+            <p>للشركات العاملة في النقل البري التي تريد تنظيم الرحلات والحجوزات والمبيعات ومتابعة العمليات والتقارير في نظام واحد.</p>
+          </details>
+          <details className="faq-item">
+            <summary>هل يمكنني تجربة النظام مجاناً؟</summary>
+            <p>يمكنك التواصل للاستفسار عن تفعيل تجربة مجانية لمدة 30 يوماً، وسيشرح لك الفريق خطوات البدء.</p>
+          </details>
+          <details className="faq-item">
+            <summary>كم تبلغ تكلفة الاشتراك؟</summary>
+            <p>لم يُعتمد السعر النهائي بعد. سنعلن تفاصيل الاشتراك بعد اعتمادها رسمياً، ويمكنك التواصل للاستفسار عن المستجدات.</p>
+          </details>
+          <details className="faq-item">
+            <summary>هل تسجيل الموظفين هو نفسه طلب التجربة؟</summary>
+            <p>لا. طلب التجربة والاستفسارات يتم عبر واتساب، أما الموظفون الذين لديهم حساب بالفعل فيمكنهم استخدام رابط «دخول الموظفين».</p>
+          </details>
+          <details className="faq-item">
+            <summary>هل الأرقام الظاهرة في معاينة الصفحة بيانات فعلية؟</summary>
+            <p>لا. الأرقام داخل المعاينة التوضيحية تجريبية، ولقطات الشاشة مأخوذة من بيئة العرض وقد تختلف البيانات بحسب المؤسسة وبيئة التشغيل.</p>
+          </details>
         </div>
       </section>
 
@@ -349,7 +409,7 @@ export default function Home() {
             هل تدير شركة نقل وتريد معرفة كيف يمكن أن تناسب Ticketty عملياتك؟
             تواصل مع فريق Suda Technologies للاستفسار عن تجربة النظام.
           </p>
-          <Link href="https://wa.me/249906346148?text=%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85%20%D8%B9%D9%84%D9%8A%D9%83%D9%85%D8%8C%20%D8%A3%D8%B1%D8%BA%D8%A8%20%D9%81%D9%8A%20%D8%A7%D9%84%D8%A7%D8%B3%D8%AA%D9%81%D8%B3%D8%A7%D8%B1%20%D8%B9%D9%86%20%D8%AA%D8%AC%D8%B1%D8%A8%D8%A9%20Ticketty%20%D8%A7%D9%84%D9%85%D8%AC%D8%A7%D9%86%D9%8A%D8%A9%20%D9%84%D9%85%D8%AF%D8%A9%2030%20%D9%8A%D9%88%D9%85%D8%A7%D9%8B." target="_blank" rel="noopener noreferrer" className="primary-link">
+          <Link href="{trialWhatsAppUrl}" target="_blank" rel="noopener noreferrer" className="primary-link">
             <ArrowLeft aria-hidden="true" className="link-icon" />
             تواصل بشأن التجربة
           </Link>
