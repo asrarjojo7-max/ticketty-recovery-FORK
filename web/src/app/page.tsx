@@ -214,6 +214,45 @@ export default function Home() {
         <p className="mockup-caption">معاينة توضيحية لواجهة Ticketty — البيانات المعروضة تجريبية وليست بيانات تشغيل مباشرة.</p>
       </section>
 
+      <section className="landing-screenshots" aria-labelledby="screenshots-title">
+        <header className="section-head">
+          <span className="eyebrow">من داخل النظام</span>
+          <h2 id="screenshots-title">تعرّف على واجهات Ticketty الفعلية</h2>
+          <p>لقطات حقيقية من واجهة النظام، لتكوين صورة أوضح عن تجربة الاستخدام.</p>
+        </header>
+        <div className="screenshot-grid">
+          <figure className="screenshot-card">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local product screenshot */}
+            <img
+              src="/screenshots/ticketty-dashboard.webp"
+              alt="لقطة فعلية من لوحة التحكم في Ticketty"
+              loading="lazy"
+              width={560}
+              height={293}
+            />
+            <figcaption>
+              <strong>لوحة التحكم</strong>
+              <span>متابعة المؤشرات والانتقال إلى أقسام التشغيل من مكان واحد</span>
+            </figcaption>
+          </figure>
+          <figure className="screenshot-card">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local product screenshot */}
+            <img
+              src="/screenshots/ticketty-login.webp"
+              alt="لقطة فعلية من بوابة دخول موظفي Ticketty"
+              loading="lazy"
+              width={560}
+              height={300}
+            />
+            <figcaption>
+              <strong>بوابة الموظفين</strong>
+              <span>واجهة تسجيل الدخول إلى مساحة عمل المؤسسة</span>
+            </figcaption>
+          </figure>
+        </div>
+        <p className="screenshots-note">اللقطات من بيئة العرض؛ وقد تختلف البيانات والمؤشرات بحسب المؤسسة وبيئة التشغيل.</p>
+      </section>
+
       <section className="landing-capabilities" id="capabilities">
         <header className="section-head">
           <span className="eyebrow">لماذا Ticketty؟</span>
