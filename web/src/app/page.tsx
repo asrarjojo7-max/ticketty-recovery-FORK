@@ -403,8 +403,8 @@ export default function Home() {
 
       <section className="landing-cta">
         <div className="cta-panel">
-          <span className="eyebrow eyebrow-light">ابدأ التشغيل اليوم</span>
-          <h2>جاهز لتشغيل أسطولك على Ticketty؟</h2>
+          <span className="eyebrow eyebrow-light">الخطوة التالية</span>
+          <h2>هل تريد معرفة كيف تناسب Ticketty شركتك؟</h2>
           <p>
             هل تدير شركة نقل وتريد معرفة كيف يمكن أن تناسب Ticketty عملياتك؟
             تواصل مع فريق Suda Technologies للاستفسار عن تجربة النظام.
