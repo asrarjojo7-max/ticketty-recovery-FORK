@@ -1026,8 +1026,28 @@ async function sendStatusOverview(chatId, actor) {
   );
 }
 
-async function aiIntent(textValue) {
+const aiRequestTimes = new Map();
+function allowAiRequest(chatId, now = Date.now()) {
+  const previous = aiRequestTimes.get(chatId) ?? [];
+  const recent = previous.filter((timestamp) => now - timestamp < 60_000);
+  if (recent.length >= 10) {
+    aiRequestTimes.set(chatId, recent);
+    return false;
+  }
+  recent.push(now);
+  aiRequestTimes.set(chatId, recent);
+  if (aiRequestTimes.size > 500) {
+    for (const [key, timestamps] of aiRequestTimes) {
+      if (!timestamps.some((timestamp) => now - timestamp < 60_000)) aiRequestTimes.delete(key);
+      if (aiRequestTimes.size <= 400) break;
+    }
+  }
+  return true;
+}
+
+async function aiIntent(textValue, chatId) {
   if (state.provider?.name !== 'apmix') return null;
+  if (!allowAiRequest(chatId)) return null;
   const apiKey = await readProviderKey();
   if (!apiKey) return null;
   try {
@@ -1187,7 +1207,7 @@ async function handleMessage(message) {
     return;
   }
 
-  const intent = intentFromText(textValue) ?? await aiIntent(textValue);
+  const intent = intentFromText(textValue) ?? await aiIntent(textValue, chatId);
 
   try {
     if (intent === 'help') {
