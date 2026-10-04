@@ -208,3 +208,65 @@ The assistant is part of the Ticketty server stack, but its lifecycle must follo
 - Installer and bot must not silently regenerate or replace pairing credentials during resume.
 - Server-side diagnostics must identify permission/runtime failures clearly without revealing secret values.
 - Do not use the bot or installer to bypass release gates, migration checks, or explicit user approval.
+
+
+## 19. AI architecture and provider-selection details
+
+This section records the more specific AI discussion, beyond the high-level policy in section 3.
+
+### 19.1 Provider abstraction and configuration
+
+- Keep provider integration behind a small adapter/interface so the assistant's intent handling and tools are not coupled to one vendor.
+- Configuration must distinguish provider, base URL/endpoint, model identifier, API-key secret reference, and supported API capabilities (for example, Chat Completions, Responses, and tool/function calling). Do not assume that every OpenAI-compatible provider supports every OpenAI endpoint or feature.
+- Validate provider/model compatibility before saving or activating a configuration. A model that supports ordinary chat but not the required tool-calling/API mode must not silently be treated as fully compatible.
+- Provider/model selection and configuration changes are platform-admin actions, audited and protected as sensitive changes. Never echo a saved key; allow replacing it, not retrieving it.
+- Keep API keys in server-side secret files/secret storage. The bot may collect a new key only through a deliberately protected setup flow; never place it in prompts, callback data, normal chat history, logs, GitHub, or client-side code.
+- Show the active provider/model and safe usage/availability status to the administrator without exposing credentials.
+
+### 19.2 Free-first requirement and historical candidates
+
+- The requirement is to use a model that is free to use at the time of operation, or has a real, currently available free trial/offer. “Free” must be verified against the provider's current terms, limits, and required API capabilities; do not hard-code a past promotion as a permanent guarantee.
+- During the earlier exploration, the user tried z-ai/glm-5.3-free through TokenRouter at https://api.tokenrouter.com/v1. This is historical context, not a claim that it is currently available or compatible with the assistant's required tool/API mode.
+- Another option discussed was BazaarLink's OpenAI-compatible endpoint, https://api.bazaarlink.ai/v1, with the auto:free routing label / Qwen3.7 Flash mentioned at that time. This is a historical candidate only; availability, model routing, quotas, and endpoint compatibility must be re-verified before use.
+- Earlier testing/discussion noted a compatibility distinction: a provider/model documented for Chat Completions cannot be assumed to support the Responses API. The adapter must target the endpoint the provider actually supports; do not infer support from the phrase “OpenAI-compatible.”
+- Do not silently switch the user to a paid model when a free model is unavailable. Stop AI-dependent work, explain the issue, and let the administrator deliberately select another eligible provider/model.
+
+### 19.3 Model responsibilities and tool execution
+
+- The model is an intent/reasoning layer: interpret natural-language requests, ask for missing non-sensitive parameters, and select from a finite set of typed tools.
+- The model must not be the source of truth for identity, permission, tenant scope, current system state, operation success, or confirmation validity.
+- Tool schemas must be narrow and typed; validate all model-generated arguments on the server. Resolve tenant/resource IDs and permissions through trusted backend services, not model assumptions.
+- The server—not the model—decides whether a request is read-only, sensitive, permitted, requires a PIN, or is prohibited.
+- Never put PINs, credentials, raw secrets, or unnecessary personal data in model context. The PIN verification path must be outside the AI conversation pipeline.
+- Tool results should be minimized and transformed into human-readable answers. Do not return raw database rows, unrestricted logs, environment variables, or secret-bearing diagnostics to the model.
+
+### 19.4 Conversation context and continuity
+
+- Keep conversation context short, task-scoped, and isolated. Do not forward an entire Telegram conversation by default.
+- Persist only the minimum operational state needed for continuity (for example, a pending operation ID or a non-secret conversation state), with explicit expiry and access control.
+- Do not treat model memory or prior chat text as authorization, durable truth, or proof of approval.
+- For a multi-step operation, store the canonical server-side plan/state and refer to it by an opaque operation ID. Reconstruct the action from trusted stored state, not from an untrusted model-generated recap.
+- Sensitive data and credentials must not be retained in conversation memory. Define retention and deletion behavior for bot state and audit data before production rollout.
+
+### 19.5 Usage, limits, and cost safety
+
+- Enforce configurable limits for requests, tokens/context size, tool calls, concurrency, and per-provider usage. Limits must be server-side and must not depend on the model obeying instructions.
+- Surface safe usage/quota status where the provider exposes it. Do not claim exact remaining quota if the provider does not provide reliable data.
+- Set bounded retries with backoff for transient provider failures; avoid retry storms and duplicate tool execution. A model retry must never automatically repeat a completed mutation.
+- Free-tier exhaustion, rate limits, provider outages, malformed responses, and unsupported tool calls must have explicit fallback/error behavior.
+- No unapproved automatic paid fallback. Any future paid option requires an explicit administrator decision and clear cost/limit visibility.
+
+## 20. AI implementation acceptance criteria
+
+Before considering the AI layer ready, verify that:
+
+1. Provider/model/base URL/API mode are configurable without code changes and secrets remain server-side.
+2. The selected provider's actual endpoint and tool-calling capability are tested—not assumed.
+3. Free eligibility and limits are verified at the time of selection; no silent paid fallback exists.
+4. Natural-language parsing supports Arabic/Sudanese Arabic and safely asks for clarification when intent or parameters are ambiguous.
+5. Model output is schema-validated and can invoke only explicitly registered tools.
+6. Backend authorization, PIN checks, exact-operation confirmation, and audit happen outside and after model interpretation.
+7. Prompt injection or malicious content in messages/tool results cannot expand the tool set, reveal secrets, or bypass policy.
+8. Context is minimized, task-scoped, expires appropriately, and contains no PINs or credentials.
+9. Provider outage/quota exhaustion leaves non-AI commands and core Ticketty services operational.
+10. Tests cover unsupported API modes, malformed model output, rate limits, timeouts, retries, tool authorization, and no-paid-fallback behavior.
