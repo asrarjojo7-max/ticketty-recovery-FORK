@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createConnection } from 'node:net';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, listModels, validateApiKey } from './ai-provider.mjs';
 import { dirname } from 'node:path';
 import { extractBearerToken, intentFromText } from './core.mjs';
 
@@ -19,6 +20,9 @@ const config = {
   stateFile:
     process.env.TELEGRAM_STATE_FILE ??
     '/var/lib/ticketty/telegram/state.json',
+  providerKeyFile:
+    process.env.TELEGRAM_AI_KEY_FILE ??
+    '/var/lib/ticketty/telegram/apmix-api-key',
   port: toPort(process.env.TELEGRAM_PORT ?? '8090', 8090),
   pollTimeoutSeconds: toInt(
     process.env.TELEGRAM_POLL_TIMEOUT_SECONDS ?? '25',
@@ -58,6 +62,14 @@ async function loadState() {
         Number.isInteger(parsed.updateOffset) && parsed.updateOffset >= 0
           ? parsed.updateOffset
           : 0,
+      provider: parsed.provider && parsed.provider.name === 'apmix'
+        ? { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: typeof parsed.provider.model === 'string' ? parsed.provider.model : DEFAULT_MODEL }
+        : null,
+      pendingProviderSetup: parsed.pendingProviderSetup &&
+        typeof parsed.pendingProviderSetup.chatId === 'string' &&
+        typeof parsed.pendingProviderSetup.userId === 'string' &&
+        Number.isFinite(parsed.pendingProviderSetup.expiresAt)
+          ? parsed.pendingProviderSetup : null,
       operators: Array.isArray(parsed.operators)
         ? parsed.operators
             .filter(
@@ -127,6 +139,17 @@ function isAuthorized(chatId, userId) {
   return state.operators.some(
     (operator) => operator.chatId === chatId && operator.userId === userId,
   );
+}
+
+async function saveProviderKey(apiKey) {
+  await mkdir(dirname(config.providerKeyFile), { recursive: true, mode: 0o700 });
+  await writeFile(config.providerKeyFile, apiKey + '\\n', { encoding: 'utf8', mode: 0o600 });
+  await chmod(config.providerKeyFile, 0o600);
+}
+
+async function readProviderKey() {
+  try { return validateApiKey(await readFile(config.providerKeyFile, 'utf8')); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
 
 function pair(chatId, userId) {
@@ -999,6 +1022,60 @@ async function sendStatusOverview(chatId, actor) {
   );
 }
 
+async function handleProviderSettings(message, chatId, userId, textValue) {
+  if (textValue === '/settings' || textValue === '/provider') {
+    const configured = state.provider?.name === 'apmix' && await readProviderKey();
+    await sendMessage(chatId, [
+      '⚙️ إعدادات الذكاء الاصطناعي', '',
+      'المزوّد: ' + (configured ? 'APMIX مضبوط' : 'غير مضبوط'),
+      'النموذج: ' + (state.provider?.model ?? 'غير محدد'),
+      '', 'لإعداد APMIX اكتب: /apmix',
+      'سيُطلب منك إرسال المفتاح في رسالة خاصة واحدة. لا ترسله في مجموعة.',
+      'سيحاول البوت حذف رسالة المفتاح بعد استلامها، لكن ذلك لا يضمن حذفها من سجل جهازك.'
+    ].join('\\n'));
+    return true;
+  }
+  if (textValue === '/apmix') {
+    if (!isPrivateChat(message)) { await sendMessage(chatId, 'أرسل أمر الإعداد في محادثة خاصة مع البوت.'); return true; }
+    state.pendingProviderSetup = { chatId, userId, expiresAt: Date.now() + 5 * 60 * 1000 };
+    await persistState();
+    await sendMessage(chatId, 'أرسل مفتاح APMIX الآن كرسالة خاصة خلال 5 دقائق. لن أطلبه مرة أخرى بعد حفظه.');
+    return true;
+  }
+  const pending = state.pendingProviderSetup;
+  if (pending && pending.chatId === chatId && pending.userId === userId) {
+    if (Date.now() > pending.expiresAt) {
+      state.pendingProviderSetup = null; await persistState();
+      await sendMessage(chatId, 'انتهت مهلة إعداد المزوّد. اكتب /apmix للبدء من جديد.');
+      return true;
+    }
+    if (!isPrivateChat(message) || textValue.startsWith('/')) return false;
+    try {
+      const apiKey = validateApiKey(textValue);
+      const models = await listModels({ apiKey, baseUrl: DEFAULT_BASE_URL });
+      const desired = models.find((item) => item.id === 'claude-sonnet-4-6-free');
+      if (!desired) {
+        state.pendingProviderSetup = null; await persistState();
+        await sendMessage(chatId, 'تم التحقق من الوصول إلى APMIX، لكن النموذج claude-sonnet-4-6-free غير موجود ضمن قائمة النماذج المتاحة لهذا المفتاح. لم أستبدله تلقائيًا. النماذج المتاحة: ' + models.slice(0, 20).map((item) => item.id).join(', '));
+        return true;
+      }
+      await saveProviderKey(apiKey);
+      state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: desired.id };
+      state.pendingProviderSetup = null;
+      await persistState();
+      await sendMessage(chatId, '✅ تم التحقق من مفتاح APMIX وحفظه في ملف سري على السيرفر. النموذج المحدد: ' + desired.id + '.');
+    } catch (error) {
+      state.pendingProviderSetup = null; await persistState();
+      await sendMessage(chatId, 'تعذر إعداد APMIX: ' + (error.message || 'فشل التحقق') + '. لم يتم حفظ المفتاح.');
+    } finally {
+      try { await telegram('deleteMessage', { chat_id: chatId, message_id: message.message_id }); }
+      catch { /* Telegram deletion is best-effort; never log message content. */ }
+    }
+    return true;
+  }
+  return false;
+}
+
 async function handleMessage(message) {
   const chatId = String(message.chat?.id ?? '');
   const userId = String(message.from?.id ?? '');
@@ -1039,6 +1116,8 @@ async function handleMessage(message) {
   }
 
   if (!isAuthorized(chatId, userId)) return;
+
+  if (await handleProviderSettings(message, chatId, userId, textValue)) return;
 
   if (textValue === '/status') {
     await sendStatusOverview(chatId, operatorActor(message));
