@@ -80,6 +80,9 @@ async function validateModelAccess(options, model = DEFAULT_MODEL) {
 }
 
 async function chatCompletion({ apiKey, baseUrl = DEFAULT_BASE_URL, model = DEFAULT_MODEL, messages, timeoutMs = 30000, fetchImpl = fetch }) {
+  if (typeof model !== 'string' || !/^[a-zA-Z0-9._:/-]{1,200}$/.test(model)) {
+    throw new Error('Model identifier is invalid');
+  }
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > 20) {
     throw new Error('Conversation must contain between 1 and 20 messages');
   }
