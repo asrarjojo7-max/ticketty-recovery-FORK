@@ -242,7 +242,8 @@ jobs:
       - name: Validate Telegram assistant
         run: |
           node --check ops/telegram-assistant/server.mjs
-          node --test ops/telegram-assistant/core.test.mjs
+          node --check ops/telegram-assistant/ai-provider.mjs
+          node --test ops/telegram-assistant/core.test.mjs ops/telegram-assistant/ai-provider.test.mjs
       - name: Build Telegram assistant image
         run: docker build --file ops/telegram-assistant/Dockerfile --tag ticketty-telegram-assistant:ci ops/telegram-assistant
 
