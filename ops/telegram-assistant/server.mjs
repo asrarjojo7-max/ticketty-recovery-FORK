@@ -902,6 +902,8 @@ function helpMessage() {
     '• هل أخذ النظام نسخة احتياطية؟',
     '• ماذا حدث اليوم؟',
     '• هل يوجد تحديث؟',
+    '• /settings إعدادات الذكاء الاصطناعي',
+    '• /apmix إعداد مفتاح APMIX',
     '',
     'يمكنني أيضًا تجهيز تحديث منشور على GitHub قبل التنفيذ.',
     'التحديث لا يبدأ إلا بعد تأكيد صريح منك.',
@@ -1363,6 +1365,8 @@ server.listen(config.port, '0.0.0.0', async () => {
         { command: 'status', description: 'حالة النظام' },
         { command: 'update', description: 'فحص التحديثات' },
         { command: 'help', description: 'المساعدة' },
+        { command: 'settings', description: 'إعدادات الذكاء الاصطناعي' },
+        { command: 'apmix', description: 'إعداد مزود APMIX' },
       ],
     });
 
