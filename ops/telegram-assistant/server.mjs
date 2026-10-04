@@ -1057,7 +1057,7 @@ async function handleProviderSettings(message, chatId, userId, textValue) {
       '', 'لإعداد APMIX اكتب: /apmix',
       'سيُطلب منك إرسال المفتاح في رسالة خاصة واحدة. لا ترسله في مجموعة.',
       'سيحاول البوت حذف رسالة المفتاح بعد استلامها، لكن ذلك لا يضمن حذفها من سجل جهازك.'
-    ].join('\\n'));
+    ].join('\n'));
     return true;
   }
   if (textValue === '/models') {
