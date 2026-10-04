@@ -154,6 +154,7 @@ model User {
   role         Role          @relation(fields: [roleId], references: [id])
   branch       Branch?       @relation(fields: [branchId], references: [id])
   agent        Agent?
+  telegramAccountLink TelegramAccountLink?
 
   @@index([organizationId])
   @@map("users")
@@ -1067,6 +1068,7 @@ model TelegramLinkChallenge {
 model TelegramAccountLink {
   id              String    @id @default(cuid())
   userId          String    @unique @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   telegramUserId  String    @unique @map("telegram_user_id")
   telegramChatId  String    @map("telegram_chat_id")
   active          Boolean   @default(true)
