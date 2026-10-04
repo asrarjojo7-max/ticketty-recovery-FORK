@@ -1105,7 +1105,7 @@ async function handleProviderSettings(message, chatId, userId, textValue) {
     if (!isPrivateChat(message)) { await sendMessage(chatId, 'أرسل أمر الإعداد في محادثة خاصة مع البوت.'); return true; }
     state.pendingProviderSetup = { chatId, userId, expiresAt: Date.now() + 5 * 60 * 1000 };
     await persistState();
-    await sendMessage(chatId, 'أرسل مفتاح APMIX الآن كرسالة خاصة خلال 5 دقائق. لن أطلبه مرة أخرى بعد حفظه.');
+    await sendMessage(chatId, 'أرسل مفتاح APMIX الآن كرسالة خاصة خلال 5 دقائق. سأفحص قائمة النماذج، وقد أرسل طلب اختبار قصيرًا للنموذج المطلوب يستهلك قدرًا بسيطًا من رصيدك التجريبي. لن أطلب المفتاح مرة أخرى بعد حفظه.');
     return true;
   }
   const pending = state.pendingProviderSetup;
