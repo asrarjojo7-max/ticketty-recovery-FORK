@@ -270,3 +270,16 @@ Before considering the AI layer ready, verify that:
 8. Context is minimized, task-scoped, expires appropriately, and contains no PINs or credentials.
 9. Provider outage/quota exhaustion leaves non-AI commands and core Ticketty services operational.
 10. Tests cover unsupported API modes, malformed model output, rate limits, timeouts, retries, tool authorization, and no-paid-fallback behavior.
+
+
+## 21. APMIX setup implementation notes
+
+The current branch contains an initial APMIX configuration slice, not a completed AI assistant:
+
+- The private-chat commands `/settings` and `/apmix` start a five-minute, operator-bound key-entry flow.
+- The key is validated against APMIX's key-scoped `GET /v1/models` catalog before saving. The bot does not echo the key, put it in callback data, or include it in model context. It attempts to delete the Telegram message containing the key; Telegram-side deletion is best-effort and cannot guarantee removal from the user's client history.
+- The key is stored separately from JSON state at `TELEGRAM_AI_KEY_FILE` (default `/var/lib/ticketty/telegram/apmix-api-key`) with mode `0600`; provider metadata only is stored in the state file. The persistent state volume and service user must permit this path.
+- The requested model identifier is checked exactly as `claude-sonnet-4-6-free`. If the key's catalog does not expose that exact identifier, setup reports the available model IDs and does not silently substitute another model.
+- A bounded OpenAI-compatible APMIX adapter and unit tests are included. CI now checks the adapter and includes it in the image.
+
+**Not yet complete:** the adapter is not yet wired into natural-language orchestration or typed Ticketty tools; model capability/tool-call verification, encrypted secret storage/key rotation, PIN/linking lifecycle, operation-bound approvals, authorization-backed tool execution, and the full security test matrix remain implementation work. This slice must not be described as production-ready or as satisfying all acceptance criteria.
