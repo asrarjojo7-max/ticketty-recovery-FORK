@@ -50,6 +50,14 @@ import {
 } from "./hooks";
 import type { ProvisionedTenant } from "./types";
 
+function generateInitialPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+  return `Tkt-${suffix.slice(0, 8)}-${suffix.slice(8)}`;
+}
+
 const inputClass =
   "h-10 w-full rounded-xl border border-input bg-card px-3 text-sm";
 
@@ -805,9 +813,7 @@ function ProvisionTenantModal({
   const [error, setError] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState(
     () =>
-      `Tkt-${Math.random().toString(36).slice(2, 8)}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`,
+      generateInitialPassword(),
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -919,9 +925,7 @@ function ProvisionTenantModal({
                 variant="outline"
                 onClick={() =>
                   setGeneratedPassword(
-                    `Tkt-${Math.random().toString(36).slice(2, 8)}-${Math.random()
-                      .toString(36)
-                      .slice(2, 8)}`,
+                    generateInitialPassword(),
                   )
                 }
               >
