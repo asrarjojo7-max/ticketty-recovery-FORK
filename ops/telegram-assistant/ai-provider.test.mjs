@@ -101,7 +101,7 @@ test('AI intent classifier accepts only the finite registered intent set', async
   assert.equal(await classify('{"intent":"status"}'), 'status');
   assert.equal(await classify('{"intent":"delete_database"}'), null);
   assert.equal(await classify('not-json'), null);
-  assert.equal(await classify('{"intent":"update","arguments":{"shell":"rm -rf /"}}'), 'update');
+  assert.equal(await classify('{"intent":"update","arguments":{"shell":"rm -rf /"}}'), null);
 });
 
 test('AI classifier rejects oversized user input before network access', async () => {
