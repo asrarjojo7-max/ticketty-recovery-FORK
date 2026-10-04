@@ -9,7 +9,7 @@ function normalizeBaseUrl(value = DEFAULT_BASE_URL) {
     throw new Error('Provider URL must be an HTTPS origin or API base URL without credentials, query, or fragment');
   }
   const normalized = url.toString().replace(/\/$/, '');
-  if (normalized !== 'https://api.apmix.ai/v1' && normalized !== 'https://api.apmix.ai') {
+  if (normalized !== 'https://api.apmix.ai/v1') {
     throw new Error('Only the approved APMIX endpoints are currently supported');
   }
   return normalized;
@@ -26,11 +26,6 @@ function validateApiKey(value) {
 
 function safeProviderError(status, payload) {
   const code = typeof payload?.error?.code === 'string' ? payload.error.code : '';
-  const allowed = new Set([
-    'invalid_api_key', 'key_expired', 'model_not_in_plan', 'model_not_found',
-    'allowance_exhausted', 'daily_limit_reached', 'weekly_limit_reached',
-    'rate_limit_exceeded', 'insufficient_quota', 'invalid_request',
-  ]);
   if (status === 401) return new Error('APMIX rejected the API key (401). Check or replace the key.');
   if (status === 403 && code === 'model_not_in_plan') return new Error('The selected model is not available on this APMIX plan.');
   if (status === 404 && code === 'model_not_found') return new Error('The selected model is not available in the APMIX catalog.');
