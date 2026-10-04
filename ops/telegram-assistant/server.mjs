@@ -1031,9 +1031,9 @@ const allowAiRequest = createRateLimiter({ limit: 10, windowMs: 60_000, maxKeys:
 async function aiIntent(textValue, chatId) {
   if (state.provider?.name !== 'apmix') return null;
   if (!allowAiRequest(chatId)) return null;
-  const apiKey = await readProviderKey();
-  if (!apiKey) return null;
   try {
+    const apiKey = await readProviderKey();
+    if (!apiKey) return null;
     const intent = await classifyIntent({
       apiKey,
       baseUrl: state.provider.baseUrl ?? DEFAULT_BASE_URL,
