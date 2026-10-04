@@ -1047,6 +1047,19 @@ async function aiIntent(textValue, chatId) {
   }
 }
 
+async function verifyApmixChatMode(apiKey, model) {
+  const result = await classifyIntent({
+    apiKey,
+    baseUrl: DEFAULT_BASE_URL,
+    model,
+    text: 'حالة النظام',
+  });
+  if (result !== 'status') {
+    throw new Error('The model did not pass the APMIX Chat Completions compatibility check.');
+  }
+  return true;
+}
+
 async function handleProviderSettings(message, chatId, userId, textValue) {
   if (textValue === '/settings' || textValue === '/provider') {
     const configured = state.provider?.name === 'apmix' && await readProviderKey();
@@ -1077,6 +1090,7 @@ async function handleProviderSettings(message, chatId, userId, textValue) {
     if (!apiKey) { await sendMessage(chatId, 'لم يتم إعداد APMIX بعد. اكتب /apmix.'); return true; }
     try {
       const verified = await validateModelAccess({ apiKey, baseUrl: state.provider?.baseUrl ?? DEFAULT_BASE_URL }, model);
+      await verifyApmixChatMode(apiKey, verified);
       state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: verified };
       await persistState();
       await sendMessage(chatId, 'تم تغيير النموذج بعد التحقق من توفره للمفتاح: ' + verified);
@@ -1104,18 +1118,23 @@ async function handleProviderSettings(message, chatId, userId, textValue) {
       const apiKey = validateApiKey(textValue);
       const models = await listModels({ apiKey, baseUrl: DEFAULT_BASE_URL });
       const desired = models.find((item) => item.id === 'claude-sonnet-4-6-free');
+      let selectedModel = null;
+      if (desired) {
+        try {
+          await verifyApmixChatMode(apiKey, desired.id);
+          selectedModel = desired.id;
+        } catch {
+          // Keep the validated key inactive; the operator can explicitly test another catalog model.
+        }
+      }
       await saveProviderKey(apiKey);
-      state.provider = {
-        name: 'apmix',
-        baseUrl: DEFAULT_BASE_URL,
-        model: desired ? desired.id : null,
-      };
+      state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: selectedModel };
       state.pendingProviderSetup = null;
       await persistState();
-      if (desired) {
-        await sendMessage(chatId, '✅ تم التحقق من مفتاح APMIX وحفظه في ملف سري على السيرفر. النموذج المحدد: ' + desired.id + '.');
+      if (selectedModel) {
+        await sendMessage(chatId, '✅ تم التحقق من المفتاح، وتوفر النموذج، ونجاح اختبار Chat Completions. النموذج المحدد: ' + selectedModel + '.');
       } else {
-        await sendMessage(chatId, 'تم التحقق من المفتاح وحفظه بأمان، لكن claude-sonnet-4-6-free غير موجود في قائمة هذا المفتاح. لم أختر بديلاً ولم أفعّل أي نموذج. اكتب /models لعرض المتاح، ثم /model MODEL_ID لاختياره صراحةً.');
+        await sendMessage(chatId, 'تم التحقق من المفتاح وحفظه بأمان، لكن لم يتم تفعيل نموذج: إما أن claude-sonnet-4-6-free غير موجود، أو لم يجتز اختبار Chat Completions. لم أختر بديلاً. اكتب /models ثم /model MODEL_ID لاختبار نموذج تختاره صراحةً.');
       }
     } catch (error) {
       state.pendingProviderSetup = null; await persistState();
