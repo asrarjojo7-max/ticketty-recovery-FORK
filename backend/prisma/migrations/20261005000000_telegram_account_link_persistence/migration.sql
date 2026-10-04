@@ -33,3 +33,8 @@ CREATE UNIQUE INDEX "telegram_account_links_telegram_user_id_key"
     ON "telegram_account_links"("telegram_user_id");
 CREATE INDEX "telegram_account_links_active_telegram_chat_id_idx"
     ON "telegram_account_links"("active", "telegram_chat_id");
+
+ALTER TABLE "telegram_account_links"
+    ADD CONSTRAINT "telegram_account_links_user_id_fkey"
+    FOREIGN KEY ("user_id") REFERENCES "users"("id")
+    ON DELETE RESTRICT ON UPDATE CASCADE;
