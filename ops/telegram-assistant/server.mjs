@@ -143,7 +143,7 @@ function isAuthorized(chatId, userId) {
 
 async function saveProviderKey(apiKey) {
   await mkdir(dirname(config.providerKeyFile), { recursive: true, mode: 0o700 });
-  await writeFile(config.providerKeyFile, apiKey + '\\n', { encoding: 'utf8', mode: 0o600 });
+  await writeFile(config.providerKeyFile, apiKey + '\n', { encoding: 'utf8', mode: 0o600 });
   await chmod(config.providerKeyFile, 0o600);
 }
 
