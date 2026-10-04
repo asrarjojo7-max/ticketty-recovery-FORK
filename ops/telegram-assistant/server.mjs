@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, listModels, validateApiKey } from './ai-provider.mjs';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, classifyIntent, listModels, validateApiKey } from './ai-provider.mjs';
 import { dirname } from 'node:path';
 import { extractBearerToken, intentFromText } from './core.mjs';
 
@@ -1024,6 +1024,24 @@ async function sendStatusOverview(chatId, actor) {
   );
 }
 
+async function aiIntent(textValue) {
+  if (state.provider?.name !== 'apmix') return null;
+  const apiKey = await readProviderKey();
+  if (!apiKey) return null;
+  try {
+    const intent = await classifyIntent({
+      apiKey,
+      baseUrl: state.provider.baseUrl ?? DEFAULT_BASE_URL,
+      model: state.provider.model ?? DEFAULT_MODEL,
+      text: textValue,
+    });
+    return intent;
+  } catch (error) {
+    console.error('AI intent classification unavailable:', error.message);
+    return null;
+  }
+}
+
 async function handleProviderSettings(message, chatId, userId, textValue) {
   if (textValue === '/settings' || textValue === '/provider') {
     const configured = state.provider?.name === 'apmix' && await readProviderKey();
@@ -1142,7 +1160,7 @@ async function handleMessage(message) {
     return;
   }
 
-  const intent = intentFromText(textValue);
+  const intent = intentFromText(textValue) ?? await aiIntent(textValue);
 
   try {
     if (intent === 'help') {
