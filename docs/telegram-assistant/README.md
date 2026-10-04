@@ -124,8 +124,87 @@ The agreed user experience is **easy one-time bot verification**, followed by a 
 6. Add automated security/integration tests and operational documentation.
 7. Roll out gradually after review; no merge or deployment without explicit approval.
 
----
-
 ## Decision status
 
 The sections above record the user's agreed product and security requirements. They are the source of truth for future Telegram Assistant work. Where the current code differs, treat the difference as implementation work—not as permission to weaken these decisions.
+
+
+## 12. Previously agreed operational capabilities
+
+The following scope was agreed in the earlier project discussions and is part of the intended assistant, subject to the authorization and confirmation rules above:
+
+- Arabic operational assistant with intent parsing, secure pairing, and persisted authorization.
+- Operational visibility such as service/status checks, health, alerts, and approved backup/runbook status.
+- Alertmanager-to-Telegram alert delivery, with a separate webhook secret and authenticated/restricted endpoint. Alert replies should be understandable to a human, not raw infrastructure payloads.
+- Controlled deployment lifecycle operations, including update and rollback, through a safe staged workflow—not direct commands.
+- As applicable to the supported release workflow, expose clear operations corresponding to `/status`, `/alerts`, `/update`, and `/rollback`; natural language remains the primary interface.
+- Long-running operations must be asynchronous, auditable, report progress, and expose an operation status/result rather than holding a Telegram request open indefinitely.
+- Do not claim a backup, migration, deployment, health check, or rollback succeeded until the relevant system reports and verifies that result.
+
+## 13. Deployment/update safety contract
+
+For deployment actions, the previously agreed sequence is:
+
+**Plan → Confirm → Backup → Migration → Deploy → Health Check**
+
+- Show the proposed plan and impact before execution; require explicit confirmation for consequential actions.
+- Use a known, approved release artifact/source. The intended production model is release-based deployment to the VPS, not arbitrary execution from a developer branch.
+- Back up before risky changes and verify the backup result. Preserve the ability to diagnose and recover.
+- Database migrations are forward-only in the automated deployment path. Do not automatically roll back PostgreSQL data/schema as if an application image rollback were safe.
+- If a failure leaves data or deployment state uncertain, stop and report a recovery-required state (previously described as `RECOVERY_REQUIRED`) rather than attempting destructive repair.
+- Rollback must be a separately planned and confirmed operation, with explicit limits; it must not imply database rollback.
+- The bot must not run arbitrary shell, SQL, Docker commands, or unrestricted backend calls. It may invoke only the existing constrained Remote Ops operations.
+- Deployment progress and each stage outcome must be visible and auditable. Preserve operation IDs and allow status inspection after Telegram/network interruptions.
+
+## 14. Remote Ops security protocol
+
+The existing deployment control plane is a narrow, separate interface. The prior agreement and implementation review covered:
+
+- Local Unix-domain socket communication for the assistant-to-operations boundary.
+- HMAC-SHA256 authentication, with timestamp, nonce/replay protection, request/operation ID, and authenticated operator identity.
+- Strict operation allowlist; no arbitrary shell, SQL, Docker, or generic API execution.
+- Short-lived plans/confirmations and validation of ownership, expiry, state, and parameters at execution time.
+- Destructive or consequential operations require explicit confirmation.
+- Auditability and replay protection are required and must be covered by tests.
+- Keep this deployment control plane separate from platform administration tools. Do not broaden its allowlist to implement unrelated tenant/platform management.
+
+## 15. Pairing, secrets, and runtime state
+
+- Pairing/authorization must persist across a normal service restart/resume; routine installer resume must not unexpectedly invalidate a valid pairing.
+- Pairing codes are secrets: do not expose them in logs or public output. If a code is exposed, revoke/rotate it before relying on the bot.
+- Keep Telegram bot token, webhook/alert secret, HMAC material, provider API keys, and database credentials in server-side secret files or the approved secret mechanism—not source control.
+- The Telegram service is isolated and hardened in Docker. The agreed deployment shape included a read-only filesystem, non-root execution, dropped capabilities/no-new-privileges, a dedicated persistent state location, and a health endpoint. Exact compose settings must be verified against the current source before changing them.
+- Secret-file ownership and permissions must allow only the intended service/group to read them; diagnose access failures without printing secret contents.
+- Do not delete persistent state, PostgreSQL volumes, or secret files as a troubleshooting shortcut. Preserve SSH and unrelated host services during installer/server work.
+
+## 16. Monitoring, cloud, and infrastructure boundaries
+
+- Integrate with the existing monitoring stack through Alertmanager and approved health/status endpoints; do not create a second, conflicting alerting authority.
+- Alertmanager webhook authentication must use a separate secret and a restricted receiver path.
+- Cloudflare or other infrastructure provisioning/reachability operations must be explicit, constrained, and separately authorized; do not imply that the Telegram bot can perform them unless an implemented allowlisted tool exists.
+- Keep system/container hardening and monitoring integration covered by CI and operational checks.
+- Telegram Assistant failure must not take down the web app, backend, database, or core Ticketty workflows.
+
+## 17. Required security and quality tests
+
+In addition to the PIN/linking tests listed above, the earlier agreed test scope includes:
+
+- HMAC signature/authentication, timestamp validation, nonce replay rejection, request/operation identity, and expiry.
+- Callback/button payload validation, stale/replayed callback rejection, and operation ownership/state validation.
+- Permission enforcement at menu generation **and** execution; tenant/platform scope isolation; no cross-tenant access.
+- Safe handling of malformed Arabic/natural-language input and model-generated tool arguments.
+- Pairing flow, one-time use, persistence across restart/resume, revocation, and secret redaction.
+- Deployment plan/confirm sequencing, stage transitions, cancellation/timeout behavior, idempotency, operation-status recovery, and failure/RECOVERY_REQUIRED paths.
+- Alert webhook authentication and human-readable alert responses.
+- Container hardening/health checks and CI coverage for parser, integration, and security behavior.
+
+## 18. Installer and server lifecycle coordination
+
+The assistant is part of the Ticketty server stack, but its lifecycle must follow the installer/deployment safety contract:
+
+- Installer/update/resume must preserve existing secrets, PostgreSQL data/volumes, and valid Telegram pairing/state.
+- Resume must continue from the last safe completed stage instead of repeating destructive or already successful work.
+- A deployment must not import secrets or production database contents from GitHub/source bundles.
+- Installer and bot must not silently regenerate or replace pairing credentials during resume.
+- Server-side diagnostics must identify permission/runtime failures clearly without revealing secret values.
+- Do not use the bot or installer to bypass release gates, migration checks, or explicit user approval.
