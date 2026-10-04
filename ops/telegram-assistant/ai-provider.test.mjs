@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_MODEL,
   chatCompletion,
+  classifyIntent,
   listModels,
   normalizeBaseUrl,
   validateApiKey,
@@ -83,4 +84,30 @@ test('maps quota and plan errors without retrying or paid fallback', async () =>
     apiKey: 'apx_live_test',
     fetchImpl: async () => response(403, { error: { code: 'model_not_in_plan' } }),
   }), /not available on this APMIX plan/);
+});
+
+test('AI intent classifier accepts only the finite registered intent set', async () => {
+  const classify = async (content) => classifyIntent({
+    apiKey: 'apx_live_test',
+    text: 'كيف وضع النظام؟',
+    fetchImpl: async (_url, init) => {
+      const sent = JSON.parse(init.body);
+      assert.equal(sent.model, DEFAULT_MODEL);
+      assert.equal(sent.messages.length, 2);
+      assert.equal(sent.messages[1].content, 'كيف وضع النظام؟');
+      return response(200, { choices: [{ message: { content } }] });
+    },
+  });
+  assert.equal(await classify('{"intent":"status"}'), 'status');
+  assert.equal(await classify('{"intent":"delete_database"}'), null);
+  assert.equal(await classify('not-json'), null);
+  assert.equal(await classify('{"intent":"update","arguments":{"shell":"rm -rf /"}}'), 'update');
+});
+
+test('AI classifier rejects oversized user input before network access', async () => {
+  await assert.rejects(classifyIntent({
+    apiKey: 'apx_live_test',
+    text: 'x'.repeat(2001),
+    fetchImpl: async () => { throw new Error('network must not be called'); },
+  }), /too large/);
 });
