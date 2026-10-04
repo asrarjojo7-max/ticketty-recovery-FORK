@@ -20,7 +20,7 @@ function response(status, payload) {
 
 test('pins APMIX to HTTPS approved API bases', () => {
   assert.equal(normalizeBaseUrl('https://api.apmix.ai/v1/'), 'https://api.apmix.ai/v1');
-  assert.equal(normalizeBaseUrl('https://api.apmix.ai'), 'https://api.apmix.ai');
+  assert.throws(() => normalizeBaseUrl('https://api.apmix.ai'));
   assert.throws(() => normalizeBaseUrl('http://api.apmix.ai/v1'));
   assert.throws(() => normalizeBaseUrl('https://evil.example/v1'));
   assert.throws(() => normalizeBaseUrl('https://user:pass@api.apmix.ai/v1'));
