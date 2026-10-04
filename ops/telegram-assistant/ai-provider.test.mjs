@@ -111,3 +111,12 @@ test('AI classifier rejects oversized user input before network access', async (
     fetchImpl: async () => { throw new Error('network must not be called'); },
   }), /too large/);
 });
+
+test('rejects invalid model identifiers before making provider requests', async () => {
+  await assert.rejects(chatCompletion({
+    apiKey: 'apx_live_test',
+    model: 'bad model',
+    messages: [{ role: 'user', content: 'hello' }],
+    fetchImpl: async () => { throw new Error('network must not be called'); },
+  }), /Model identifier is invalid/);
+});
