@@ -63,7 +63,7 @@ async function loadState() {
           ? parsed.updateOffset
           : 0,
       provider: parsed.provider && parsed.provider.name === 'apmix'
-        ? { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: typeof parsed.provider.model === 'string' ? parsed.provider.model : DEFAULT_MODEL }
+        ? { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: typeof parsed.provider.model === 'string' ? parsed.provider.model : null }
         : null,
       pendingProviderSetup: parsed.pendingProviderSetup &&
         typeof parsed.pendingProviderSetup.chatId === 'string' &&
@@ -1029,7 +1029,7 @@ async function sendStatusOverview(chatId, actor) {
 const allowAiRequest = createRateLimiter({ limit: 10, windowMs: 60_000, maxKeys: 500 });
 
 async function aiIntent(textValue, chatId) {
-  if (state.provider?.name !== 'apmix') return null;
+  if (state.provider?.name !== 'apmix' || typeof state.provider.model !== 'string') return null;
   if (!allowAiRequest(chatId)) return null;
   try {
     const apiKey = await readProviderKey();
@@ -1104,16 +1104,19 @@ async function handleProviderSettings(message, chatId, userId, textValue) {
       const apiKey = validateApiKey(textValue);
       const models = await listModels({ apiKey, baseUrl: DEFAULT_BASE_URL });
       const desired = models.find((item) => item.id === 'claude-sonnet-4-6-free');
-      if (!desired) {
-        state.pendingProviderSetup = null; await persistState();
-        await sendMessage(chatId, 'تم التحقق من الوصول إلى APMIX، لكن النموذج claude-sonnet-4-6-free غير موجود ضمن قائمة النماذج المتاحة لهذا المفتاح. لم أستبدله تلقائيًا. النماذج المتاحة: ' + models.slice(0, 20).map((item) => item.id).join(', '));
-        return true;
-      }
       await saveProviderKey(apiKey);
-      state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: desired.id };
+      state.provider = {
+        name: 'apmix',
+        baseUrl: DEFAULT_BASE_URL,
+        model: desired ? desired.id : null,
+      };
       state.pendingProviderSetup = null;
       await persistState();
-      await sendMessage(chatId, '✅ تم التحقق من مفتاح APMIX وحفظه في ملف سري على السيرفر. النموذج المحدد: ' + desired.id + '.');
+      if (desired) {
+        await sendMessage(chatId, '✅ تم التحقق من مفتاح APMIX وحفظه في ملف سري على السيرفر. النموذج المحدد: ' + desired.id + '.');
+      } else {
+        await sendMessage(chatId, 'تم التحقق من المفتاح وحفظه بأمان، لكن claude-sonnet-4-6-free غير موجود في قائمة هذا المفتاح. لم أختر بديلاً ولم أفعّل أي نموذج. اكتب /models لعرض المتاح، ثم /model MODEL_ID لاختياره صراحةً.');
+      }
     } catch (error) {
       state.pendingProviderSetup = null; await persistState();
       await sendMessage(chatId, 'تعذر إعداد APMIX: ' + (error.message || 'فشل التحقق') + '. لم يتم حفظ المفتاح.');
