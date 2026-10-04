@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, classifyIntent, listModels, validateApiKey } from './ai-provider.mjs';
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, classifyIntent, listModels, validateApiKey, validateModelAccess } from './ai-provider.mjs';
 import { dirname } from 'node:path';
 import { extractBearerToken, intentFromText } from './core.mjs';
 
@@ -904,6 +904,8 @@ function helpMessage() {
     '• هل يوجد تحديث؟',
     '• /settings إعدادات الذكاء الاصطناعي',
     '• /apmix إعداد مفتاح APMIX',
+    '• /models عرض النماذج المتاحة',
+    '• /model MODEL_ID تغيير النموذج بعد التحقق',
     '',
     'يمكنني أيضًا تجهيز تحديث منشور على GitHub قبل التنفيذ.',
     'التحديث لا يبدأ إلا بعد تأكيد صريح منك.',
@@ -1053,6 +1055,31 @@ async function handleProviderSettings(message, chatId, userId, textValue) {
       'سيُطلب منك إرسال المفتاح في رسالة خاصة واحدة. لا ترسله في مجموعة.',
       'سيحاول البوت حذف رسالة المفتاح بعد استلامها، لكن ذلك لا يضمن حذفها من سجل جهازك.'
     ].join('\\n'));
+    return true;
+  }
+  if (textValue === '/models') {
+    const apiKey = await readProviderKey();
+    if (!apiKey) { await sendMessage(chatId, 'لم يتم إعداد APMIX بعد. اكتب /apmix.'); return true; }
+    try {
+      const models = await listModels({ apiKey, baseUrl: state.provider?.baseUrl ?? DEFAULT_BASE_URL });
+      await sendMessage(chatId, 'النماذج المتاحة لهذا المفتاح:\n' + models.slice(0, 30).map((item) => '• ' + item.id).join('\n') + '\n\nلتغيير النموذج: /model MODEL_ID');
+    } catch (error) {
+      await sendMessage(chatId, 'تعذر قراءة قائمة النماذج: ' + error.message);
+    }
+    return true;
+  }
+  if (textValue.startsWith('/model ')) {
+    const model = textValue.slice('/model '.length).trim();
+    const apiKey = await readProviderKey();
+    if (!apiKey) { await sendMessage(chatId, 'لم يتم إعداد APMIX بعد. اكتب /apmix.'); return true; }
+    try {
+      const verified = await validateModelAccess({ apiKey, baseUrl: state.provider?.baseUrl ?? DEFAULT_BASE_URL }, model);
+      state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: verified };
+      await persistState();
+      await sendMessage(chatId, 'تم تغيير النموذج بعد التحقق من توفره للمفتاح: ' + verified);
+    } catch (error) {
+      await sendMessage(chatId, 'لم أغيّر النموذج: ' + error.message);
+    }
     return true;
   }
   if (textValue === '/apmix') {
@@ -1385,6 +1412,8 @@ server.listen(config.port, '0.0.0.0', async () => {
         { command: 'help', description: 'المساعدة' },
         { command: 'settings', description: 'إعدادات الذكاء الاصطناعي' },
         { command: 'apmix', description: 'إعداد مزود APMIX' },
+        { command: 'models', description: 'النماذج المتاحة' },
+        { command: 'model', description: 'تغيير نموذج الذكاء الاصطناعي' },
       ],
     });
 
