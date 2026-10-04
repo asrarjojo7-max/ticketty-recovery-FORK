@@ -1029,21 +1029,23 @@ async function sendStatusOverview(chatId, actor) {
 const allowAiRequest = createRateLimiter({ limit: 10, windowMs: 60_000, maxKeys: 500 });
 
 async function aiIntent(textValue, chatId) {
-  if (state.provider?.name !== 'apmix' || typeof state.provider.model !== 'string') return null;
-  if (!allowAiRequest(chatId)) return null;
+  if (state.provider?.name !== 'apmix' || typeof state.provider.model !== 'string') {
+    return { intent: null, status: 'not_configured' };
+  }
+  if (!allowAiRequest(chatId)) return { intent: null, status: 'rate_limited' };
   try {
     const apiKey = await readProviderKey();
-    if (!apiKey) return null;
+    if (!apiKey) return { intent: null, status: 'not_configured' };
     const intent = await classifyIntent({
       apiKey,
       baseUrl: state.provider.baseUrl ?? DEFAULT_BASE_URL,
-      model: state.provider.model ?? DEFAULT_MODEL,
+      model: state.provider.model,
       text: textValue,
     });
-    return intent;
+    return { intent, status: intent ? 'ok' : 'invalid_response' };
   } catch (error) {
     console.error('AI intent classification unavailable:', error.message);
-    return null;
+    return { intent: null, status: 'unavailable' };
   }
 }
 
@@ -1212,7 +1214,13 @@ async function handleMessage(message) {
     return;
   }
 
-  const intent = intentFromText(textValue) ?? await aiIntent(textValue, chatId);
+  let intent = intentFromText(textValue);
+  let aiStatus = 'not_used';
+  if (!intent) {
+    const classified = await aiIntent(textValue, chatId);
+    intent = classified.intent;
+    aiStatus = classified.status;
+  }
 
   try {
     if (intent === 'help') {
@@ -1250,7 +1258,9 @@ async function handleMessage(message) {
       await sendMessage(
         chatId,
         [
-          'لم أفهم المطلوب بشكل واضح.',
+          aiStatus === 'unavailable' || aiStatus === 'rate_limited' || aiStatus === 'invalid_response'
+            ? 'خدمة الذكاء الاصطناعي غير متاحة أو لم تستطع تصنيف الطلب الآن. الأوامر المباشرة ما زالت تعمل.'
+            : 'لم أفهم المطلوب بشكل واضح.',
           '',
           'جرّب مثلًا:',
           '«حالة النظام»',
