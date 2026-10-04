@@ -4,7 +4,7 @@ import { createConnection } from 'node:net';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, classifyIntent, listModels, validateApiKey, validateModelAccess } from './ai-provider.mjs';
 import { dirname } from 'node:path';
-import { extractBearerToken, intentFromText } from './core.mjs';
+import { createRateLimiter, extractBearerToken, intentFromText } from './core.mjs';
 
 const config = {
   botTokenFile: process.env.TELEGRAM_BOT_TOKEN_FILE ?? '',
@@ -1026,24 +1026,7 @@ async function sendStatusOverview(chatId, actor) {
   );
 }
 
-const aiRequestTimes = new Map();
-function allowAiRequest(chatId, now = Date.now()) {
-  const previous = aiRequestTimes.get(chatId) ?? [];
-  const recent = previous.filter((timestamp) => now - timestamp < 60_000);
-  if (recent.length >= 10) {
-    aiRequestTimes.set(chatId, recent);
-    return false;
-  }
-  recent.push(now);
-  aiRequestTimes.set(chatId, recent);
-  if (aiRequestTimes.size > 500) {
-    for (const [key, timestamps] of aiRequestTimes) {
-      if (!timestamps.some((timestamp) => now - timestamp < 60_000)) aiRequestTimes.delete(key);
-      if (aiRequestTimes.size <= 400) break;
-    }
-  }
-  return true;
-}
+const allowAiRequest = createRateLimiter({ limit: 10, windowMs: 60_000, maxKeys: 500 });
 
 async function aiIntent(textValue, chatId) {
   if (state.provider?.name !== 'apmix') return null;
