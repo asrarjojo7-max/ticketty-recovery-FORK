@@ -8,7 +8,7 @@ REVOKE ALL PRIVILEGES ON TABLE
   public.telegram_account_links
 FROM PUBLIC;
 
-DO $
+DO $telegram_role_guard$
 DECLARE
   role_name text;
 BEGIN
