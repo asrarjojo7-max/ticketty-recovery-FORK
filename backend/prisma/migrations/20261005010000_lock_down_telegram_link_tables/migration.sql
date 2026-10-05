@@ -28,4 +28,4 @@ BEGIN
     );
   END LOOP;
 END
-$;
+$telegram_role_guard$;
