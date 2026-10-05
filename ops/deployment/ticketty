@@ -9,6 +9,8 @@ LOCK_FILE="/run/lock/ticketty-deploy.lock"
 OPS_GROUP="ticketty-ops"
 OPS_SOCKET="/run/ticketty/ops.sock"
 OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
+TELEGRAM_LINK_HMAC_FILE="$ETC_ROOT/secrets/telegram-link-hmac"
+TELEGRAM_LINK_GROUP="ticketty-telegram-link"
 TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
@@ -113,6 +115,7 @@ ensure_env(){
   env_set CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE"
   env_set TICKETTY_OPS_SOCKET "$OPS_SOCKET"
   env_set TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE"
+  env_set TELEGRAM_LINK_HMAC_FILE "$TELEGRAM_LINK_HMAC_FILE"
   env_set TICKETTY_REMOTE_OPS_ENABLED true
   env_set TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}"
   env_set TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}"
@@ -167,6 +170,7 @@ TICKETTY_RELEASE_CHANNEL=stable
 TICKETTY_INSTALL_ROOT=$INSTALL_ROOT
 TICKETTY_OPS_SOCKET=$OPS_SOCKET
 TICKETTY_OPS_HMAC_FILE=$OPS_HMAC_FILE
+TELEGRAM_LINK_HMAC_FILE=$TELEGRAM_LINK_HMAC_FILE
 TICKETTY_REMOTE_OPS_ENABLED=true
 BACKUP_DIR=$BACKUP_ROOT
 RCLONE_REMOTE=
@@ -185,10 +189,15 @@ telegram(){
   fi
   secret_file "$TELEGRAM_ALERT_TOKEN_FILE" 32
   secret_file "$OPS_HMAC_FILE" 32
+  secret_file "$TELEGRAM_LINK_HMAC_FILE" 32
   getent group "$OPS_GROUP" >/dev/null 2>&1 || groupadd --system "$OPS_GROUP"
   local gid; gid="$(getent group "$OPS_GROUP" | cut -d: -f3)"
   if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
+  getent group "$TELEGRAM_LINK_GROUP" >/dev/null 2>&1 || groupadd --system "$TELEGRAM_LINK_GROUP"
+  local link_gid; link_gid="$(getent group "$TELEGRAM_LINK_GROUP" | cut -d: -f3)"
+  env_set TICKETTY_TELEGRAM_LINK_GID "$link_gid"
+  chown root:"$TELEGRAM_LINK_GROUP" "$TELEGRAM_LINK_HMAC_FILE"; chmod 640 "$TELEGRAM_LINK_HMAC_FILE"
   ok "Telegram"; }
 cloudflare(){ [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && { ok "Cloudflare Tunnel token موجود"; return; }; [[ "$NON_INTERACTIVE" -eq 1 ]] && return; printf '\nCloudflare\n  1) Tunnel موجود\n  2) إنشاء Tunnel + DNS تلقائيًا\n  3) لاحقًا\n'; local m t; read -r -p "اختر [1]: " m; [[ -n "$m" ]] || m=1; case "$m" in 1) read -r -s -p "Tunnel Token: " t; printf '\n'; [[ -n "$t" ]] || die "Tunnel Token مطلوب."; printf '%s\n' "$t" > "$CLOUDFLARE_TOKEN_FILE"; chmod 600 "$CLOUDFLARE_TOKEN_FILE";; 2) "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE";; 3) warn "Cloudflare مؤجل.";; *) die "خيار غير صالح.";; esac; }
 compose_validate(){ docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null; ok "Compose"; }
@@ -285,7 +294,7 @@ cmd_status(){
     warn "ملفات تشغيل Ticketty غير مكتملة بعد."
   fi
 }
-cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
+cmd_doctor(){ load; step "Ticketty — الفحص"; command -v docker >/dev/null && ok Docker || warn Docker; docker compose version >/dev/null 2>&1 && ok "Docker Compose" || warn "Docker Compose"; [[ -f "$INSTALL_ROOT/.env" ]] && ok Environment || warn Environment; [[ -s "$TELEGRAM_TOKEN_FILE" ]] && ok Telegram || warn Telegram; [[ -s "$CLOUDFLARE_TOKEN_FILE" ]] && ok Cloudflare || warn Cloudflare; [[ -s "$OPS_HMAC_FILE" ]] && ok "Ops secret" || warn "Ops secret"; [[ -s "$TELEGRAM_LINK_HMAC_FILE" ]] && ok "Telegram link secret" || warn "Telegram link secret"; systemctl is-active --quiet ticketty-ops.service && ok "Ops service" || warn "Ops service"; docker compose -f "$INSTALL_ROOT/compose.yaml" --env-file "$INSTALL_ROOT/.env" config >/dev/null && ok Compose || warn Compose; health && ok "Backend + Web" || warn "Backend/Web"; }
 cmd_setup_cf(){
   root; load
   "$INSTALL_ROOT/ops/deployment/cloudflare.sh" wizard --env "$ETC_ROOT/ticketty.env" --token-file "$CLOUDFLARE_TOKEN_FILE"
