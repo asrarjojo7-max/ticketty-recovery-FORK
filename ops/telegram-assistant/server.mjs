@@ -13,6 +13,8 @@ const config = {
   opsSocket: process.env.TICKETTY_OPS_SOCKET ?? '/run/ticketty/ops.sock',
   opsHmacFile: process.env.TICKETTY_OPS_HMAC_FILE ?? '',
   remoteOpsEnabled: process.env.TICKETTY_REMOTE_OPS_ENABLED === 'true',
+  backendUrl: process.env.TICKETTY_BACKEND_URL ?? 'http://backend:3001',
+  linkHmacFile: process.env.TELEGRAM_LINK_HMAC_FILE ?? '',
   prometheusUrl: process.env.PROMETHEUS_URL ?? 'http://prometheus:9090',
   alertmanagerUrl:
     process.env.ALERTMANAGER_URL ?? 'http://alertmanager:9093',
@@ -162,6 +164,35 @@ function pair(chatId, userId) {
   return true;
 }
 
+
+async function attachTelegramLink(token, message) {
+  if (!config.linkHmacFile) throw new Error('Telegram link integration is not configured');
+  const secret = (await readFile(config.linkHmacFile, 'utf8')).trim();
+  if (!secret) throw new Error('Telegram link integration secret is empty');
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const telegramUserId = String(message.from?.id ?? '');
+  const telegramChatId = String(message.chat?.id ?? '');
+  const canonical = [
+    'POST',
+    '/api/telegram/link/internal/attach',
+    timestamp,
+    token,
+    telegramUserId,
+    telegramChatId,
+  ].join('\\n');
+  const signature = createHmac('sha256', secret).update(canonical).digest('hex');
+  const response = await fetch(config.backendUrl.replace(/\\/$/, '') + '/api/telegram/link/internal/attach', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-ticketty-telegram-timestamp': timestamp,
+      'x-ticketty-telegram-signature': 'v1=' + signature,
+    },
+    body: JSON.stringify({ token, telegramUserId, telegramChatId }),
+  });
+  if (!response.ok) throw new Error('Telegram link attachment rejected');
+  return response.json();
+}
 
 async function remoteOps(operation, payload, actor) {
   if (!config.remoteOpsEnabled || !config.opsHmacFile) {
@@ -1174,6 +1205,20 @@ async function handleMessage(message) {
         chatId,
         '🔐 تم ربط حساب Telegram بنجاح.\n\nأصبح بإمكانك الآن متابعة Ticketty من هنا بأمان ✅',
       );
+      return;
+    }
+
+    if (/^[A-Za-z0-9_-]{43}$/.test(candidateCode)) {
+      try {
+        await attachTelegramLink(candidateCode, message);
+        await sendMessage(
+          chatId,
+          '🔗 تم التحقق من حساب Telegram لهذا الطلب.\n\nارجع إلى Ticketty واضغط «تأكيد ربط Telegram» لإتمام الربط.',
+        );
+      } catch (error) {
+        console.error('Telegram link attachment failed', error);
+        await sendMessage(chatId, 'تعذر التحقق من طلب الربط أو انتهت صلاحيته. ابدأ طلب ربط جديد من Ticketty.');
+      }
       return;
     }
 
