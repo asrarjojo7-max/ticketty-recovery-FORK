@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { describe, expect, it, jest } from '@jest/globals';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -105,7 +106,10 @@ describe('TelegramLinkService', () => {
       expect.any(Buffer),
       user.sub,
     );
-    expect(prisma.withTenantContext).toHaveBeenCalledWith('org-1', expect.any(Function));
+    expect(prisma.withTenantContext).toHaveBeenCalledWith(
+      'org-1',
+      expect.any(Function),
+    );
     expect(audit.log).toHaveBeenCalledWith(
       user,
       'TELEGRAM_LINK_CONFIRMED',
@@ -121,7 +125,10 @@ describe('TelegramLinkService', () => {
 
     await expect(service.revoke(user)).resolves.toEqual({ revoked: true });
     expect(prisma.revokeTelegramLink).toHaveBeenCalledWith(user.sub);
-    expect(prisma.withTenantContext).toHaveBeenCalledWith('org-1', expect.any(Function));
+    expect(prisma.withTenantContext).toHaveBeenCalledWith(
+      'org-1',
+      expect.any(Function),
+    );
     expect(audit.log).toHaveBeenCalledWith(
       user,
       'TELEGRAM_LINK_REVOKED',
@@ -142,9 +149,8 @@ describe('TelegramLinkService', () => {
 
     const timestamp = String(Math.floor(Date.now() / 1000));
     const canonical = ['POST', '/api/telegram/link/internal/attach', timestamp, 'A'.repeat(43), '123', '456'].join('\n');
-    const signature = 'v1=' + createHmac('sha256', secret)
-      .update(canonical)
-      .digest('hex');
+    const signature =
+      'v1=' + createHmac('sha256', secret).update(canonical).digest('hex');
 
     await expect(
       service.verifyInternalSignature(timestamp, signature, canonical),
