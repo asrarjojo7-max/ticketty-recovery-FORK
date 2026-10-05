@@ -140,6 +140,7 @@ function createRateLimiter({ limit = 10, windowMs = 60_000, maxKeys = 500 } = {}
 }
 
 export {
+  createRateLimiter,
   extractBearerToken,
   extractStartPairingCode,
   intentFromText,
