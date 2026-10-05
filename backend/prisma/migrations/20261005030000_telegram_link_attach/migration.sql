@@ -54,5 +54,24 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION ticketty_security.telegram_attach_link_challenge(bytea, text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION ticketty_security.telegram_attach_link_challenge(bytea, text, text) FROM ticketty_runtime, ticketty_app, ticketty_platform;
+DO $
+DECLARE
+  role_name text;
+BEGIN
+  FOR role_name IN
+    SELECT rolname
+    FROM pg_roles
+    WHERE rolname IN (
+      'ticketty_runtime',
+      'ticketty_app',
+      'ticketty_platform'
+    )
+  LOOP
+    EXECUTE format(
+      'REVOKE ALL ON FUNCTION ticketty_security.telegram_attach_link_challenge(bytea, text, text) FROM %I',
+      role_name
+    );
+  END LOOP;
+END
+$;
 GRANT EXECUTE ON FUNCTION ticketty_security.telegram_attach_link_challenge(bytea, text, text) TO ticketty_auth;
