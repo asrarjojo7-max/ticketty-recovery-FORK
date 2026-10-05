@@ -148,7 +148,14 @@ describe('TelegramLinkService', () => {
     process.env.TELEGRAM_LINK_HMAC_FILE = path;
 
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const canonical = ['POST', '/api/telegram/link/internal/attach', timestamp, 'A'.repeat(43), '123', '456'].join('\n');
+    const canonical = [
+      'POST',
+      '/api/telegram/link/internal/attach',
+      timestamp,
+      'A'.repeat(43),
+      '123',
+      '456',
+    ].join('\n');
     const signature =
       'v1=' + createHmac('sha256', secret).update(canonical).digest('hex');
 
