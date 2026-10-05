@@ -4,7 +4,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { AuthUser } from '../common/decorators/current-user.decorator';
 import { AuditService } from '../common/audit/audit.service';
@@ -32,7 +32,7 @@ export class TelegramLinkService {
     const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
 
     await this.prisma.createTelegramLinkChallenge({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       userId: user.sub,
       tokenDigest: token.digest,
       telegramUserId: pendingIdentity,
@@ -40,12 +40,14 @@ export class TelegramLinkService {
       expiresAt,
     });
 
-    await this.audit.log(
-      user,
-      'TELEGRAM_LINK_CHALLENGE_CREATED',
-      'TelegramAccountLink',
-      user.sub,
-      { expiresAt: expiresAt.toISOString() },
+    await this.prisma.withTenantContext(user.orgId, () =>
+      this.audit.log(
+        user,
+        'TELEGRAM_LINK_CHALLENGE_CREATED',
+        'TelegramAccountLink',
+        user.sub,
+        { expiresAt: expiresAt.toISOString() },
+      ),
     );
 
     return {
@@ -86,12 +88,14 @@ export class TelegramLinkService {
     const digest = digestTelegramLinkToken(token);
     try {
       const link = await this.prisma.confirmTelegramLink(digest, user.sub);
-      await this.audit.log(
-        user,
-        'TELEGRAM_LINK_CONFIRMED',
-        'TelegramAccountLink',
-        user.sub,
-        { telegramUserId: link.telegramUserId },
+      await this.prisma.withTenantContext(user.orgId, () =>
+        this.audit.log(
+          user,
+          'TELEGRAM_LINK_CONFIRMED',
+          'TelegramAccountLink',
+          user.sub,
+          { telegramUserId: link.telegramUserId },
+        ),
       );
       return {
         linked: true,
@@ -115,11 +119,13 @@ export class TelegramLinkService {
   async revoke(user: AuthUser) {
     if (!user.orgId) throw new UnauthorizedException('حساب المنصة غير مدعوم');
     const changed = await this.prisma.revokeTelegramLink(user.sub);
-    await this.audit.log(
-      user,
-      'TELEGRAM_LINK_REVOKED',
-      'TelegramAccountLink',
-      user.sub,
+    await this.prisma.withTenantContext(user.orgId, () =>
+      this.audit.log(
+        user,
+        'TELEGRAM_LINK_REVOKED',
+        'TelegramAccountLink',
+        user.sub,
+      ),
     );
     return { revoked: changed };
   }
