@@ -8,7 +8,24 @@ REVOKE ALL PRIVILEGES ON TABLE
   public.telegram_account_links
 FROM PUBLIC;
 
-REVOKE ALL PRIVILEGES ON TABLE
-  public.telegram_link_challenges,
-  public.telegram_account_links
-FROM ticketty_runtime, ticketty_app, ticketty_auth, ticketty_platform;
+DO $
+DECLARE
+  role_name text;
+BEGIN
+  FOR role_name IN
+    SELECT rolname
+    FROM pg_roles
+    WHERE rolname IN (
+      'ticketty_runtime',
+      'ticketty_app',
+      'ticketty_auth',
+      'ticketty_platform'
+    )
+  LOOP
+    EXECUTE format(
+      'REVOKE ALL PRIVILEGES ON TABLE public.telegram_link_challenges, public.telegram_account_links FROM %I',
+      role_name
+    );
+  END LOOP;
+END
+$;
