@@ -41,6 +41,8 @@ const TENANT_DELEGATES = new Set([
   'journalEntry',
   'journalEntryLine',
   'auditLog',
+  'telegramLinkChallenge',
+  'telegramAccountLink',
 ]);
 const RAW_OPERATIONS = new Set([
   '$queryRaw',
@@ -412,7 +414,7 @@ export class PrismaService
     );
   }
 
-  async confirmTelegramLink(
+  async attachTelegramLinkChallenge(input: {\n    tokenDigest: Buffer;\n    telegramUserId: string;\n    telegramChatId: string;\n  }): Promise<void> {\n    if (this.tenantContext.current()) {\n      throw new Error('Telegram linking cannot run in tenant context');\n    }\n    await this.withAuthRole(\n      (transaction) => transaction.$executeRaw`\n        SELECT ticketty_security.telegram_attach_link_challenge(\n          ${input.tokenDigest},\n          ${input.telegramUserId},\n          ${input.telegramChatId}\n        )\n      `,\n    );\n  }\n\n  async confirmTelegramLink(
     tokenDigest: Buffer,
     userId: string,
   ): Promise<{
