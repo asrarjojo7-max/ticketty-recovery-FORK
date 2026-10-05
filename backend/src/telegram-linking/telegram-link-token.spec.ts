@@ -8,7 +8,9 @@ describe('Telegram link token', () => {
     const result = createTelegramLinkToken();
     expect(result.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(result.digest).toHaveLength(32);
-    expect(result.digest.equals(digestTelegramLinkToken(result.token))).toBe(true);
+    expect(result.digest.equals(digestTelegramLinkToken(result.token))).toBe(
+      true,
+    );
   });
 
   it('creates different tokens for separate challenges', () => {
