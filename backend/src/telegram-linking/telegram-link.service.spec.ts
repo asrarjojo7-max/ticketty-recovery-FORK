@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { TelegramLinkService } from './telegram-link.service';
-import type { AuthUser } from '../auth/auth.types';
+import type { AuthUser } from '../common/decorators/current-user.decorator';
 
 describe('TelegramLinkService', () => {
   const user: AuthUser = {
