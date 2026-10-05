@@ -14,6 +14,7 @@ x-backend-environment: &backend-environment
   PILOT_PAYMENT_MODE: CASH
   PORT: 3001
   API_BIND_HOST: 0.0.0.0
+  TELEGRAM_LINK_HMAC_FILE: /run/secrets/telegram_link_hmac
 
 services:
   postgres:
@@ -66,6 +67,10 @@ services:
     environment:
       <<: *backend-environment
       DATABASE_URL: ${RUNTIME_DATABASE_URL:?RUNTIME_DATABASE_URL is required}
+    group_add:
+      - "${TICKETTY_TELEGRAM_LINK_GID:-1002}"
+    volumes:
+      - ${TELEGRAM_LINK_HMAC_FILE:-/etc/ticketty/telegram-link-hmac}:/run/secrets/telegram_link_hmac:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -196,23 +201,8 @@ services:
     profiles:
       - cloudflare
     volumes:
-      - ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/ticketty/secrets/cloudflare-tunnel-token}:/run/secrets/cloudflare_tunnel_token:ro
+      - ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/ticketty/cloudflare-tunnel-token}:/run/secrets/cloudflare_tunnel_token:ro
 
-  cloudflared-local:
-    image: cloudflare/cloudflared:${CLOUDFLARE_TUNNEL_IMAGE_TAG:-2026.9.3}
-    restart: unless-stopped
-    command:
-      - tunnel
-      - --config
-      - /etc/cloudflared/config.yml
-      - run
-    depends_on:
-      web:
-        condition: service_healthy
-    profiles:
-      - cloudflare-local
-    volumes:
-      - ${CLOUDFLARE_CONFIG_DIR:-/etc/ticketty/cloudflared}:/etc/cloudflared:ro
   telegram-assistant:
     build:
       context: ./ops/telegram-assistant
@@ -221,6 +211,8 @@ services:
       TELEGRAM_BOT_TOKEN_FILE: /run/secrets/telegram_bot_token
       TELEGRAM_PAIRING_CODE: ${TELEGRAM_PAIRING_CODE:-}
       TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/telegram_alert_webhook_token
+      TICKETTY_BACKEND_URL: http://backend:3001
+      TELEGRAM_LINK_HMAC_FILE: /run/secrets/telegram_link_hmac
       TICKETTY_OPS_SOCKET: /run/ticketty/ops.sock
       TICKETTY_OPS_HMAC_FILE: /run/secrets/ticketty_ops_hmac
       TICKETTY_REMOTE_OPS_ENABLED: ${TICKETTY_REMOTE_OPS_ENABLED:-true}
@@ -239,11 +231,13 @@ services:
       - "8090"
     group_add:
       - "${TICKETTY_OPS_GID:?TICKETTY_OPS_GID is required}"
+      - "${TICKETTY_TELEGRAM_LINK_GID:-1002}"
     volumes:
       - ticketty-telegram:/var/lib/ticketty/telegram
       - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
       - ${TELEGRAM_BOT_TOKEN_FILE:-/etc/ticketty/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
       - ${TICKETTY_OPS_HMAC_FILE:-/etc/ticketty/ticketty-ops-hmac}:/run/secrets/ticketty_ops_hmac:ro
+      - ${TELEGRAM_LINK_HMAC_FILE:-/etc/ticketty/telegram-link-hmac}:/run/secrets/telegram_link_hmac:ro
       - /run/ticketty:/run/ticketty:ro
     read_only: true
     tmpfs:

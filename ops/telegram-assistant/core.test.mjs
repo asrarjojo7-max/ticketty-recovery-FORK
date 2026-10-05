@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createRateLimiter,
   extractBearerToken,
   extractStartPairingCode,
   intentFromText,
@@ -46,4 +47,14 @@ test('extracts only a bearer authorization token', () => {
   assert.equal(extractBearerToken('Basic secret-value'), null);
   assert.equal(extractBearerToken('Bearer '), null);
   assert.equal(extractBearerToken(undefined), null);
+});
+
+test('AI request limiter enforces per-key windows and bounded key count', () => {
+  const allow = createRateLimiter({ limit: 2, windowMs: 1000, maxKeys: 2 });
+  assert.equal(allow('operator-a', 100), true);
+  assert.equal(allow('operator-a', 200), true);
+  assert.equal(allow('operator-a', 300), false);
+  assert.equal(allow('operator-a', 1200), true);
+  assert.equal(allow('', 1200), false);
+  assert.throws(() => createRateLimiter({ limit: 0 }), /invalid/);
 });

@@ -1,13 +1,10 @@
 import { createServer } from 'node:http';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createConnection } from 'node:net';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import {
-  extractBearerToken,
-  extractStartPairingCode,
-  intentFromText,
-} from './core.mjs';
+import { DEFAULT_BASE_URL, classifyIntent, listModels, validateApiKey, validateModelAccess } from './ai-provider.mjs';
+import { createRateLimiter, extractBearerToken, extractStartPairingCode, intentFromText } from './core.mjs';
 
 const config = {
   botTokenFile: process.env.TELEGRAM_BOT_TOKEN_FILE ?? '',
@@ -16,6 +13,8 @@ const config = {
   opsSocket: process.env.TICKETTY_OPS_SOCKET ?? '/run/ticketty/ops.sock',
   opsHmacFile: process.env.TICKETTY_OPS_HMAC_FILE ?? '',
   remoteOpsEnabled: process.env.TICKETTY_REMOTE_OPS_ENABLED === 'true',
+  backendUrl: process.env.TICKETTY_BACKEND_URL ?? 'http://backend:3001',
+  linkHmacFile: process.env.TELEGRAM_LINK_HMAC_FILE ?? '',
   prometheusUrl: process.env.PROMETHEUS_URL ?? 'http://prometheus:9090',
   alertmanagerUrl:
     process.env.ALERTMANAGER_URL ?? 'http://alertmanager:9093',
@@ -23,6 +22,9 @@ const config = {
   stateFile:
     process.env.TELEGRAM_STATE_FILE ??
     '/var/lib/ticketty/telegram/state.json',
+  providerKeyFile:
+    process.env.TELEGRAM_AI_KEY_FILE ??
+    '/var/lib/ticketty/telegram/apmix-api-key',
   port: toPort(process.env.TELEGRAM_PORT ?? '8090', 8090),
   pollTimeoutSeconds: toInt(
     process.env.TELEGRAM_POLL_TIMEOUT_SECONDS ?? '25',
@@ -62,6 +64,14 @@ async function loadState() {
         Number.isInteger(parsed.updateOffset) && parsed.updateOffset >= 0
           ? parsed.updateOffset
           : 0,
+      provider: parsed.provider && parsed.provider.name === 'apmix'
+        ? { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: typeof parsed.provider.model === 'string' ? parsed.provider.model : null }
+        : null,
+      pendingProviderSetup: parsed.pendingProviderSetup &&
+        typeof parsed.pendingProviderSetup.chatId === 'string' &&
+        typeof parsed.pendingProviderSetup.userId === 'string' &&
+        Number.isFinite(parsed.pendingProviderSetup.expiresAt)
+          ? parsed.pendingProviderSetup : null,
       operators: Array.isArray(parsed.operators)
         ? parsed.operators
             .filter(
@@ -133,6 +143,17 @@ function isAuthorized(chatId, userId) {
   );
 }
 
+async function saveProviderKey(apiKey) {
+  await mkdir(dirname(config.providerKeyFile), { recursive: true, mode: 0o700 });
+  await writeFile(config.providerKeyFile, apiKey + '\n', { encoding: 'utf8', mode: 0o600 });
+  await chmod(config.providerKeyFile, 0o600);
+}
+
+async function readProviderKey() {
+  try { return validateApiKey(await readFile(config.providerKeyFile, 'utf8')); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+}
+
 function pair(chatId, userId) {
   if (isAuthorized(chatId, userId)) return false;
   state.operators.push({
@@ -143,6 +164,35 @@ function pair(chatId, userId) {
   return true;
 }
 
+
+async function attachTelegramLink(token, message) {
+  if (!config.linkHmacFile) throw new Error('Telegram link integration is not configured');
+  const secret = (await readFile(config.linkHmacFile, 'utf8')).trim();
+  if (!secret) throw new Error('Telegram link integration secret is empty');
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const telegramUserId = String(message.from?.id ?? '');
+  const telegramChatId = String(message.chat?.id ?? '');
+  const canonical = [
+    'POST',
+    '/api/telegram/link/internal/attach',
+    timestamp,
+    token,
+    telegramUserId,
+    telegramChatId,
+  ].join('\\n');
+  const signature = createHmac('sha256', secret).update(canonical).digest('hex');
+  const response = await fetch(config.backendUrl.replace(/\/$/, '') + '/api/telegram/link/internal/attach', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-ticketty-telegram-timestamp': timestamp,
+      'x-ticketty-telegram-signature': 'v1=' + signature,
+    },
+    body: JSON.stringify({ token, telegramUserId, telegramChatId }),
+  });
+  if (!response.ok) throw new Error('Telegram link attachment rejected');
+  return response.json();
+}
 
 async function remoteOps(operation, payload, actor) {
   if (!config.remoteOpsEnabled || !config.opsHmacFile) {
@@ -1082,6 +1132,130 @@ async function sendStatusOverview(chatId, actor) {
   );
 }
 
+const allowAiRequest = createRateLimiter({ limit: 10, windowMs: 60_000, maxKeys: 500 });
+
+async function aiIntent(textValue, chatId) {
+  if (state.provider?.name !== 'apmix' || typeof state.provider.model !== 'string') {
+    return { intent: null, status: 'not_configured' };
+  }
+  if (!allowAiRequest(chatId)) return { intent: null, status: 'rate_limited' };
+  try {
+    const apiKey = await readProviderKey();
+    if (!apiKey) return { intent: null, status: 'not_configured' };
+    const intent = await classifyIntent({
+      apiKey,
+      baseUrl: state.provider.baseUrl ?? DEFAULT_BASE_URL,
+      model: state.provider.model,
+      text: textValue,
+    });
+    return { intent, status: intent ? 'ok' : 'invalid_response' };
+  } catch (error) {
+    console.error('AI intent classification unavailable:', error.message);
+    return { intent: null, status: 'unavailable' };
+  }
+}
+
+async function verifyApmixChatMode(apiKey, model) {
+  const result = await classifyIntent({
+    apiKey,
+    baseUrl: DEFAULT_BASE_URL,
+    model,
+    text: 'حالة النظام',
+  });
+  if (result !== 'status') {
+    throw new Error('The model did not pass the APMIX Chat Completions compatibility check.');
+  }
+  return true;
+}
+
+async function handleProviderSettings(message, chatId, userId, textValue) {
+  if (textValue === '/settings' || textValue === '/provider') {
+    const configured = state.provider?.name === 'apmix' && await readProviderKey();
+    await sendMessage(chatId, [
+      '⚙️ إعدادات الذكاء الاصطناعي', '',
+      'المزوّد: ' + (configured ? 'APMIX مضبوط' : 'غير مضبوط'),
+      'النموذج: ' + (state.provider?.model ?? 'غير محدد'),
+      '', 'لإعداد APMIX اكتب: /apmix',
+      'سيُطلب منك إرسال المفتاح في رسالة خاصة واحدة. لا ترسله في مجموعة.',
+      'سيحاول البوت حذف رسالة المفتاح بعد استلامها، لكن ذلك لا يضمن حذفها من سجل جهازك.'
+    ].join('\n'));
+    return true;
+  }
+  if (textValue === '/models') {
+    const apiKey = await readProviderKey();
+    if (!apiKey) { await sendMessage(chatId, 'لم يتم إعداد APMIX بعد. اكتب /apmix.'); return true; }
+    try {
+      const models = await listModels({ apiKey, baseUrl: state.provider?.baseUrl ?? DEFAULT_BASE_URL });
+      await sendMessage(chatId, 'النماذج المتاحة لهذا المفتاح:\n' + models.slice(0, 30).map((item) => '• ' + item.id).join('\n') + '\n\nلتغيير النموذج: /model MODEL_ID');
+    } catch (error) {
+      await sendMessage(chatId, 'تعذر قراءة قائمة النماذج: ' + error.message);
+    }
+    return true;
+  }
+  if (textValue.startsWith('/model ')) {
+    const model = textValue.slice('/model '.length).trim();
+    const apiKey = await readProviderKey();
+    if (!apiKey) { await sendMessage(chatId, 'لم يتم إعداد APMIX بعد. اكتب /apmix.'); return true; }
+    try {
+      const verified = await validateModelAccess({ apiKey, baseUrl: state.provider?.baseUrl ?? DEFAULT_BASE_URL }, model);
+      await verifyApmixChatMode(apiKey, verified);
+      state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: verified };
+      await persistState();
+      await sendMessage(chatId, 'تم تغيير النموذج بعد التحقق من توفره للمفتاح: ' + verified);
+    } catch (error) {
+      await sendMessage(chatId, 'لم أغيّر النموذج: ' + error.message);
+    }
+    return true;
+  }
+  if (textValue === '/apmix') {
+    if (!isPrivateChat(message)) { await sendMessage(chatId, 'أرسل أمر الإعداد في محادثة خاصة مع البوت.'); return true; }
+    state.pendingProviderSetup = { chatId, userId, expiresAt: Date.now() + 5 * 60 * 1000 };
+    await persistState();
+    await sendMessage(chatId, 'أرسل مفتاح APMIX الآن كرسالة خاصة خلال 5 دقائق. سأفحص قائمة النماذج، وقد أرسل طلب اختبار قصيرًا للنموذج المطلوب يستهلك قدرًا بسيطًا من رصيدك التجريبي. لن أطلب المفتاح مرة أخرى بعد حفظه.');
+    return true;
+  }
+  const pending = state.pendingProviderSetup;
+  if (pending && pending.chatId === chatId && pending.userId === userId) {
+    if (Date.now() > pending.expiresAt) {
+      state.pendingProviderSetup = null; await persistState();
+      await sendMessage(chatId, 'انتهت مهلة إعداد المزوّد. اكتب /apmix للبدء من جديد.');
+      return true;
+    }
+    if (!isPrivateChat(message) || textValue.startsWith('/')) return false;
+    try {
+      const apiKey = validateApiKey(textValue);
+      const models = await listModels({ apiKey, baseUrl: DEFAULT_BASE_URL });
+      const desired = models.find((item) => item.id === 'claude-sonnet-4-6-free');
+      let selectedModel = null;
+      if (desired) {
+        try {
+          await verifyApmixChatMode(apiKey, desired.id);
+          selectedModel = desired.id;
+        } catch {
+          // Keep the validated key inactive; the operator can explicitly test another catalog model.
+        }
+      }
+      await saveProviderKey(apiKey);
+      state.provider = { name: 'apmix', baseUrl: DEFAULT_BASE_URL, model: selectedModel };
+      state.pendingProviderSetup = null;
+      await persistState();
+      if (selectedModel) {
+        await sendMessage(chatId, '✅ تم التحقق من المفتاح، وتوفر النموذج، ونجاح اختبار Chat Completions. النموذج المحدد: ' + selectedModel + '.');
+      } else {
+        await sendMessage(chatId, 'تم التحقق من المفتاح وحفظه بأمان، لكن لم يتم تفعيل نموذج: إما أن claude-sonnet-4-6-free غير موجود، أو لم يجتز اختبار Chat Completions. لم أختر بديلاً. اكتب /models ثم /model MODEL_ID لاختبار نموذج تختاره صراحةً.');
+      }
+    } catch (error) {
+      state.pendingProviderSetup = null; await persistState();
+      await sendMessage(chatId, 'تعذر إعداد APMIX: ' + (error.message || 'فشل التحقق') + '. لم يتم حفظ المفتاح.');
+    } finally {
+      try { await telegram('deleteMessage', { chat_id: chatId, message_id: message.message_id }); }
+      catch { /* Telegram deletion is best-effort; never log message content. */ }
+    }
+    return true;
+  }
+  return false;
+}
+
 async function handleMessage(message) {
   const chatId = String(message.chat?.id ?? '');
   const userId = String(message.from?.id ?? '');
@@ -1109,6 +1283,20 @@ async function handleMessage(message) {
       return;
     }
 
+    if (/^[A-Za-z0-9_-]{43}$/.test(candidateCode)) {
+      try {
+        await attachTelegramLink(candidateCode, message);
+        await sendMessage(
+          chatId,
+          '🔗 تم التحقق من حساب Telegram لهذا الطلب.\n\nارجع إلى Ticketty واضغط «تأكيد ربط Telegram» لإتمام الربط.',
+        );
+      } catch (error) {
+        console.error('Telegram link attachment failed', error);
+        await sendMessage(chatId, 'تعذر التحقق من طلب الربط أو انتهت صلاحيته. ابدأ طلب ربط جديد من Ticketty.');
+      }
+      return;
+    }
+
     if (!isAuthorized(chatId, userId)) {
       await sendMessage(
         chatId,
@@ -1122,6 +1310,8 @@ async function handleMessage(message) {
   }
 
   if (!isAuthorized(chatId, userId)) return;
+
+  if (await handleProviderSettings(message, chatId, userId, textValue)) return;
 
   if (textValue === '/status') {
     await sendStatusOverview(chatId, operatorActor(message));
@@ -1168,7 +1358,13 @@ async function handleMessage(message) {
     return;
   }
 
-  const intent = intentFromText(textValue);
+  let intent = intentFromText(textValue);
+  let aiStatus = 'not_used';
+  if (!intent) {
+    const classified = await aiIntent(textValue, chatId);
+    intent = classified.intent;
+    aiStatus = classified.status;
+  }
 
   try {
     if (intent === 'help') {
@@ -1226,7 +1422,9 @@ async function handleMessage(message) {
       await sendMessage(
         chatId,
         [
-          'لم أفهم المطلوب بشكل واضح.',
+          aiStatus === 'unavailable' || aiStatus === 'rate_limited' || aiStatus === 'invalid_response'
+            ? 'خدمة الذكاء الاصطناعي غير متاحة أو لم تستطع تصنيف الطلب الآن. الأوامر المباشرة ما زالت تعمل.'
+            : 'لم أفهم المطلوب بشكل واضح.',
           '',
           'جرّب مثلًا:',
           '«حالة النظام»',
@@ -1412,6 +1610,10 @@ server.listen(config.port, '0.0.0.0', async () => {
         { command: 'update', description: 'فحص التحديثات' },
         { command: 'rollback', description: 'العودة إلى الإصدار السابق' },
         { command: 'help', description: 'المساعدة' },
+        { command: 'settings', description: 'إعدادات الذكاء الاصطناعي' },
+        { command: 'apmix', description: 'إعداد مزود APMIX' },
+        { command: 'models', description: 'النماذج المتاحة' },
+        { command: 'model', description: 'تغيير نموذج الذكاء الاصطناعي' },
       ],
     });
 

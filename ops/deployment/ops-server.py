@@ -13,7 +13,7 @@ TICKETTY_BIN=os.environ.get("TICKETTY_BIN","/usr/local/bin/ticketty")
 REQUEST_TTL=60
 PLAN_TTL=600
 MAX_LINE=262144
-ALLOWED={"STATUS","PLAN_UPDATE","PLAN_ROLLBACK","CANCEL_PLAN","EXECUTE_UPDATE","EXECUTE_ROLLBACK","OPERATION_STATUS"}
+ALLOWED={"STATUS","PLAN_UPDATE","CANCEL_PLAN","EXECUTE_UPDATE","OPERATION_STATUS"}
 
 def now(): return int(time.time())
 
@@ -72,28 +72,16 @@ def run(args,timeout):
     if p.returncode: raise RuntimeError(p.stderr.strip() or p.stdout.strip() or f"exit {p.returncode}")
     return p.stdout.strip()
 
-def launch_deployment(plan_id, operation, ref, actor, request_id):
+def launch_update(plan_id, ref, actor, request_id):
     OPS_LOG_DIR.mkdir(parents=True,exist_ok=True)
     log_path=OPS_LOG_DIR/(plan_id+".log")
     env=os.environ.copy()
-    if operation == "EXECUTE_ROLLBACK":
-        command=[TICKETTY_BIN,"rollback","--non-interactive","--confirm"]
-    else:
-        command=[TICKETTY_BIN,"update","--non-interactive","--confirm","--ref",ref]
     handle=log_path.open("a",encoding="utf-8")
-    process=subprocess.Popen(command,stdout=handle,stderr=subprocess.STDOUT,text=True,env=env,start_new_session=True)
+    process=subprocess.Popen([TICKETTY_BIN,"update","--non-interactive","--confirm","--ref",ref],stdout=handle,stderr=subprocess.STDOUT,text=True,env=env,start_new_session=True)
     with STATE_LOCK:
-        STATE["operations"][plan_id]={
-            "plan_id":plan_id,
-            "operation":operation,
-            "ref":ref,
-            "pid":process.pid,
-            "status":"running",
-            "started_at":now(),
-            "log_file":str(log_path),
-        }
+        STATE["operations"][plan_id]={"plan_id":plan_id,"ref":ref,"pid":process.pid,"status":"running","started_at":now(),"log_file":str(log_path)}
     save_state()
-    audit(actor,operation,ref,"started",request_id,{"plan_id":plan_id})
+    audit(actor,"EXECUTE_UPDATE",ref,"started",request_id,{"plan_id":plan_id})
 
     def waiter():
         try:
@@ -104,7 +92,7 @@ def launch_deployment(plan_id, operation, ref, actor, request_id):
                 STATE["operations"][plan_id]["exit_code"]=code
                 STATE["operations"][plan_id]["finished_at"]=now()
             save_state()
-            audit(actor,operation,ref,status,request_id,{"plan_id":plan_id,"exit_code":code,"log_file":str(log_path)})
+            audit(actor,"EXECUTE_UPDATE",ref,status,request_id,{"plan_id":plan_id,"exit_code":code,"log_file":str(log_path)})
         finally:
             handle.close()
     threading.Thread(target=waiter,daemon=True,name="ticketty-deploy-"+plan_id).start()
@@ -118,7 +106,6 @@ def handle(m):
         result["remote_operations"]=[
             {
                 "plan_id": v.get("plan_id"),
-                "operation": v.get("operation"),
                 "ref": v.get("ref"),
                 "status": v.get("status"),
                 "started_at": v.get("started_at"),
@@ -128,32 +115,17 @@ def handle(m):
             for v in list(STATE["operations"].values())[-10:]
         ]
         audit(actor,op,None,"success",rid); return result
-    if op in {"PLAN_UPDATE","PLAN_ROLLBACK"}:
+    if op=="PLAN_UPDATE":
         with STATE_LOCK:
             if any(v.get("status")=="running" for v in STATE["operations"].values()):
                 raise ValueError("another deployment is already running")
-        if op=="PLAN_UPDATE":
-            plan=json.loads(run(["update","--plan"],30))
-            if plan.get("update"):
-                pid="plan-"+secrets.token_hex(8)
-                with STATE_LOCK:
-                    STATE["plans"][pid]={"kind":"update","ref":plan["latest"],"created_at":now(),"expires_at":now()+PLAN_TTL,"status":"planned"}
-                plan["plan_id"]=pid
-                plan["kind"]="update"
-                save_state(); audit(actor,op,plan["latest"],"success",rid,{"plan_id":pid})
-            else:
-                audit(actor,op,None,"noop",rid)
-            return plan
-        plan=json.loads(run(["rollback","--plan","--json"],30))
-        if not plan.get("rollback"):
-            audit(actor,op,plan.get("release"),"blocked",rid,{"reason":plan.get("reason"),"migration_state":plan.get("migration_state")})
-            return plan
-        pid="plan-"+secrets.token_hex(8)
-        with STATE_LOCK:
-            STATE["plans"][pid]={"kind":"rollback","ref":plan["release"],"created_at":now(),"expires_at":now()+PLAN_TTL,"status":"planned"}
-        plan["plan_id"]=pid
-        plan["kind"]="rollback"
-        save_state(); audit(actor,op,plan["release"],"success",rid,{"plan_id":pid})
+        plan=json.loads(run(["update","--plan"],30))
+        if plan.get("update"):
+            pid="plan-"+secrets.token_hex(8)
+            with STATE_LOCK:
+                STATE["plans"][pid]={"ref":plan["latest"],"created_at":now(),"expires_at":now()+PLAN_TTL,"status":"planned"}
+            plan["plan_id"]=pid; save_state(); audit(actor,op,plan["latest"],"success",rid,{"plan_id":pid})
+        else: audit(actor,op,None,"noop",rid)
         return plan
     if op=="CANCEL_PLAN":
         pid=str(payload.get("plan_id",""))
@@ -186,19 +158,17 @@ def handle(m):
         audit(actor,op,pid,"success",rid)
         return result
 
-    if op in {"EXECUTE_UPDATE","EXECUTE_ROLLBACK"}:
+    if op=="EXECUTE_UPDATE":
         pid=str(payload.get("plan_id",""))
         with STATE_LOCK:
             plan=STATE["plans"].get(pid)
             if not plan or int(plan.get("expires_at",0))<now(): raise ValueError("unknown or expired plan")
-            expected_kind="update" if op=="EXECUTE_UPDATE" else "rollback"
-            if plan.get("kind")!=expected_kind: raise ValueError("plan type does not match requested operation")
             if plan.get("status")!="planned": raise ValueError("plan is no longer executable")
             if any(v.get("status")=="running" for v in STATE["operations"].values()): raise ValueError("another deployment is already running")
             plan["status"]="executing"
             ref=plan["ref"]
         save_state()
-        return launch_deployment(pid,op,ref,actor,rid)
+        return launch_update(pid,ref,actor,rid)
     raise ValueError("operation not allowed")
 
 def serve():

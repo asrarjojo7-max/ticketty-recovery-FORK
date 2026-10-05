@@ -2,7 +2,7 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY core.mjs server.mjs ./
+COPY core.mjs server.mjs ai-provider.mjs ./
 
 RUN chown -R node:node /app
 

@@ -1,8 +1,10 @@
 overrides:
   deepmerge-ts: ^8.0.0
   qs@<6.16.0: ">=6.16.0"
-  # Keep aligned with pnpm-lock.yaml; 2.4.0 includes the upstream security fix.
-  multer: 2.4.0
+  # @nestjs/platform-express 11.2.1 pins 2.2.0, which is affected by
+  # multipart field-name and aborted-upload DoS advisories. 2.3.0 is the
+  # upstream-compatible security release until Nest updates its exact pin.
+  multer: 2.3.0
 
 allowBuilds:
   '@prisma/client': true

@@ -41,6 +41,8 @@ const TENANT_DELEGATES = new Set([
   'journalEntry',
   'journalEntryLine',
   'auditLog',
+  'telegramLinkChallenge',
+  'telegramAccountLink',
 ]);
 const RAW_OPERATIONS = new Set([
   '$queryRaw',
@@ -385,6 +387,130 @@ export class PrismaService
         SELECT ticketty_security.auth_record_success(${userId})
       `,
     );
+  }
+
+  async createTelegramLinkChallenge(input: {
+    id: string;
+    userId: string;
+    tokenDigest: Buffer;
+    telegramUserId: string;
+    telegramChatId: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    if (this.tenantContext.current()) {
+      throw new Error('Telegram linking cannot run in tenant context');
+    }
+    await this.withAuthRole(
+      (transaction) => transaction.$executeRaw`
+        SELECT ticketty_security.telegram_create_link_challenge(
+          ${input.id},
+          ${input.userId},
+          ${input.tokenDigest},
+          ${input.telegramUserId},
+          ${input.telegramChatId},
+          ${input.expiresAt}
+        )
+      `,
+    );
+  }
+
+  async attachTelegramLinkChallenge(input: {
+    tokenDigest: Buffer;
+    telegramUserId: string;
+    telegramChatId: string;
+  }): Promise<void> {
+    if (this.tenantContext.current()) {
+      throw new Error('Telegram linking cannot run in tenant context');
+    }
+    await this.withAuthRole(
+      (transaction) => transaction.$executeRaw`
+        SELECT ticketty_security.telegram_attach_link_challenge(
+          ${input.tokenDigest},
+          ${input.telegramUserId},
+          ${input.telegramChatId}
+        )
+      `,
+    );
+  }
+
+  async confirmTelegramLink(
+    tokenDigest: Buffer,
+    userId: string,
+  ): Promise<{
+    userId: string;
+    telegramUserId: string;
+    telegramChatId: string;
+  }> {
+    if (this.tenantContext.current()) {
+      throw new Error('Telegram linking cannot run in tenant context');
+    }
+    const rows = await this.withAuthRole(
+      (transaction) => transaction.$queryRaw<
+        Array<{
+          userId: string;
+          telegramUserId: string;
+          telegramChatId: string;
+        }>
+      >`
+        SELECT
+          user_id AS "userId",
+          telegram_user_id AS "telegramUserId",
+          telegram_chat_id AS "telegramChatId"
+        FROM ticketty_security.telegram_confirm_link(${tokenDigest}, ${userId})
+      `,
+    );
+    const linked = rows[0];
+    if (!linked) {
+      throw new Error('Telegram link confirmation returned no binding');
+    }
+    return linked;
+  }
+
+  async revokeTelegramLink(userId: string): Promise<boolean> {
+    if (this.tenantContext.current()) {
+      throw new Error('Telegram linking cannot run in tenant context');
+    }
+    const rows = await this.withAuthRole(
+      (transaction) => transaction.$queryRaw<Array<{ revoked: boolean }>>`
+        SELECT ticketty_security.telegram_revoke_link(${userId}) AS revoked
+      `,
+    );
+    return rows[0]?.revoked ?? false;
+  }
+
+  async findTelegramLinkForUser(userId: string): Promise<{
+    userId: string;
+    telegramUserId: string;
+    telegramChatId: string;
+    active: boolean;
+    linkedAt: Date;
+    revokedAt: Date | null;
+  } | null> {
+    if (this.tenantContext.current()) {
+      throw new Error('Telegram linking cannot run in tenant context');
+    }
+    const rows = await this.withAuthRole(
+      (transaction) => transaction.$queryRaw<
+        Array<{
+          userId: string;
+          telegramUserId: string;
+          telegramChatId: string;
+          active: boolean;
+          linkedAt: Date;
+          revokedAt: Date | null;
+        }>
+      >`
+        SELECT
+          user_id AS "userId",
+          telegram_user_id AS "telegramUserId",
+          telegram_chat_id AS "telegramChatId",
+          active,
+          linked_at AS "linkedAt",
+          revoked_at AS "revokedAt"
+        FROM ticketty_security.telegram_link_for_user(${userId})
+      `,
+    );
+    return rows[0] ?? null;
   }
 
   async withAuthRole<T>(

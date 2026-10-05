@@ -154,6 +154,8 @@ model User {
   role         Role          @relation(fields: [roleId], references: [id])
   branch       Branch?       @relation(fields: [branchId], references: [id])
   agent        Agent?
+  telegramAccountLink TelegramAccountLink?
+  telegramLinkChallenges TelegramLinkChallenge[]
 
   @@index([organizationId])
   @@map("users")
@@ -1048,4 +1050,36 @@ model AuditLog {
   @@index([organizationId, createdAt])
   @@index([branchId, createdAt])
   @@map("audit_logs")
+}
+
+// Telegram identity linking — persistence only; no API or bot authorization is enabled yet.
+model TelegramLinkChallenge {
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tokenDigest     Bytes     @unique @map("token_digest")
+  telegramUserId  String    @map("telegram_user_id")
+  telegramChatId  String    @map("telegram_chat_id")
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt      DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("telegram_link_challenges")
+}
+
+model TelegramAccountLink {
+  id              String    @id @default(cuid())
+  userId          String    @unique @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  telegramUserId  String    @unique @map("telegram_user_id")
+  telegramChatId  String    @map("telegram_chat_id")
+  active          Boolean   @default(true)
+  linkedAt        DateTime  @default(now()) @map("linked_at") @db.Timestamptz(6)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([active, telegramChatId])
+  @@map("telegram_account_links")
 }

@@ -187,7 +187,7 @@ export function PosFeature() {
           الشاشة (lg+) فلا تمرير صفحة طويل أثناء البيع.
           lg: أعمدة جانبية مضغوطة · xl: العرض الكامل المعتاد. */}
       <div className="grid gap-4 xl:h-[calc(100vh-11rem)] xl:grid-cols-[280px_minmax(0,1fr)_340px] xl:grid-rows-[minmax(0,1fr)]">
-        <div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:pe-1">
+        <div className="xl:min-h-0 xl:overflow-y-auto xl:pe-1">
           <TripCards
             trips={tripsQuery.data}
             isLoading={tripsQuery.isLoading}

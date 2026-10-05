@@ -113,5 +113,13 @@
         "lines": 90
       }
     }
+  },
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "^8.0.0",
+      "qs@<6.16.0": ">=6.16.0",
+      "multer": "2.4.0",
+      "engine.io": "6.6.10"
+    }
   }
 }

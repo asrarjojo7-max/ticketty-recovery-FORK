@@ -119,7 +119,28 @@ function extractBearerToken(authorization) {
   return token || null;
 }
 
+function createRateLimiter({ limit = 10, windowMs = 60_000, maxKeys = 500 } = {}) {
+  if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(windowMs) || windowMs < 1 ||
+      !Number.isInteger(maxKeys) || maxKeys < 1) throw new Error('Rate limiter configuration is invalid');
+  const entries = new Map();
+  return function allow(key, now = Date.now()) {
+    if (typeof key !== 'string' || !key) return false;
+    const recent = (entries.get(key) ?? []).filter((timestamp) => now - timestamp < windowMs);
+    if (recent.length >= limit) { entries.set(key, recent); return false; }
+    recent.push(now);
+    entries.set(key, recent);
+    if (entries.size > maxKeys) {
+      for (const [candidate, timestamps] of entries) {
+        if (!timestamps.some((timestamp) => now - timestamp < windowMs)) entries.delete(candidate);
+        if (entries.size <= Math.floor(maxKeys * 0.8)) break;
+      }
+    }
+    return true;
+  };
+}
+
 export {
+  createRateLimiter,
   extractBearerToken,
   extractStartPairingCode,
   intentFromText,

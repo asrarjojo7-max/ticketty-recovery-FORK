@@ -9,6 +9,8 @@ LOCK_FILE="${TICKETTY_LOCK_FILE:-/run/lock/ticketty-deploy.lock}"
 OPS_GROUP="ticketty-ops"
 OPS_SOCKET="/run/ticketty/ops.sock"
 OPS_HMAC_FILE="$ETC_ROOT/secrets/ticketty-ops-hmac"
+TELEGRAM_LINK_HMAC_FILE="$ETC_ROOT/secrets/telegram-link-hmac"
+TELEGRAM_LINK_GROUP="ticketty-telegram-link"
 TELEGRAM_TOKEN_FILE="$ETC_ROOT/secrets/telegram-bot-token"
 TELEGRAM_ALERT_TOKEN_FILE="$ETC_ROOT/secrets/telegram-alert-webhook-token"
 CLOUDFLARE_TOKEN_FILE="$ETC_ROOT/secrets/cloudflare-tunnel-token"
@@ -242,6 +244,7 @@ ensure_env(){
   env_set_missing CLOUDFLARE_TUNNEL_TOKEN_FILE "$CLOUDFLARE_TOKEN_FILE" "$f"
   env_set_missing TICKETTY_OPS_SOCKET "$OPS_SOCKET" "$f"
   env_set_missing TICKETTY_OPS_HMAC_FILE "$OPS_HMAC_FILE" "$f"
+  env_set_missing TELEGRAM_LINK_HMAC_FILE "$TELEGRAM_LINK_HMAC_FILE" "$f"
   env_set_missing TICKETTY_REMOTE_OPS_ENABLED true "$f"
   env_set_missing TICKETTY_GITHUB_REPOSITORY "${TICKETTY_GITHUB_REPOSITORY:-mogahedadamy/ticketty-recovery}" "$f"
   env_set_missing TICKETTY_RELEASE_CHANNEL "${TICKETTY_RELEASE_CHANNEL:-stable}" "$f"
@@ -266,7 +269,7 @@ ensure_env(){
   [[ -n "$value" ]] && env_set_missing CLOUDFLARE_TUNNEL_ID "$value" "$f"
   chmod 600 "$f"
 }
-write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "Production environment already exists"; return; }; local db1 db2 db3 jwt pair ops; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; cat > "$f" <<EOF
+write_env(){ local f="$ETC_ROOT/ticketty.env"; [[ -f "$f" ]] && { ok "Production environment already exists"; return; }; local db1 db2 db3 jwt pair ops link_hmac; db1="$(openssl rand -hex 24)"; db2="$(openssl rand -hex 24)"; db3="$(openssl rand -hex 24)"; jwt="$(openssl rand -base64 48 | tr -d '\n')"; pair="$(openssl rand -hex 24)"; ops="$(openssl rand -hex 32)"; link_hmac="$(openssl rand -hex 32)"; printf '%s\n' "$ops" > "$OPS_HMAC_FILE"; chmod 600 "$OPS_HMAC_FILE"; printf '%s\n' "$link_hmac" > "$TELEGRAM_LINK_HMAC_FILE"; chmod 600 "$TELEGRAM_LINK_HMAC_FILE"; cat > "$f" <<EOF
 POSTGRES_DB=ticketty
 POSTGRES_USER=ticketty_admin
 POSTGRES_PASSWORD=$db1
@@ -304,6 +307,7 @@ TICKETTY_RELEASE_CHANNEL=stable
 TICKETTY_INSTALL_ROOT=$INSTALL_ROOT
 TICKETTY_OPS_SOCKET=$OPS_SOCKET
 TICKETTY_OPS_HMAC_FILE=$OPS_HMAC_FILE
+TELEGRAM_LINK_HMAC_FILE=$TELEGRAM_LINK_HMAC_FILE
 TICKETTY_REMOTE_OPS_ENABLED=true
 BACKUP_DIR=$BACKUP_ROOT
 RCLONE_REMOTE=
@@ -336,6 +340,10 @@ telegram(){
   local gid; gid="$(getent group "$OPS_GROUP" | cut -d: -f3)"
   if grep -q "^TICKETTY_OPS_GID=" "$ETC_ROOT/ticketty.env"; then sed -i "s#^TICKETTY_OPS_GID=.*#TICKETTY_OPS_GID=$gid#" "$ETC_ROOT/ticketty.env"; else printf 'TICKETTY_OPS_GID=%s\n' "$gid" >> "$ETC_ROOT/ticketty.env"; fi
   chown root:"$OPS_GROUP" "$OPS_HMAC_FILE"; chmod 640 "$OPS_HMAC_FILE"
+  getent group "$TELEGRAM_LINK_GROUP" >/dev/null 2>&1 || groupadd --system "$TELEGRAM_LINK_GROUP"
+  local link_gid; link_gid="$(getent group "$TELEGRAM_LINK_GROUP" | cut -d: -f3)"
+  env_set TICKETTY_TELEGRAM_LINK_GID "$link_gid"
+  chown root:"$TELEGRAM_LINK_GROUP" "$TELEGRAM_LINK_HMAC_FILE"; chmod 640 "$TELEGRAM_LINK_HMAC_FILE"
   ok "Telegram"; }
 cloudflare(){
   if [[ -s "$CLOUDFLARED_DIR/config.yml" ]]; then

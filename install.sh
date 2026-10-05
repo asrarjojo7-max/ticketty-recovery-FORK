@@ -12,7 +12,7 @@ if [[ ! -t 0 && -r /dev/tty ]]; then exec </dev/tty; fi
 . /etc/os-release
 if ! command -v curl >/dev/null 2>&1 || ! command -v git >/dev/null 2>&1; then
   [[ "$ID" == ubuntu || "$ID" == debian || "$ID_LIKE" == *debian* ]] || {
-    echo "ERROR: curl and git are required. Install them manually on this distribution." >&2
+    echo "يحتاج هذا التثبيت curl وgit؛ ثبّتهما يدويًا على هذه التوزيعة." >&2
     exit 1
   }
   apt-get update
@@ -21,20 +21,15 @@ fi
 
 mkdir -p "$(dirname "$ROOT")"
 if [[ -d "$ROOT/.git" ]]; then
-  echo "Existing Ticketty installation detected at $ROOT"
-  echo "Refreshing bootstrap tools from the repository..."
-  GIT_TERMINAL_PROMPT=0 git -C "$ROOT" fetch --force "$REPO" master
-  git -C "$ROOT" show FETCH_HEAD:ops/deployment/ticketty > /usr/local/bin/ticketty
-  git -C "$ROOT" show FETCH_HEAD:ops/deployment/bootstrap.sh > /usr/local/bin/ticketty-bootstrap
+  echo "Ticketty موجود بالفعل في $ROOT"
 else
-  [[ ! -e "$ROOT" ]] || { echo "ERROR: Path exists but is not a Git repository: $ROOT" >&2; exit 1; }
+  [[ ! -e "$ROOT" ]] || { echo "المسار موجود لكنه ليس مستودع Git: $ROOT" >&2; exit 1; }
   git clone "$REPO" "$ROOT"
-  install -m 0755 "$ROOT/ops/deployment/ticketty" /usr/local/bin/ticketty
-  install -m 0755 "$ROOT/ops/deployment/bootstrap.sh" /usr/local/bin/ticketty-bootstrap
 fi
 
-chmod 0755 /usr/local/bin/ticketty /usr/local/bin/ticketty-bootstrap
+install -m 0755 "$ROOT/ops/deployment/ticketty" /usr/local/bin/ticketty
+install -m 0755 "$ROOT/ops/deployment/bootstrap.sh" /usr/local/bin/ticketty-bootstrap
 
 echo
-echo "Bootstrap ready."
+echo "Ticketty bootstrap جاهز."
 exec /usr/local/bin/ticketty install
