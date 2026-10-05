@@ -181,7 +181,7 @@ async function attachTelegramLink(token, message) {
     telegramChatId,
   ].join('\\n');
   const signature = createHmac('sha256', secret).update(canonical).digest('hex');
-  const response = await fetch(config.backendUrl.replace(/\\/$/, '') + '/api/telegram/link/internal/attach', {
+  const response = await fetch(config.backendUrl.replace(/\/$/, '') + '/api/telegram/link/internal/attach', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
