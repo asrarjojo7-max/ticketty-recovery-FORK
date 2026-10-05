@@ -67,6 +67,8 @@ services:
     environment:
       <<: *backend-environment
       DATABASE_URL: ${RUNTIME_DATABASE_URL:?RUNTIME_DATABASE_URL is required}
+    group_add:
+      - "${TICKETTY_TELEGRAM_LINK_GID:-1002}"
     volumes:
       - ${TELEGRAM_LINK_HMAC_FILE:-/etc/ticketty/telegram-link-hmac}:/run/secrets/telegram_link_hmac:ro
     depends_on:
@@ -229,6 +231,7 @@ services:
       - "8090"
     group_add:
       - "${TICKETTY_OPS_GID:?TICKETTY_OPS_GID is required}"
+      - "${TICKETTY_TELEGRAM_LINK_GID:-1002}"
     volumes:
       - ticketty-telegram:/var/lib/ticketty/telegram
       - ${TELEGRAM_ALERT_WEBHOOK_TOKEN_FILE:-/etc/ticketty/telegram-alert-webhook-token}:/run/secrets/telegram_alert_webhook_token:ro
