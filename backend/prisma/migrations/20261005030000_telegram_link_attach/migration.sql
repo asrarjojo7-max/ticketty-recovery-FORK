@@ -54,7 +54,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION ticketty_security.telegram_attach_link_challenge(bytea, text, text) FROM PUBLIC;
-DO $
+DO $telegram_role_guard$
 DECLARE
   role_name text;
 BEGIN
