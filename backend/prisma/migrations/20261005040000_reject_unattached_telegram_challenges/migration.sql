@@ -102,7 +102,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION ticketty_security.telegram_confirm_link(bytea, text) FROM PUBLIC;
-DO $
+DO $telegram_role_guard$
 DECLARE
   role_name text;
 BEGIN
