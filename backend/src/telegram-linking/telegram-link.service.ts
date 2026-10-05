@@ -26,9 +26,7 @@ export class TelegramLinkService {
 
   async createChallenge(user: AuthUser) {
     if (!user.orgId) {
-      throw new UnauthorizedException(
-        'حساب المنصة لا يمكن ربطه بهذه الطريقة',
-      );
+      throw new UnauthorizedException('حساب المنصة لا يمكن ربطه بهذه الطريقة');
     }
 
     const token = createTelegramLinkToken();
