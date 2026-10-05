@@ -113,5 +113,11 @@
         "lines": 90
       }
     }
+  },
+  "pnpm": {
+    "overrides": {
+      "engine.io": "6.6.10",
+      "multer": "2.4.0"
+    }
   }
 }
