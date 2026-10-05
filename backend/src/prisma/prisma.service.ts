@@ -414,7 +414,26 @@ export class PrismaService
     );
   }
 
-  async attachTelegramLinkChallenge(input: {\n    tokenDigest: Buffer;\n    telegramUserId: string;\n    telegramChatId: string;\n  }): Promise<void> {\n    if (this.tenantContext.current()) {\n      throw new Error('Telegram linking cannot run in tenant context');\n    }\n    await this.withAuthRole(\n      (transaction) => transaction.$executeRaw`\n        SELECT ticketty_security.telegram_attach_link_challenge(\n          ${input.tokenDigest},\n          ${input.telegramUserId},\n          ${input.telegramChatId}\n        )\n      `,\n    );\n  }\n\n  async confirmTelegramLink(
+  async attachTelegramLinkChallenge(input: {
+    tokenDigest: Buffer;
+    telegramUserId: string;
+    telegramChatId: string;
+  }): Promise<void> {
+    if (this.tenantContext.current()) {
+      throw new Error('Telegram linking cannot run in tenant context');
+    }
+    await this.withAuthRole(
+      (transaction) => transaction.$executeRaw`
+        SELECT ticketty_security.telegram_attach_link_challenge(
+          ${input.tokenDigest},
+          ${input.telegramUserId},
+          ${input.telegramChatId}
+        )
+      `,
+    );
+  }
+
+  async confirmTelegramLink(
     tokenDigest: Buffer,
     userId: string,
   ): Promise<{
