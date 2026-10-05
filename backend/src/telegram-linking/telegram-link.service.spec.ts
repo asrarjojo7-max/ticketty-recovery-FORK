@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { TelegramLinkService } from './telegram-link.service';
+import type { AuthUser } from '../auth/auth.types';
 
 describe('TelegramLinkService', () => {
-  const user = {
+  const user: AuthUser = {
     sub: 'user-1',
     orgId: 'org-1',
     branchId: null,
@@ -15,7 +16,7 @@ describe('TelegramLinkService', () => {
     email: 'owner@example.test',
     roleKey: 'owner',
     permissions: [],
-  } as const;
+  };
 
   function makeService() {
     const prisma = {
