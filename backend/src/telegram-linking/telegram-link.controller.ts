@@ -68,11 +68,7 @@ export class TelegramLinkController {
       body.telegramUserId,
       body.telegramChatId,
     ].join('\n');
-    await this.service.verifyInternalSignature(
-      timestamp,
-      signature,
-      canonical,
-    );
+    await this.service.verifyInternalSignature(timestamp, signature, canonical);
     return this.service.attachTelegramIdentity(
       body.token,
       body.telegramUserId,
