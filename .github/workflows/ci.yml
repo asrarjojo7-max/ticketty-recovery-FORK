@@ -295,6 +295,8 @@ jobs:
           BACKUP_RETENTION_DAYS=0
           EOF
           docker compose --env-file .env.ci config --quiet
+          grep -q 'TELEGRAM_LINK_HMAC_FILE' ops/deployment/ticketty
+          grep -q 'TICKETTY_TELEGRAM_LINK_GID' ops/deployment/ticketty
           rm -f .env.ci
 
   container-builds:
