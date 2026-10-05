@@ -1,17 +1,13 @@
 ALTER TABLE "telegram_link_challenges"
   ADD COLUMN "user_id" TEXT;
 
-UPDATE "telegram_link_challenges"
-SET "user_id" = (
-  SELECT "user_id"
-  FROM "telegram_account_links"
-  WHERE "telegram_account_links"."telegram_user_id" = "telegram_link_challenges"."telegram_user_id"
-  LIMIT 1
-);
-
--- The branch has not been deployed; any pre-existing rows are CI-only and must
--- not silently survive without an owner.
-DELETE FROM "telegram_link_challenges" WHERE "user_id" IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM "telegram_link_challenges") THEN
+    RAISE EXCEPTION 'telegram_link_challenges must be empty before user binding is enabled';
+  END IF;
+END
+$$;
 
 ALTER TABLE "telegram_link_challenges"
   ALTER COLUMN "user_id" SET NOT NULL;
