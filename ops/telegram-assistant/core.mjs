@@ -75,6 +75,16 @@ function intentFromText(input) {
   }
 
   if (
+    text.includes('ارجع للإصدار السابق') ||
+    text.includes('الرجوع للإصدار السابق') ||
+    text.includes('تراجع عن التحديث') ||
+    text.includes('rollback') ||
+    text === 'رجوع'
+  ) {
+    return 'rollback';
+  }
+
+  if (
     text.includes('هل يوجد تحديث') ||
     text.includes('في تحديث') ||
     text.includes('التحديث') ||
@@ -95,13 +105,19 @@ function intentFromText(input) {
   return null;
 }
 
+function extractStartPairingCode(input) {
+  if (typeof input !== 'string') return null;
+
+  const match = input.trim().match(/^\/start(?:@\w+)?(?:\s+(\S+))?$/i);
+  return match ? match[1] ?? '' : null;
+}
+
 function extractBearerToken(authorization) {
   if (typeof authorization !== 'string') return null;
   if (!authorization.startsWith('Bearer ')) return null;
   const token = authorization.slice('Bearer '.length).trim();
   return token || null;
 }
-
 
 function createRateLimiter({ limit = 10, windowMs = 60_000, maxKeys = 500 } = {}) {
   if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(windowMs) || windowMs < 1 ||
@@ -123,4 +139,9 @@ function createRateLimiter({ limit = 10, windowMs = 60_000, maxKeys = 500 } = {}
   };
 }
 
-export { createRateLimiter, extractBearerToken, intentFromText, normalizeArabic };
+export {
+  extractBearerToken,
+  extractStartPairingCode,
+  intentFromText,
+  normalizeArabic,
+};
