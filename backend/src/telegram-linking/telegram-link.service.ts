@@ -25,7 +25,11 @@ export class TelegramLinkService {
   ) {}
 
   async createChallenge(user: AuthUser) {
-    if (!user.orgId) throw new UnauthorizedException('حساب المنصة لا يمكن ربطه بهذه الطريقة');
+    if (!user.orgId) {
+      throw new UnauthorizedException(
+        'حساب المنصة لا يمكن ربطه بهذه الطريقة',
+      );
+    }
 
     const token = createTelegramLinkToken();
     const pendingIdentity = 'pending:' + token.digest.toString('hex');
@@ -130,7 +134,7 @@ export class TelegramLinkService {
     return { revoked: changed };
   }
 
-  async current(user: AuthUser) {
+  current(user: AuthUser) {
     if (!user.orgId) throw new UnauthorizedException('حساب المنصة غير مدعوم');
     return this.prisma.findTelegramLinkForUser(user.sub);
   }
@@ -141,19 +145,34 @@ export class TelegramLinkService {
     canonical: string,
   ) {
     const ts = Number(timestamp);
-    if (!Number.isInteger(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > INTERNAL_TIMESTAMP_TOLERANCE_SECONDS) {
+    if (
+      !Number.isInteger(ts) ||
+      Math.abs(Math.floor(Date.now() / 1000) - ts) >
+        INTERNAL_TIMESTAMP_TOLERANCE_SECONDS
+    ) {
       throw new BadRequestException('طلب Telegram الداخلي منتهي الصلاحية');
     }
     if (!/^v1=[a-f0-9]{64}$/.test(signature)) {
       throw new UnauthorizedException('توقيع Telegram الداخلي غير صالح');
     }
     const secretPath = process.env.TELEGRAM_LINK_HMAC_FILE?.trim();
-    if (!secretPath) throw new UnauthorizedException('تكامل Telegram الداخلي غير مهيأ');
+    if (!secretPath) {
+      throw new UnauthorizedException('تكامل Telegram الداخلي غير مهيأ');
+    }
     const secret = (await readFile(secretPath, 'utf8')).trim();
-    if (!secret) throw new UnauthorizedException('سر تكامل Telegram الداخلي فارغ');
-    const expected = createHmac('sha256', secret).update(canonical).digest('hex');
+    if (!secret) {
+      throw new UnauthorizedException('سر تكامل Telegram الداخلي فارغ');
+    }
+    const expected = createHmac('sha256', secret)
+      .update(canonical)
+      .digest('hex');
     const provided = signature.slice(3);
-    if (!timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(provided, 'hex'))) {
+    if (
+      !timingSafeEqual(
+        Buffer.from(expected, 'hex'),
+        Buffer.from(provided, 'hex'),
+      )
+    ) {
       throw new UnauthorizedException('توقيع Telegram الداخلي غير صالح');
     }
   }
