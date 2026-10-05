@@ -2,9 +2,9 @@ import { createServer } from 'node:http';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, classifyIntent, listModels, validateApiKey, validateModelAccess } from './ai-provider.mjs';
 import { dirname } from 'node:path';
-import { createRateLimiter, extractBearerToken, intentFromText } from './core.mjs';
+import { DEFAULT_BASE_URL, classifyIntent, listModels, validateApiKey, validateModelAccess } from './ai-provider.mjs';
+import { createRateLimiter, extractBearerToken, extractStartPairingCode, intentFromText } from './core.mjs';
 
 const config = {
   botTokenFile: process.env.TELEGRAM_BOT_TOKEN_FILE ?? '',
@@ -323,7 +323,7 @@ function deploymentStatusMessage(result) {
     .join('\n');
 }
 
-async function monitorDeployment(chatId, actor, planId) {
+async function monitorDeployment(chatId, actor, planId, mode = 'update') {
   const maxChecks = 360;
   for (let attempt = 0; attempt < maxChecks; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -336,13 +336,21 @@ async function monitorDeployment(chatId, actor, planId) {
       );
 
       if (result.status === 'success') {
+        const completedTitle =
+          mode === 'rollback'
+            ? '🟢 اكتمل rollback في Ticketty'
+            : '🟢 اكتمل تحديث Ticketty';
+        const completedState =
+          mode === 'rollback'
+            ? 'الحالة: تمت العودة بنجاح ✅'
+            : 'الحالة: تم التحديث بنجاح ✅';
         await sendMessage(
           chatId,
           [
-            '🟢 اكتمل تحديث Ticketty',
+            completedTitle,
             '',
             'الإصدار: ' + (result.ref ?? 'غير معروف'),
-            'الحالة: تم التحديث بنجاح ✅',
+            completedState,
             'معرّف العملية: ' + planId,
             '',
             'اكتب: حالة النظام',
@@ -353,13 +361,21 @@ async function monitorDeployment(chatId, actor, planId) {
       }
 
       if (result.status === 'failed') {
+        const failedTitle =
+          mode === 'rollback'
+            ? '🔴 فشل rollback في Ticketty'
+            : '🔴 فشل تحديث Ticketty';
+        const failedState =
+          mode === 'rollback'
+            ? 'لم تتم العودة إلى الإصدار السابق.'
+            : 'لم يتم اعتماد التحديث.';
         await sendMessage(
           chatId,
           [
-            '🔴 فشل تحديث Ticketty',
+            failedTitle,
             '',
             'الإصدار المطلوب: ' + (result.ref ?? 'غير معروف'),
-            'لم يتم اعتماد التحديث.',
+            failedState,
             'معرّف العملية: ' + planId,
             '',
             'استخدم «حالة التحديث» لمراجعة آخر حالة، ثم راجع سجل النشر من السيرفر.',
@@ -417,6 +433,37 @@ function updatePlanMessage(plan) {
       inline_keyboard: [
         [
           { text: '✅ تنفيذ التحديث', callback_data: 'deploy:execute:' + plan.plan_id },
+          { text: '❌ إلغاء', callback_data: 'deploy:cancel:' + plan.plan_id },
+        ],
+      ],
+    },
+  };
+}
+
+function rollbackPlanMessage(plan) {
+  const body = [
+    '↩️ يمكن العودة إلى الإصدار السابق',
+    '',
+    'الإصدار الحالي: ' + (plan.current ?? 'غير معروف'),
+    'الإصدار السابق: ' + (plan.release ?? 'غير معروف'),
+    '',
+    'هذا الإجراء لا يعيد قاعدة البيانات إلى الخلف.',
+    'لن يُنفذ إذا كان آخر تحديث قد طبّق migration.',
+    '',
+    'الخطة مؤقتة وصالحة لمدة 10 دقائق.',
+    '',
+    'اختر الإجراء:',
+  ].join('\n');
+
+  return {
+    text: body,
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: '✅ تنفيذ rollback',
+            callback_data: 'deploy:rollback-execute:' + plan.plan_id,
+          },
           { text: '❌ إلغاء', callback_data: 'deploy:cancel:' + plan.plan_id },
         ],
       ],
@@ -933,13 +980,10 @@ function helpMessage() {
     '• هل أخذ النظام نسخة احتياطية؟',
     '• ماذا حدث اليوم؟',
     '• هل يوجد تحديث؟',
-    '• /settings إعدادات الذكاء الاصطناعي',
-    '• /apmix إعداد مفتاح APMIX',
-    '• /models عرض النماذج المتاحة',
-    '• /model MODEL_ID تغيير النموذج بعد التحقق',
+    '• هل نحتاج rollback؟',
     '',
     'يمكنني أيضًا تجهيز تحديث منشور على GitHub قبل التنفيذ.',
-    'التحديث لا يبدأ إلا بعد تأكيد صريح منك.',
+    'التحديث وrollback لا يبدأان إلا بعد تأكيد صريح منك.',
 
   ].join('\n');
 }
@@ -982,7 +1026,34 @@ async function handleCallbackQuery(query) {
         callback_query_id: query.id,
         text: 'تم إلغاء خطة التحديث.',
       });
-      await sendMessage(chatId, '❌ تم إلغاء خطة التحديث. لن يتم تنفيذ أي تغيير.');
+      await sendMessage(chatId, '❌ تم إلغاء الخطة. لن يتم تنفيذ أي تغيير.');
+      return;
+    }
+
+    if (action === 'rollback-execute') {
+      const result = await remoteOps(
+        'EXECUTE_ROLLBACK',
+        { plan_id: planId },
+        actor,
+      );
+      await telegram('answerCallbackQuery', {
+        callback_query_id: query.id,
+        text: 'بدأ تنفيذ rollback.',
+      });
+      await sendMessage(
+        chatId,
+        [
+          '🟠 بدأ rollback في Ticketty',
+          '',
+          'الإصدار السابق: ' + (result.ref ?? 'غير معروف'),
+          'معرّف العملية: ' + planId,
+          '',
+          'جاري تنفيذ العودة والفحوص.',
+          '',
+          'سأخبرك تلقائيًا عند اكتمال العملية أو فشلها.',
+        ].join('\n'),
+      );
+      void monitorDeployment(chatId, actor, planId, 'rollback');
       return;
     }
 
@@ -1053,6 +1124,10 @@ async function sendStatusOverview(chatId, actor) {
       'حالة النشر: ' + (deployment.status ?? 'غير معروفة'),
       'الدومين: ' + (deployment.domain ?? 'غير مضبوط'),
       'Remote Ops: ' + (deployment.remote_ops ?? 'غير معروف'),
+      'Rollback: ' +
+        (deployment.rollback?.available
+          ? 'متاح إلى ' + (deployment.rollback.previous_release ?? 'الإصدار السابق')
+          : 'غير متاح'),
     ].join('\n'),
   );
 }
@@ -1189,9 +1264,9 @@ async function handleMessage(message) {
 
   if (!chatId || !userId || !textValue) return;
 
-  if (textValue.startsWith('/start')) {
-    const parts = textValue.split(/\\s+/);
-    const candidateCode = parts[1] ?? '';
+  const candidateCode = extractStartPairingCode(textValue);
+
+  if (candidateCode !== null) {
 
     if (
       isPrivateChat(message) &&
@@ -1243,6 +1318,30 @@ async function handleMessage(message) {
     return;
   }
 
+  if (textValue === '/rollback') {
+    try {
+      const plan = await remoteOps('PLAN_ROLLBACK', {}, operatorActor(message));
+      if (!plan.rollback) {
+        await sendMessage(
+          chatId,
+          plan.reason === 'migration-guard'
+            ? '🔒 لا يمكن تنفيذ rollback لأن آخر تحديث طبّق migration. يجب إجراء recovery إلى الأمام أو استخدام إجراء restore الموثق.'
+            : 'لا توجد نسخة سابقة آمنة مسجلة للعودة إليها.',
+        );
+        return;
+      }
+      const rendered = rollbackPlanMessage({
+        ...plan,
+        current: (await remoteOps('STATUS', {}, operatorActor(message))).release,
+      });
+      await sendMessage(chatId, rendered.text, rendered.reply_markup);
+    } catch (error) {
+      console.error('Telegram rollback plan failed', error);
+      await sendMessage(chatId, 'تعذر تجهيز خطة rollback الآن. راجع حالة السيرفر وحاول مرة أخرى.');
+    }
+    return;
+  }
+
   if (textValue === '/update' || textValue === '/deploy') {
     try {
       const plan = await remoteOps('PLAN_UPDATE', {}, operatorActor(message));
@@ -1287,6 +1386,26 @@ async function handleMessage(message) {
         operatorActor(message),
       );
       await sendMessage(chatId, deploymentStatusMessage(result));
+    } else if (intent === 'rollback') {
+      const plan = await remoteOps(
+        'PLAN_ROLLBACK',
+        {},
+        operatorActor(message),
+      );
+      if (!plan.rollback) {
+        await sendMessage(
+          chatId,
+          plan.reason === 'migration-guard'
+            ? '🔒 لا يمكن تنفيذ rollback لأن آخر تحديث طبّق migration. يجب إجراء recovery إلى الأمام أو استخدام إجراء restore الموثق.'
+            : 'لا توجد نسخة سابقة آمنة مسجلة للعودة إليها.',
+        );
+      } else {
+        const rendered = rollbackPlanMessage({
+          ...plan,
+          current: (await remoteOps('STATUS', {}, operatorActor(message))).release,
+        });
+        await sendMessage(chatId, rendered.text, rendered.reply_markup);
+      }
     } else if (intent === 'update') {
       const plan = await remoteOps(
         'PLAN_UPDATE',
@@ -1489,6 +1608,7 @@ server.listen(config.port, '0.0.0.0', async () => {
       commands: [
         { command: 'status', description: 'حالة النظام' },
         { command: 'update', description: 'فحص التحديثات' },
+        { command: 'rollback', description: 'العودة إلى الإصدار السابق' },
         { command: 'help', description: 'المساعدة' },
         { command: 'settings', description: 'إعدادات الذكاء الاصطناعي' },
         { command: 'apmix', description: 'إعداد مزود APMIX' },
