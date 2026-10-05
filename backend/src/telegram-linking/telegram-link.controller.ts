@@ -44,9 +44,20 @@ export class TelegramLinkController {
   async attach(
     @Headers('x-ticketty-telegram-timestamp') timestamp: string,
     @Headers('x-ticketty-telegram-signature') signature: string,
-    @Body() body: { token?: string; telegramUserId?: string; telegramChatId?: string },
+    @Body()
+    body: {
+      token?: string;
+      telegramUserId?: string;
+      telegramChatId?: string;
+    },
   ) {
-    if (!timestamp || !signature || !body.token || !body.telegramUserId || !body.telegramChatId) {
+    if (
+      !timestamp ||
+      !signature ||
+      !body.token ||
+      !body.telegramUserId ||
+      !body.telegramChatId
+    ) {
       throw new UnauthorizedException('بيانات Telegram الداخلية ناقصة');
     }
     const canonical = [
@@ -57,7 +68,11 @@ export class TelegramLinkController {
       body.telegramUserId,
       body.telegramChatId,
     ].join('\n');
-    await this.service.verifyInternalSignature(timestamp, signature, canonical);
+    await this.service.verifyInternalSignature(
+      timestamp,
+      signature,
+      canonical,
+    );
     return this.service.attachTelegramIdentity(
       body.token,
       body.telegramUserId,
