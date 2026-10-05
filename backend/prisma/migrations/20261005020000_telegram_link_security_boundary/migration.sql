@@ -7,6 +7,7 @@
 
 CREATE OR REPLACE FUNCTION ticketty_security.telegram_create_link_challenge(
   p_id text,
+  p_user_id text,
   p_token_digest bytea,
   p_telegram_user_id text,
   p_telegram_chat_id text,
@@ -60,6 +61,9 @@ BEGIN
 END;
 $$;
 
+-- The unique Telegram identity is intentionally never reassigned to another
+-- user after a historical link exists. This prevents account-hijack style
+-- relinking after revocation.
 CREATE OR REPLACE FUNCTION ticketty_security.telegram_confirm_link(
   p_token_digest bytea,
   p_user_id text
@@ -118,7 +122,6 @@ BEGIN
     SELECT 1
     FROM public."telegram_account_links" l
     WHERE l."telegram_user_id" = v_challenge."telegram_user_id"
-      AND l."active" = TRUE
       AND l."user_id" <> p_user_id
   ) THEN
     RAISE EXCEPTION 'Telegram account is already linked';
@@ -142,7 +145,7 @@ BEGIN
       "active"
     )
     VALUES (
-      md5(random()::text || clock_timestamp()::text || p_user_id),
+      v_challenge."id",
       p_user_id,
       v_challenge."telegram_user_id",
       v_challenge."telegram_chat_id",
@@ -210,12 +213,12 @@ AS $$
   WHERE l."user_id" = p_user_id
 $$;
 
-REVOKE ALL ON FUNCTION ticketty_security.telegram_create_link_challenge(text, bytea, text, text, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION ticketty_security.telegram_create_link_challenge(text, text, bytea, text, text, timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION ticketty_security.telegram_confirm_link(bytea, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION ticketty_security.telegram_revoke_link(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION ticketty_security.telegram_link_for_user(text) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION ticketty_security.telegram_create_link_challenge(text, bytea, text, text, timestamptz) TO ticketty_auth;
+GRANT EXECUTE ON FUNCTION ticketty_security.telegram_create_link_challenge(text, text, bytea, text, text, timestamptz) TO ticketty_auth;
 GRANT EXECUTE ON FUNCTION ticketty_security.telegram_confirm_link(bytea, text) TO ticketty_auth;
 GRANT EXECUTE ON FUNCTION ticketty_security.telegram_revoke_link(text) TO ticketty_auth;
 GRANT EXECUTE ON FUNCTION ticketty_security.telegram_link_for_user(text) TO ticketty_auth;
