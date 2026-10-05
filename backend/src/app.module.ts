@@ -31,6 +31,7 @@ import { ReportsModule } from './reports/reports.module';
 import { RoutesModule } from './routes/routes.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { TripsModule } from './trips/trips.module';
+import { TelegramLinkModule } from './telegram-linking/telegram-link.module';
 import { validateEnvironment } from './config/env.validation';
 
 function jwtOptions(config: ConfigService): JwtModuleOptions {
@@ -73,6 +74,7 @@ function jwtOptions(config: ConfigService): JwtModuleOptions {
     FleetModule,
     DriversModule,
     TripsModule,
+    TelegramLinkModule,
     BookingsModule,
     PaymentsModule,
     PlatformModule,
