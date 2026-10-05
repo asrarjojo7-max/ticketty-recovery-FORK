@@ -121,5 +121,5 @@ BEGIN
     );
   END LOOP;
 END
-$;
+$telegram_role_guard$;
 GRANT EXECUTE ON FUNCTION ticketty_security.telegram_confirm_link(bytea, text) TO ticketty_auth;
