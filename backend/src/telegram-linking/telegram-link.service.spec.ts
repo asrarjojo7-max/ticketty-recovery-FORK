@@ -23,7 +23,9 @@ describe('TelegramLinkService', () => {
       revokeTelegramLink: jest.fn(),
       findTelegramLinkForUser: jest.fn(),
       attachTelegramLinkChallenge: jest.fn(),
-      withTenantContext: jest.fn(async (_orgId: string, callback: () => Promise<unknown>) => callback()),
+      withTenantContext: jest.fn(
+        async (_orgId: string, callback: () => Promise<unknown>) => callback(),
+      ),
     };
     const audit = { log: jest.fn().mockResolvedValue(undefined) };
     return {
@@ -48,7 +50,10 @@ describe('TelegramLinkService', () => {
         telegramChatId: expect.stringMatching(/^pending:/),
       }),
     );
-    expect(prisma.withTenantContext).toHaveBeenCalledWith('org-1', expect.any(Function));
+    expect(prisma.withTenantContext).toHaveBeenCalledWith(
+      'org-1',
+      expect.any(Function),
+    );
     expect(audit.log).toHaveBeenCalledWith(
       user,
       'TELEGRAM_LINK_CHALLENGE_CREATED',
@@ -62,7 +67,11 @@ describe('TelegramLinkService', () => {
     const { service, prisma } = makeService();
 
     await expect(
-      service.attachTelegramIdentity('A'.repeat(43), 'not-a-telegram-id', '123'),
+      service.attachTelegramIdentity(
+        'A'.repeat(43),
+        'not-a-telegram-id',
+        '123',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.attachTelegramLinkChallenge).not.toHaveBeenCalled();
   });
@@ -123,23 +132,34 @@ describe('TelegramLinkService', () => {
 
   it('accepts a valid internal HMAC signature', async () => {
     const { service } = makeService();
-    const path = join(tmpdir(), `ticketty-telegram-link-${Date.now()}-${Math.random()}`);
+    const path = join(
+      tmpdir(),
+      `ticketty-telegram-link-${Date.now()}-${Math.random()}`,
+    );
     const secret = 'test-link-hmac-secret';
     await writeFile(path, secret, { mode: 0o600 });
     process.env.TELEGRAM_LINK_HMAC_FILE = path;
 
     const timestamp = String(Math.floor(Date.now() / 1000));
     const canonical = ['POST', '/api/telegram/link/internal/attach', timestamp, 'A'.repeat(43), '123', '456'].join('\n');
-    const signature = 'v1=' + createHmac('sha256', secret).update(canonical).digest('hex');
+    const signature = 'v1=' + createHmac('sha256', secret)
+      .update(canonical)
+      .digest('hex');
 
-    await expect(service.verifyInternalSignature(timestamp, signature, canonical)).resolves.toBeUndefined();
+    await expect(
+      service.verifyInternalSignature(timestamp, signature, canonical),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects stale internal HMAC signatures', async () => {
     const { service } = makeService();
     const timestamp = String(Math.floor(Date.now() / 1000) - 61);
     await expect(
-      service.verifyInternalSignature(timestamp, 'v1=' + '0'.repeat(64), 'canonical'),
+      service.verifyInternalSignature(
+        timestamp,
+        'v1=' + '0'.repeat(64),
+        'canonical',
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
