@@ -73,5 +73,5 @@ BEGIN
     );
   END LOOP;
 END
-$;
+$telegram_role_guard$;
 GRANT EXECUTE ON FUNCTION ticketty_security.telegram_attach_link_challenge(bytea, text, text) TO ticketty_auth;
