@@ -24,7 +24,7 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM public.users u
-    JOIN public.organizations o ON o.id = u.organization_id
+    JOIN public.organizations o ON o.id = u."organizationId"
     WHERE u.id = p_user_id
       AND u.active = TRUE
       AND o.active = TRUE
@@ -135,13 +135,13 @@ BEGIN
      AND active = TRUE
    FOR UPDATE;
 
-  IF NOT FOUND OR v_user.organization_id IS NULL THEN
+  IF NOT FOUND OR v_user."organizationId" IS NULL THEN
     RAISE EXCEPTION 'Telegram link user is invalid';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM public.organizations o
-    WHERE o.id = v_user.organization_id AND o.active = TRUE
+    WHERE o.id = v_user."organizationId" AND o.active = TRUE
   ) THEN
     RAISE EXCEPTION 'Telegram link organization is inactive';
   END IF;
