@@ -1,9 +1,11 @@
 overrides:
   deepmerge-ts: ^8.0.0
   qs@<6.16.0: ">=6.16.0"
-  # Keep security overrides aligned with backend/package.json and pnpm-lock.yaml.
+  # Keep security overrides centralized and aligned with the generated lockfile.
   multer: 2.4.0
   engine.io: 6.6.10
+  proxy-addr: 2.0.8
+  sharp: 0.35.5
 
 allowBuilds:
   '@prisma/client': true
