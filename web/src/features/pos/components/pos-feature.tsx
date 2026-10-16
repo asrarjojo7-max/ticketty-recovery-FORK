@@ -13,7 +13,7 @@ import { usePosTripSeats, usePosTrips, useCheckout } from "../hooks";
 import { TripCards } from "./trip-cards";
 import { SeatPanel } from "./seat-panel";
 import { Cart } from "./cart";
-import type { CartPassenger, CartSeat } from "../types";
+import { isSellable, type CartPassenger, type CartSeat } from "../types";
 
 /* ── Success view: the official printable tickets ───────────── */
 
@@ -55,6 +55,10 @@ export function PosFeature() {
   const selectedTrip = useMemo(
     () => (tripsQuery.data ?? []).find((t) => t.id === selectedTripId),
     [tripsQuery.data, selectedTripId],
+  );
+  const sellableTripsCount = useMemo(
+    () => (tripsQuery.data ?? []).filter((trip) => isSellable(trip)).length,
+    [tripsQuery.data],
   );
 
     function selectTrip(tripId: string) {
@@ -179,7 +183,7 @@ export function PosFeature() {
           ) : null}
         </div>
         <p className="text-xs text-muted-foreground">
-          {tripsQuery.data?.length ?? 0} رحلة قابلة للبيع
+          {sellableTripsCount} رحلة قابلة للبيع
         </p>
       </div>
 
