@@ -42,6 +42,7 @@ export function useUpdateTrip() {
     onSuccess: () => {
       toast.success("تم تحديث الرحلة");
       queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["pos", "trips"] });
     },
     onError: (error) =>
       toast.error("تعذّر تحديث الرحلة", {
@@ -57,6 +58,7 @@ export function useOpenTrip() {
     onSuccess: () => {
       toast.success("تم فتح الحجز للرحلة");
       queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["pos", "trips"] });
     },
     onError: (error) =>
       toast.error("تعذّر فتح الحجز", {
@@ -72,6 +74,7 @@ export function useCompleteTrip() {
     onSuccess: () => {
       toast.success("تم إكمال الرحلة");
       queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["pos", "trips"] });
     },
     onError: (error) =>
       toast.error("تعذّر إكمال الرحلة", {
@@ -87,6 +90,7 @@ export function useCancelTrip() {
     onSuccess: () => {
       toast.success("تم إلغاء الرحلة");
       queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["pos", "trips"] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
