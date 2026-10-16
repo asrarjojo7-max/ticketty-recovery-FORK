@@ -25,6 +25,7 @@ export function useCreateTrip() {
     onSuccess: () => {
       toast.success("تم إنشاء الرحلة بنجاح");
       queryClient.invalidateQueries({ queryKey: tripKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["pos", "trips"] });
     },
     onError: (error) =>
       toast.error("تعذّر إنشاء الرحلة", {
