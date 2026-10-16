@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: lockfile-refresh-{{ github.ref }}
+  group: lockfile-refresh
   cancel-in-progress: true
 
 jobs:
@@ -18,8 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${'{'}{ github.ref_name }}
-          token: ${'{'}{ secrets.GITHUB_TOKEN }}
+          ref: fix/pos-recent-trips-visibility
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@v4
         with:
           version: 11.7.0
@@ -42,4 +42,4 @@ jobs:
           fi
           git add backend/pnpm-lock.yaml web/pnpm-lock.yaml
           git commit -m "chore: regenerate pnpm lockfiles"
-          git push origin "HEAD:${'{'}{ github.ref_name }}"
+          git push origin HEAD:fix/pos-recent-trips-visibility
