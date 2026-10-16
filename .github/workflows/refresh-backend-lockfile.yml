@@ -1,7 +1,9 @@
 name: Temporary backend lockfile refresh
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - fix/pos-recent-trips-visibility
 
 permissions:
   contents: write
