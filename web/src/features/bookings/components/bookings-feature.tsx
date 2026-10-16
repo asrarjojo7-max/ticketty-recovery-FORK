@@ -26,7 +26,9 @@ function hasPermission(permissions: string[], permission: string): boolean {
 
 export function BookingsFeature() {
   const user = useSession();
-  const tripsQuery = useTrips();
+  // The API defaults to 50 trips ordered by departure time. Load the maximum
+  // supported page so recently created/open trips are not omitted from booking.
+  const tripsQuery = useTrips({ limit: 200 });
   const bookableTrips = useMemo(
     () => tripsQuery.data?.filter((trip) => trip.status === "SCHEDULED" || trip.status === "OPEN") ?? [],
     [tripsQuery.data],
