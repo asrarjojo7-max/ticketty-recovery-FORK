@@ -23,6 +23,9 @@ export type PosTripCard = Pick<
 export function fetchPosTrips(date?: string): Promise<PosTripCard[]> {
   const params = new URLSearchParams();
   if (date) params.set("date", date);
+  // The API defaults to 50 trips ordered by departure time; POS needs a wider
+  // window so older records do not crowd out newly scheduled trips.
+  params.set("limit", "200");
   return apiClient<PosTripCard[]>(`/trips?${params.toString()}`);
 }
 
