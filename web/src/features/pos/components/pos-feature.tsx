@@ -148,7 +148,7 @@ export function PosFeature() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 w-full max-w-full space-y-6">
       <PageHeader
         eyebrow="نقطة البيع"
         title="شاشة البيع السريع"
@@ -190,8 +190,8 @@ export function PosFeature() {
       {/* 3-pane layout — شاشة واحدة: كل عمود يمرّر داخليًا داخل ارتفاع
           الشاشة (lg+) فلا تمرير صفحة طويل أثناء البيع.
           lg: أعمدة جانبية مضغوطة · xl: العرض الكامل المعتاد. */}
-      <div className="grid gap-4 xl:h-[calc(100vh-11rem)] xl:grid-cols-[280px_minmax(0,1fr)_340px] xl:grid-rows-[minmax(0,1fr)]">
-        <div className="xl:min-h-0 xl:overflow-y-auto xl:pe-1">
+      <div className="grid min-w-0 w-full max-w-full gap-4 xl:h-[calc(100vh-11rem)] xl:grid-cols-[280px_minmax(0,1fr)_340px] xl:grid-rows-[minmax(0,1fr)]">
+        <div className="min-w-0 max-w-full xl:min-h-0 xl:overflow-y-auto xl:pe-1">
           <TripCards
             trips={tripsQuery.data}
             isLoading={tripsQuery.isLoading}
